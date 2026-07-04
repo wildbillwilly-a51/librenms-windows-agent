@@ -2,6 +2,9 @@
 
 ## 2026-07-04
 
+- Added prerequisite documentation for enabling LibreNMS `unix-agent` and
+  `applications` poller modules globally or per device.
+
 - Promoted generic LibreNMS Windows Agent overlay package and Windows MSI 0.6.0 from validated development commit bc23c4b.
 
 - Promoted generic LibreNMS Windows Agent overlay package and Windows MSI 0.6.0 from validated development commit d279011.

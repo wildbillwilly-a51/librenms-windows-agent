@@ -2,6 +2,12 @@
 
 ## 2026-07-04
 
+- Added README prerequisites for LibreNMS `unix-agent` and `applications`
+  poller modules, including global UI, per-device UI, global CLI, per-device
+  CLI enablement, and per-device override removal.
+- Validation: reviewed upstream LibreNMS module override handling and checked
+  the README diff; no installer artifacts changed.
+
 - Promoted overlay package 0.6.0 and Windows MSI from development commit bc23c4b with checksums f83a6a59656681582d4f980ff8d0a4c41fd26f26441c633881701656980fceb2 and 60a0a2fcce8d130cf34e0a6cabdd544e7a69a7156ddd2b17751946a25bfe3d6c. Validation: generated package tar listing, MSI build, checksum update, public agent --once check, and legacy-branding scans passed; PHP lint depends on local PHP availability.
 
 - Promoted overlay package 0.6.0 and Windows MSI from development commit d279011 with checksums 894dcbef1c3afaa30dea04c31a0215d16fb6d9d3222ae2880a12ef8830c09336 and efb500c6bc31cdbf31f9ddd92d37a1522a9501dac59651c0286966d20bbe9881. Validation: generated package tar listing, MSI build, checksum update, public agent --once check, and legacy-branding scans passed; PHP lint depends on local PHP availability.

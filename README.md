@@ -3,6 +3,88 @@
 One-command installers for the generic Windows Agent LibreNMS overlay and the
 Windows-side agent MSI.
 
+## Prerequisites
+
+- The Windows machine must already exist in LibreNMS as a device, normally from
+  SNMP discovery.
+- Install the LibreNMS server overlay on the management or web node and on every
+  distributed poller node that may poll Windows Agent devices.
+- LibreNMS must run the `unix-agent` poller module for each Windows Agent
+  device. The `applications` poller module must also be enabled so LibreNMS can
+  create and update the `Windows Agent` application row.
+- Each active LibreNMS poller for the device must be able to reach the Windows
+  host on TCP `6556`.
+
+LibreNMS poller module settings are evaluated in this order: device override,
+OS override, then global setting. A per-device setting overrides the global
+setting.
+
+### Enable Modules In The UI
+
+Global UI path:
+
+1. Open LibreNMS.
+2. Go to `Global Settings` -> `Poller` -> `Poller Modules`.
+3. Enable `unix-agent`.
+4. Confirm `applications` is enabled.
+
+Per-device UI path:
+
+1. Open the Windows device in LibreNMS.
+2. Open the device settings or edit page.
+3. Go to `Modules`.
+4. Enable `unix-agent`.
+5. Confirm `applications` is enabled.
+
+### Enable Modules From The CLI
+
+Run LibreNMS CLI commands from the LibreNMS server as the `librenms` user.
+
+Enable globally for all devices that do not have a more specific override:
+
+```bash
+cd /opt/librenms
+sudo -u librenms php /opt/librenms/lnms config:set poller_modules.unix-agent true
+sudo -u librenms php /opt/librenms/lnms config:set poller_modules.applications true
+```
+
+Verify the global settings:
+
+```bash
+sudo -u librenms php /opt/librenms/lnms config:get poller_modules.unix-agent
+sudo -u librenms php /opt/librenms/lnms config:get poller_modules.applications
+```
+
+Enable for one device by device ID:
+
+```bash
+DEVICE_ID="<DEVICE_ID>"
+
+sudo -u librenms env DEVICE_ID="$DEVICE_ID" php -r '
+chdir("/opt/librenms");
+require "includes/init.php";
+$device = \App\Models\Device::findOrFail((int) getenv("DEVICE_ID"));
+$device->setAttrib("poll_unix-agent", true);
+$device->setAttrib("poll_applications", true);
+echo "Enabled unix-agent and applications for device " . $device->device_id . PHP_EOL;
+'
+```
+
+Remove the per-device override and return the device to global or OS defaults:
+
+```bash
+DEVICE_ID="<DEVICE_ID>"
+
+sudo -u librenms env DEVICE_ID="$DEVICE_ID" php -r '
+chdir("/opt/librenms");
+require "includes/init.php";
+$device = \App\Models\Device::findOrFail((int) getenv("DEVICE_ID"));
+$device->forgetAttrib("poll_unix-agent");
+$device->forgetAttrib("poll_applications");
+echo "Removed unix-agent and applications overrides for device " . $device->device_id . PHP_EOL;
+'
+```
+
 ## Windows Agent MSI
 
 Run PowerShell as Administrator on each Windows host that should expose the
@@ -105,7 +187,8 @@ Recommended order:
 2. Install the Windows agent MSI on the Windows machine.
 3. Install the LibreNMS server overlay on the management node and each poller
    that may poll or render the device.
-4. Enable the `unix-agent` module on the Windows device in LibreNMS.
+4. Enable `unix-agent` and confirm `applications` is enabled globally or for
+   the Windows device.
 5. Confirm the LibreNMS server or poller can reach the Windows host on TCP
    `6556`.
 
