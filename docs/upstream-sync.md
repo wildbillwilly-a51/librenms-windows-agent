@@ -94,11 +94,11 @@ Every sync must include a public-safety scan.
 
 - Public package: `artifacts/librenms-windows-agent-overlay-0.6.0.tar.gz`
 - Public Windows MSI: `artifacts/librenms-windows-agent-0.6.0.msi`
-- Upstream development commit: `9a2a8ea`
+- Upstream development commit: `d279011`
 - Overlay SHA256:
-  `34736005d4b758984f10c705721392762303db34e65302df5388448194154cba`
+  `894dcbef1c3afaa30dea04c31a0215d16fb6d9d3222ae2880a12ef8830c09336`
 - Windows MSI SHA256:
-  `b67e10b40cad8e54194ad22a190c7863fddd7a4fc6b44e8a3b6568ee2acb13dc`
+  `efb500c6bc31cdbf31f9ddd92d37a1522a9501dac59651c0286966d20bbe9881`
 - Compatibility: requires Windows agent output using `windows_agent` and
   `windows_agent_*` section names.
 - Promotion method: `scripts/promote-from-dev-overlay.ps1` built the
