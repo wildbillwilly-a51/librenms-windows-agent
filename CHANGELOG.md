@@ -2,6 +2,8 @@
 
 ## 2026-07-04
 
+- Promoted generic LibreNMS Windows Agent overlay package and Windows MSI 0.6.0 from validated development commit 9a2a8ea.
+
 - Promoted generic LibreNMS Windows Agent overlay package and Windows MSI 0.6.0 from validated development commit 7e6f398.
 
 - Promoted generic LibreNMS Windows Agent overlay package and Windows MSI 0.6.0 from validated development commit 1e6a425.
