@@ -18,6 +18,11 @@ Silent install:
 powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -UseBasicParsing https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/install-agent.ps1 -OutFile $env:TEMP\install-agent.ps1; & $env:TEMP\install-agent.ps1 -Silent -ListenAddress 0.0.0.0 -ListenPort 6556 -AddFirewallRule 1 -StartService 1"
 ```
 
+`ListenAddress` is the local bind address on the Windows host. The default
+`0.0.0.0` means the agent listens on all local network interfaces; it is not
+the LibreNMS server or poller IP. Use a specific Windows host IP only when the
+agent should listen on one interface.
+
 Direct MSI download:
 
 ```text
@@ -38,6 +43,8 @@ msiexec /x librenms-windows-agent-0.6.0.msi /qn
 
 Supported MSI properties are `LISTEN_ADDRESS`, `LISTEN_PORT`,
 `ADD_FIREWALL_RULE`, `START_SERVICE`, `CONFIG_PATH`, and `PRESERVE_CONFIG`.
+The default install path normally needs no additional Windows-side
+configuration.
 
 ## LibreNMS Server Overlay
 
@@ -75,8 +82,22 @@ that emits `windows_agent_*` sections over TCP `6556`.
 
 ## After Install
 
-Enable the `unix-agent` module on the Windows device in LibreNMS, then force a
-first poll if desired:
+The Windows machine must already exist in LibreNMS as a device, normally from
+SNMP discovery. The overlay does not discover Windows hosts by itself; it adds
+Windows Agent parsing and the `Windows Agent` application view for an existing
+LibreNMS device.
+
+Recommended order:
+
+1. Discover or add the Windows machine in LibreNMS with SNMP.
+2. Install the Windows agent MSI on the Windows machine.
+3. Install the LibreNMS server overlay on the management node and each poller
+   that may poll or render the device.
+4. Enable the `unix-agent` module on the Windows device in LibreNMS.
+5. Confirm the LibreNMS server or poller can reach the Windows host on TCP
+   `6556`.
+
+Force a first poll if desired:
 
 ```bash
 cd /opt/librenms
@@ -97,13 +118,3 @@ sudo bash ./rollback-overlay.sh --librenms-root /opt/librenms
 
 Add `--delete-apps` only when you intentionally want to remove existing
 `windows-agent` application rows and metrics.
-
-## Project Documentation
-
-For Codex or maintainer handoff, start with:
-
-- `CURRENT-STATE.md`
-- `AGENTS.md`
-- `docs/codex-project-guide.md`
-- `docs/upstream-sync.md`
-- `docs/release-runbook.md`
