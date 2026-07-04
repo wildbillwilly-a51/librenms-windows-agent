@@ -14,8 +14,19 @@ The public repo should receive only sanitized generic artifacts.
 
 ## Current Sync Method
 
-The current package was generated from a validated private overlay package and
-converted to generic identifiers:
+The current interim model is scripted promotion from the private development
+project. Run the promotion from this public installer repository:
+
+```powershell
+.\scripts\promote-from-dev-overlay.ps1
+```
+
+The script builds the private development overlay package into a temporary
+directory, converts the package to generic identifiers, updates the public
+package/checksum/docs, validates the generated artifact, and creates a local
+commit. It does not push to GitHub.
+
+The public conversion targets are:
 
 - section prefix: `windows_agent`
 - section family: `windows_agent_*`
@@ -32,7 +43,7 @@ When syncing a new version, record:
 - local validation performed in this repo
 - known compatibility requirements for Windows agent output
 
-## Recommended Durable Model
+## Long-Term Migration Roadmap
 
 The most reliable long-term approach is to invert the current flow:
 
@@ -47,19 +58,26 @@ The most reliable long-term approach is to invert the current flow:
 This avoids recurring risk from text-converting a site-specific overlay into a
 generic product. It also makes public releases reproducible from public source.
 
+Recommended migration phases:
+
+1. Add generic overlay source directories to this public repo while preserving
+   the current packaged installer.
+2. Make the public package builder produce
+   `librenms-windows-agent-overlay-<version>.tar.gz` directly from that source.
+3. Update the private development project to consume this public generic source
+   for lab validation.
+4. Keep private deployment details in the development project only.
+5. Retire the conversion step once lab validation uses the public generic
+   source.
+
 ## Acceptable Interim Model
 
 Until the generic overlay source is moved here, use an explicit promotion step:
 
 1. Build and validate the private development overlay.
-2. Generate a generic public overlay package in a temporary staging folder.
-3. Scan the generated package for private/site-specific content.
-4. Copy only the generic tarball into `artifacts/`.
-5. Regenerate `SHA256SUMS`.
-6. Update `CURRENT-STATE.md`, `CHANGELOG.md`, and this file with the promoted
-   version and source commit.
-7. Commit locally.
-8. Push only after the full committed snapshot is public-safe.
+2. Run `scripts/promote-from-dev-overlay.ps1` from this repo.
+3. Review the generated local commit.
+4. Push only after the full committed snapshot is public-safe.
 
 Do not automate a blind copy from the private project into this public repo.
 Every sync must include a public-safety scan.

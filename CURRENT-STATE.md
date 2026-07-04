@@ -50,7 +50,7 @@ This repo does not install the Windows-side agent.
 Smallest useful local validation:
 
 ```powershell
-bash -n .\install.sh
+bash -n ./install.sh
 tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.0.tar.gz
 Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.0.tar.gz
 ```
@@ -68,7 +68,7 @@ public, generic distribution product.
 Recommended durable link:
 
 1. Develop and validate new overlay behavior in the private development project.
-2. Promote only sanitized, generic overlay artifacts into this installer repo.
+2. Run `scripts/promote-from-dev-overlay.ps1` from this installer repo.
 3. Record the upstream source commit, package version, checksum, validation, and
    compatibility notes in `docs/upstream-sync.md`.
 4. Commit locally first in this repository.

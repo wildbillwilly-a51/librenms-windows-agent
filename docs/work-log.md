@@ -10,6 +10,9 @@
 - Added full project documentation for opening this folder as its own Codex
   project, including current state, read order, release runbook, and upstream
   sync model.
+- Added `scripts/promote-from-dev-overlay.ps1` as the official interim
+  promotion path from the private development overlay package to the public
+  generic installer package.
 - Validation: installer syntax, tarball listing, checksum generation, raw
   GitHub URL checks, and legacy-branding scan were run during initial
   publication. PHP lint was skipped because PHP is not installed locally.

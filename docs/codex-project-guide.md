@@ -39,15 +39,20 @@ snapshot is verified as public-safe.
 Installer edit:
 
 ```powershell
-bash -n .\install.sh
+bash -n ./install.sh
 git diff --check
 ```
 
 Overlay package update:
 
 ```powershell
-tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.0.tar.gz
-Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.0.tar.gz
+.\scripts\promote-from-dev-overlay.ps1
+```
+
+Promotion test without commit:
+
+```powershell
+.\scripts\promote-from-dev-overlay.ps1 -NoCommit
 ```
 
 Snapshot review before push:

@@ -45,7 +45,7 @@ public release.
 Use the smallest relevant validation first:
 
 ```powershell
-bash -n .\install.sh
+bash -n ./install.sh
 tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.0.tar.gz
 Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.0.tar.gz
 ```

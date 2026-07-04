@@ -18,16 +18,23 @@ For installer-only changes, edit `install.sh` and `README.md` as needed.
 
 For overlay changes:
 
-1. Generate or copy the new generic overlay package to `artifacts/`.
-2. Confirm package names use `librenms-windows-agent-overlay-<version>.tar.gz`.
-3. Regenerate `SHA256SUMS`.
-4. Update `CURRENT-STATE.md`, `CHANGELOG.md`, `docs/work-log.md`, and
-   `docs/upstream-sync.md`.
+1. Validate the overlay behavior in the private development project.
+2. Run the scripted promotion from this repo:
+
+```powershell
+.\scripts\promote-from-dev-overlay.ps1
+```
+
+The script builds the development overlay into a temp directory, converts it to
+generic public identifiers, updates `artifacts/`, regenerates `SHA256SUMS`,
+updates release docs, validates the result, and creates a local commit.
+
+Use `-NoCommit` only when testing the promotion script itself.
 
 ## 3. Validate
 
 ```powershell
-bash -n .\install.sh
+bash -n ./install.sh
 tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.0.tar.gz
 Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.0.tar.gz
 git diff --check
@@ -54,6 +61,17 @@ Also scan the extracted overlay package for private/site-specific branding and
 environment facts before pushing.
 
 ## 5. Commit And Push
+
+For scripted overlay promotions, the commit is created by
+`scripts/promote-from-dev-overlay.ps1`. Review it, then push:
+
+```powershell
+git status --short
+git show --stat --oneline HEAD
+git push origin main
+```
+
+For installer-only edits, commit manually:
 
 ```powershell
 git add .
