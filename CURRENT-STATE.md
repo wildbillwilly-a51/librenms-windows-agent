@@ -71,8 +71,9 @@ Recommended durable link:
 2. Run `scripts/promote-from-dev-overlay.ps1` from this installer repo.
 3. Record the upstream source commit, package version, checksum, validation, and
    compatibility notes in `docs/upstream-sync.md`.
-4. Commit locally first in this repository.
-5. Push the verified public-safe snapshot to GitHub.
+4. Commit locally in this repository.
+5. Push the verified public-safe snapshot to GitHub automatically as part of
+   the installer repo workflow.
 
 Long term, the more reliable design is to make the generic overlay source live
 in this public repository and have the private development project consume or

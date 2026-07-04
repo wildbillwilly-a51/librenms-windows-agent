@@ -22,8 +22,10 @@ LibreNMS details.
 The local Git repository is the primary project record. The GitHub repository is
 a sanitized public distribution mirror for installer content.
 
-Before pushing to GitHub, verify the complete committed snapshot is safe for
-public release.
+The handoff from the private development project into this installer repository
+is the review and authorization boundary. After a scoped installer repo commit
+is created and public-safety checks pass, push the committed snapshot to GitHub
+as part of task completion.
 
 ## Safety Rules
 
@@ -70,8 +72,10 @@ Default completion steps:
   history.
 - Run the smallest validation appropriate to the requested validation tier.
 - Commit the completed scoped changes locally with a clear one-line message.
-- Push sanitized public distribution content to GitHub only after verifying the
-  complete committed snapshot is public-safe.
+- Push sanitized public distribution content to GitHub after verifying the
+  complete committed snapshot is public-safe. A commit in this installer repo is
+  authorization to sync the public mirror unless the user explicitly says not
+  to push.
 - Leave unrelated pre-existing changes uncommitted unless the user explicitly
   asks to include them.
 

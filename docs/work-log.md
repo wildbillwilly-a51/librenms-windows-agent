@@ -13,6 +13,8 @@
 - Added `scripts/promote-from-dev-overlay.ps1` as the official interim
   promotion path from the private development overlay package to the public
   generic installer package.
+- Updated the installer workflow so promotion into this repo is the review
+  boundary and successful local installer commits automatically push to GitHub.
 - Validation: installer syntax, tarball listing, checksum generation, raw
   GitHub URL checks, and legacy-branding scan were run during initial
   publication. PHP lint was skipped because PHP is not installed locally.

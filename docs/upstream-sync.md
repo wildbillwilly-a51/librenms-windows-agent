@@ -23,8 +23,12 @@ project. Run the promotion from this public installer repository:
 
 The script builds the private development overlay package into a temporary
 directory, converts the package to generic identifiers, updates the public
-package/checksum/docs, validates the generated artifact, and creates a local
-commit. It does not push to GitHub.
+package/checksum/docs, validates the generated artifact, creates a local
+commit, pushes `main` to GitHub, and verifies the raw installer/package URLs.
+
+The manual review boundary is the promotion into this installer repository. A
+successful installer repo commit is authorization to sync the public GitHub
+mirror unless the user explicitly runs with `-NoPush`.
 
 The public conversion targets are:
 
@@ -76,8 +80,7 @@ Until the generic overlay source is moved here, use an explicit promotion step:
 
 1. Build and validate the private development overlay.
 2. Run `scripts/promote-from-dev-overlay.ps1` from this repo.
-3. Review the generated local commit.
-4. Push only after the full committed snapshot is public-safe.
+3. The script validates, commits locally, pushes to GitHub, and checks raw URLs.
 
 Do not automate a blind copy from the private project into this public repo.
 Every sync must include a public-safety scan.

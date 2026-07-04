@@ -3,6 +3,7 @@ param(
     [string]$DevRepo = (Join-Path $PSScriptRoot '..\..\librenms-windows-agent'),
     [string]$Version = '',
     [switch]$NoCommit,
+    [switch]$NoPush,
     [switch]$SkipDevDirtyCheck
 )
 
@@ -184,6 +185,21 @@ function Assert-Command {
     }
 }
 
+function Test-RawUrl {
+    param([Parameter(Mandatory = $true)][string]$Url)
+
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if ($curl) {
+        & curl.exe -fsSI $Url | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Raw URL check failed: $Url"
+        }
+        return
+    }
+
+    Invoke-WebRequest -Uri $Url -Method Head -UseBasicParsing | Out-Null
+}
+
 New-Item -ItemType Directory -Force -Path $workRoot, $devArtifacts, $stageRoot, $extractRoot, $artifactsDir | Out-Null
 
 try {
@@ -326,7 +342,7 @@ try {
 
     $scanOutput = & git -C $repoRoot grep -n -I -E 'password|passwd|secret|token|api_key|apikey|client_secret|private_key|BEGIN PRIVATE KEY|Authorization:|Bearer ' -- .
     if ($LASTEXITCODE -eq 0) {
-        Write-Warning 'Public snapshot scan found policy-word matches; review them before pushing.'
+        Write-Warning 'Public snapshot scan found policy-word matches; review them as part of the promotion boundary.'
         $scanOutput | ForEach-Object { Write-Warning $_ }
     } elseif ($LASTEXITCODE -gt 1) {
         throw 'Public snapshot scan failed.'
@@ -353,7 +369,20 @@ try {
             throw 'git commit failed.'
         }
         Write-Output 'Local promotion commit created.'
-        Write-Output 'Review the commit, then publish with: git push origin main'
+
+        if ($NoPush) {
+            Write-Output 'GitHub push skipped because -NoPush was set.'
+        } else {
+            & git -C $repoRoot push origin main
+            if ($LASTEXITCODE -ne 0) {
+                throw 'git push failed. Local promotion commit remains in place.'
+            }
+
+            $rawBaseUrl = 'https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main'
+            Test-RawUrl -Url "$rawBaseUrl/install.sh"
+            Test-RawUrl -Url "$rawBaseUrl/artifacts/librenms-windows-agent-overlay-$Version.tar.gz"
+            Write-Output 'GitHub push and raw URL verification completed.'
+        }
     }
 
     Write-Output "Promoted overlay package $Version"

@@ -27,9 +27,10 @@ For overlay changes:
 
 The script builds the development overlay into a temp directory, converts it to
 generic public identifiers, updates `artifacts/`, regenerates `SHA256SUMS`,
-updates release docs, validates the result, and creates a local commit.
+updates release docs, validates the result, creates a local commit, pushes
+`main` to GitHub, and verifies raw GitHub URLs.
 
-Use `-NoCommit` only when testing the promotion script itself.
+Use `-NoCommit` or `-NoPush` only when testing the promotion script itself.
 
 ## 3. Validate
 
@@ -63,12 +64,12 @@ environment facts before pushing.
 ## 5. Commit And Push
 
 For scripted overlay promotions, the commit is created by
-`scripts/promote-from-dev-overlay.ps1`. Review it, then push:
+`scripts/promote-from-dev-overlay.ps1` and pushed automatically after
+validation. Confirm the final state:
 
 ```powershell
 git status --short
 git show --stat --oneline HEAD
-git push origin main
 ```
 
 For installer-only edits, commit manually:

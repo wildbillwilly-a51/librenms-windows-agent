@@ -23,7 +23,9 @@ these surfaces:
 - `docs/` for project state, workflow, and release notes.
 
 Keep the local Git repo primary. Push to GitHub only after the committed
-snapshot is verified as public-safe.
+snapshot is verified as public-safe. Promotion into this installer repo is the
+review boundary; after a scoped local commit is created, sync GitHub as part of
+the same task unless the user explicitly says not to push.
 
 ## Public-Safe Rules
 
@@ -53,6 +55,12 @@ Promotion test without commit:
 
 ```powershell
 .\scripts\promote-from-dev-overlay.ps1 -NoCommit
+```
+
+Promotion test with local commit but no GitHub sync:
+
+```powershell
+.\scripts\promote-from-dev-overlay.ps1 -NoPush
 ```
 
 Snapshot review before push:
