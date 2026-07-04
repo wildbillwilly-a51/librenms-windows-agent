@@ -15,7 +15,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -UseBasicParsing htt
 Silent install:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -UseBasicParsing https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/install-agent.ps1 -OutFile $env:TEMP\install-agent.ps1; & $env:TEMP\install-agent.ps1 -Silent -ListenAddress 0.0.0.0 -ListenPort 6556 -AddFirewallRule 1 -StartService 1"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -UseBasicParsing https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/install-agent.ps1 -OutFile $env:TEMP\install-agent.ps1; & $env:TEMP\install-agent.ps1 -Silent"
 ```
 
 `ListenAddress` is the local bind address on the Windows host. The default
@@ -29,10 +29,22 @@ Direct MSI download:
 https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/artifacts/librenms-windows-agent-0.6.0.msi
 ```
 
-Direct silent MSI install after download:
+Direct interactive MSI install after download:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.0.msi /qn LISTEN_ADDRESS=0.0.0.0 LISTEN_PORT=6556 ADD_FIREWALL_RULE=1 START_SERVICE=1
+msiexec /i librenms-windows-agent-0.6.0.msi
+```
+
+Direct silent MSI install after download, using defaults:
+
+```powershell
+msiexec /i librenms-windows-agent-0.6.0.msi /qn
+```
+
+Optional override example:
+
+```powershell
+msiexec /i librenms-windows-agent-0.6.0.msi /qn LISTEN_ADDRESS=192.0.2.25 LISTEN_PORT=6556 ADD_FIREWALL_RULE=1 START_SERVICE=1
 ```
 
 Silent uninstall:
@@ -43,8 +55,8 @@ msiexec /x librenms-windows-agent-0.6.0.msi /qn
 
 Supported MSI properties are `LISTEN_ADDRESS`, `LISTEN_PORT`,
 `ADD_FIREWALL_RULE`, `START_SERVICE`, `CONFIG_PATH`, and `PRESERVE_CONFIG`.
-The default install path normally needs no additional Windows-side
-configuration.
+They are optional; the default install path normally needs no additional
+Windows-side configuration.
 
 ## LibreNMS Server Overlay
 
