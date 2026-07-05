@@ -101,6 +101,35 @@ timeout 5 nc -vz "$WINDOWS_HOST" 6556
 timeout 15 bash -c "cat < /dev/null | nc '$WINDOWS_HOST' 6556" | head -40
 ```
 
+### 6. Plan Poller Capacity
+
+The Windows agent adds poller worker time to each Windows device that has
+`Unix Agent` enabled. Field validation with the full default collector set
+showed about `8-10` poller worker-seconds per Windows-agent device per poll
+cycle. LibreNMS application parsing was negligible, around `0.02` seconds; the
+main cost is the poller worker waiting for the TCP `6556` agent payload.
+
+Capacity estimate:
+
+```text
+Windows-agent devices * 8-10 seconds = added worker-seconds per poll cycle
+
+100 Windows devices = about 800-1000 added worker-seconds per cycle
+150 Windows devices = about 1200-1500 added worker-seconds per cycle
+```
+
+Before a broad rollout, check LibreNMS `Poller Cluster Health` and compare
+`Worker Seconds Consumed/Maximum` on each active poller. Roll out in batches,
+then wait a few normal polling intervals and confirm:
+
+- active pollers are not consistently above about `90%` worker-seconds used;
+- `Devices Pending` stays near zero;
+- poller `Last Checkin` remains current;
+- no single poller receives most of the Windows-agent devices.
+
+If a poller is close to saturation, rebalance devices, add poller capacity, or
+tune collector runtime before continuing the rollout.
+
 ## Addendum
 
 ### Per-Device Module Overrides

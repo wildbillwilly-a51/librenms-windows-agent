@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-05
+
+- Added public README performance and scaling guidance for Windows-agent poller worker-time cost, rollout batches, and Poller Cluster Health checks.
+
 ## 2026-07-04
 
 - Reworked the README into a step-by-step primary install/upgrade runbook with optional module overrides, overlay options, MSI options, rollback, collector expectations, and diagnostics moved into an addendum.

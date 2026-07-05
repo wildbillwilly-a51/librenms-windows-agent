@@ -1,5 +1,10 @@
 # Work Log
 
+## 2026-07-05
+
+- Added a public README performance and scaling section with observed Windows-agent poller worker-time cost, capacity math for 100-150 Windows devices, and rollout checks using LibreNMS Poller Cluster Health.
+- Validation: documentation diff review and `git diff --check` passed for README, work log, and changelog.
+
 ## 2026-07-04
 
 - Reworked the public README into a step-by-step primary runbook: confirm SNMP-backed LibreNMS device discovery, enable `Applications` and `Unix Agent` globally, install the overlay on every LibreNMS node/poller, install or update the Windows agent, and poll/verify. Optional per-device overrides, overlay options, MSI properties, rollback, collector expectations, and diagnostics are now in an addendum.
