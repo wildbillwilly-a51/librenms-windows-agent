@@ -2,6 +2,9 @@
 
 ## 2026-07-04
 
+- Updated current public instructions and installer docs to reference the promoted x64 0.6.2 MSI and overlay artifacts.
+- Validation: `bash -n`, PowerShell parse, 0.6.2 tar listing, SHA256 checks, current-reference scan, `git diff --check`, and raw URL checks passed.
+
 - Promoted overlay package 0.6.2 and Windows MSI from development commit db0126b with checksums b5418bb1863316bedde423cb3a0c4e43fecf5e28ea3b71eb35cf3ec6c521d212 and 60858d312631ecc4206d8a02dc0ce986eff18d5022238c4d11abc7727f134b47. Validation: generated package tar listing, MSI build, checksum update, public agent --once check, and legacy-branding scans passed; PHP lint depends on local PHP availability.
 
 - Hardened `install-agent.ps1` so it removes prior LibreNMS Windows Agent MSI packages before install, accepts MSI reboot-required success, verifies the installed service executable exists, verifies the expected file version, verifies config creation, and prints the actual service executable path.
