@@ -2,6 +2,8 @@
 
 ## 2026-07-04
 
+- Promoted overlay package 0.6.2 and Windows MSI from development commit db0126b with checksums b5418bb1863316bedde423cb3a0c4e43fecf5e28ea3b71eb35cf3ec6c521d212 and 60858d312631ecc4206d8a02dc0ce986eff18d5022238c4d11abc7727f134b47. Validation: generated package tar listing, MSI build, checksum update, public agent --once check, and legacy-branding scans passed; PHP lint depends on local PHP availability.
+
 - Hardened `install-agent.ps1` so it removes prior LibreNMS Windows Agent MSI packages before install, accepts MSI reboot-required success, verifies the installed service executable exists, verifies the expected file version, verifies config creation, and prints the actual service executable path.
 - Updated the promotion workflow so `install-agent.ps1` receives the promoted version automatically along with `install.sh`.
 - Validation: PowerShell parse for `install-agent.ps1` and `scripts/promote-from-dev-overlay.ps1` passed; `git diff --check` passed.

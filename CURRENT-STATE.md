@@ -12,7 +12,7 @@ project.
 - LibreNMS overlay installer entry point: `install.sh`
 - Windows agent installer entry point: `install-agent.ps1`
 - Published overlay package:
-  `artifacts/librenms-windows-agent-overlay-0.6.1.tar.gz`
+  `artifacts/librenms-windows-agent-overlay-0.6.2.tar.gz`
 - Published Windows MSI:
   `artifacts/librenms-windows-agent-0.6.1.msi`
 - Package checksum manifest: `SHA256SUMS`
@@ -24,7 +24,7 @@ distribution mirror for sanitized installer content.
 
 ## Current Release
 
-- Current version: `0.6.1`
+- Current version: `0.6.2`
 - Public LibreNMS overlay install command:
 
 ```bash
