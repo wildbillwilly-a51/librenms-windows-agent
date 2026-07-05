@@ -2,6 +2,8 @@
 
 ## 2026-07-04
 
+- Updated current public instructions and installer docs to reference the promoted 0.6.3 MSI and overlay artifacts.
+
 - Promoted generic LibreNMS Windows Agent overlay package and Windows MSI 0.6.3 from validated development commit 6d595f2.
 
 - Updated current public instructions and installer docs to reference the promoted x64 0.6.2 MSI and overlay artifacts.

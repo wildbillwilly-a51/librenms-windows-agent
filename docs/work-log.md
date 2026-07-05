@@ -2,6 +2,9 @@
 
 ## 2026-07-04
 
+- Updated current public instructions and installer docs to reference the promoted 0.6.3 MSI and overlay artifacts.
+- Validation: `bash -n`, PowerShell parse, 0.6.3 tar listing, SHA256 checks, current-reference scan, `git diff --check`, and raw URL checks passed.
+
 - Promoted overlay package 0.6.3 and Windows MSI from development commit 6d595f2 with checksums d78bb063ecc6b18900dfb37f42c62074b1d96cd65389e505a5df34d0ce36930a and 05bbf6851568da4bc72096bd4c65c719093c1652a20cff3bf9095aa869124d33. Validation: generated package tar listing, MSI build, checksum update, public agent --once check, and legacy-branding scans passed; PHP lint depends on local PHP availability.
 
 - Updated current public instructions and installer docs to reference the promoted x64 0.6.2 MSI and overlay artifacts.

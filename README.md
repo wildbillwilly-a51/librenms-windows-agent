@@ -108,31 +108,31 @@ agent should listen on one interface.
 Direct MSI download:
 
 ```text
-https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/artifacts/librenms-windows-agent-0.6.2.msi
+https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/artifacts/librenms-windows-agent-0.6.3.msi
 ```
 
 Direct interactive MSI install after download:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.2.msi
+msiexec /i librenms-windows-agent-0.6.3.msi
 ```
 
 Direct silent MSI install after download, using defaults:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.2.msi /qn
+msiexec /i librenms-windows-agent-0.6.3.msi /qn
 ```
 
 Optional override example:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.2.msi /qn LISTEN_ADDRESS=192.0.2.25 LISTEN_PORT=6556 ADD_FIREWALL_RULE=1 START_SERVICE=1
+msiexec /i librenms-windows-agent-0.6.3.msi /qn LISTEN_ADDRESS=192.0.2.25 LISTEN_PORT=6556 ADD_FIREWALL_RULE=1 START_SERVICE=1
 ```
 
 Silent uninstall:
 
 ```powershell
-msiexec /x librenms-windows-agent-0.6.2.msi /qn
+msiexec /x librenms-windows-agent-0.6.3.msi /qn
 ```
 
 Supported MSI properties are `LISTEN_ADDRESS`, `LISTEN_PORT`,
