@@ -21,7 +21,7 @@ distributed poller node.
 
 Environment overrides:
   LIBRENMS_ROOT   LibreNMS root path. Default: /opt/librenms
-  VERSION         Overlay package version. Default: 0.6.3
+  VERSION         Overlay package version. Default: current script version
   BASE_URL        Raw GitHub base URL for install assets
 EOF
 }

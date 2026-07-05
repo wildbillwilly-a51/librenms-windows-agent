@@ -2,6 +2,8 @@
 
 ## 2026-07-04
 
+- Reworked the README into a step-by-step primary install/upgrade runbook with optional module overrides, overlay options, MSI options, rollback, collector expectations, and diagnostics moved into an addendum.
+
 - Promoted generic LibreNMS Windows Agent overlay package and Windows MSI 0.6.5 from validated development commit 51180e3.
 
 - Promoted generic LibreNMS Windows Agent overlay package and Windows MSI 0.6.4 from validated development commit c9e48c3.
