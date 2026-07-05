@@ -51,3 +51,7 @@
   overlay packages into generic public installer releases.
 - Updated the promotion workflow so installer repo commits automatically sync
   to GitHub after validation.
+
+## 2026-07-05
+
+- Promoted generic LibreNMS Windows Agent overlay package and Windows MSI 0.6.5 from validated development commit 17acd26.
