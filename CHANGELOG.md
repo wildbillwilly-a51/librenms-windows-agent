@@ -2,6 +2,9 @@
 
 ## 2026-07-04
 
+- Hardened the Windows agent PowerShell installer to verify the actual installed executable, config, service, and file version before reporting success.
+- Updated the promotion workflow so the Windows installer script default version is maintained automatically.
+
 - Updated current public instructions and installer defaults to reference the promoted 0.6.1 MSI and overlay artifacts.
 
 - Promoted generic LibreNMS Windows Agent overlay package and Windows MSI 0.6.1 from validated development commit b97c5c5.

@@ -150,6 +150,17 @@ function Update-InstallerVersion {
     Set-Utf8NoBom -Path $Path -Value $content
 }
 
+function Update-AgentInstallerVersion {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Version
+    )
+
+    $content = Get-Content -LiteralPath $Path -Raw
+    $content = [regex]::Replace($content, "\[string\]\`$Version = '[^']+'", ("[string]`$Version = '{0}'" -f $Version))
+    Set-Utf8NoBom -Path $Path -Value $content
+}
+
 function Add-DatedBullet {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -317,6 +328,7 @@ try {
 
     Update-CurrentState -Path (Join-Path $repoRoot 'CURRENT-STATE.md') -Version $Version
     Update-InstallerVersion -Path (Join-Path $repoRoot 'install.sh') -Version $Version
+    Update-AgentInstallerVersion -Path (Join-Path $repoRoot 'install-agent.ps1') -Version $Version
 
     $record = @(
         ('### {0}' -f $Version),

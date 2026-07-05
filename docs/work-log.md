@@ -2,6 +2,10 @@
 
 ## 2026-07-04
 
+- Hardened `install-agent.ps1` so it removes prior LibreNMS Windows Agent MSI packages before install, accepts MSI reboot-required success, verifies the installed service executable exists, verifies the expected file version, verifies config creation, and prints the actual service executable path.
+- Updated the promotion workflow so `install-agent.ps1` receives the promoted version automatically along with `install.sh`.
+- Validation: PowerShell parse for `install-agent.ps1` and `scripts/promote-from-dev-overlay.ps1` passed; `git diff --check` passed.
+
 - Updated current public instructions and installer defaults to reference the promoted 0.6.1 MSI and overlay artifacts instead of stale 0.6.0 examples.
 - Validation: `bash -n`, PowerShell parse, 0.6.1 tar listing, SHA256 checks, stale current-reference scan, and `git diff --check` passed.
 
