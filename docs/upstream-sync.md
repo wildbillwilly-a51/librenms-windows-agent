@@ -37,8 +37,8 @@ The public conversion targets are:
 - section family: `windows_agent_*`
 - LibreNMS app type: `windows-agent`
 - UI name: `Windows Agent`
-- overlay package: `librenms-windows-agent-overlay-0.6.0.tar.gz`
-- Windows MSI: `librenms-windows-agent-0.6.0.msi`
+- overlay package: `librenms-windows-agent-overlay-0.6.1.tar.gz`
+- Windows MSI: `librenms-windows-agent-0.6.1.msi`
 - Windows service name: `LibreNMSWindowsAgent`
 
 When syncing a new version, record:

@@ -39,9 +39,9 @@ Use `-NoCommit` or `-NoPush` only when testing the promotion script itself.
 ```powershell
 bash -n ./install.sh
 powershell.exe -NoProfile -Command "[void][scriptblock]::Create((Get-Content -Raw .\install-agent.ps1))"
-tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.0.tar.gz
-Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.0.tar.gz
-Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-0.6.0.msi
+tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.1.tar.gz
+Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.1.tar.gz
+Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-0.6.1.msi
 git diff --check
 ```
 
@@ -51,7 +51,7 @@ If PHP is available, extract the package and lint all PHP files:
 $tmp = Join-Path $env:TEMP "librenms-windows-agent-overlay-lint"
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $tmp | Out-Null
-tar -xzf .\artifacts\librenms-windows-agent-overlay-0.6.0.tar.gz -C $tmp
+tar -xzf .\artifacts\librenms-windows-agent-overlay-0.6.1.tar.gz -C $tmp
 Get-ChildItem -Path $tmp -Recurse -Filter *.php | ForEach-Object { php -l $_.FullName }
 ```
 
@@ -91,6 +91,6 @@ After pushing, verify raw URLs:
 curl.exe -fsSI https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/install.sh
 curl.exe -fsSI https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/install-agent.ps1
 curl.exe -fsSI https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/SHA256SUMS
-curl.exe -fsSI https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/artifacts/librenms-windows-agent-overlay-0.6.0.tar.gz
-curl.exe -fsSI https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/artifacts/librenms-windows-agent-0.6.0.msi
+curl.exe -fsSI https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/artifacts/librenms-windows-agent-overlay-0.6.1.tar.gz
+curl.exe -fsSI https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/artifacts/librenms-windows-agent-0.6.1.msi
 ```
