@@ -2,6 +2,8 @@
 
 ## 2026-07-04
 
+- Promoted overlay package 0.6.1 and Windows MSI from development commit b97c5c5 with checksums c060f5bd155b3782b512ced1ac617b84a299ea25f261cf55ac0c0b0eabc4a173 and 0e048d6640b791db904f68fc2c85027687e0d9a48b255295e8a760acdb5ce896. Validation: generated package tar listing, MSI build, checksum update, public agent --once check, and legacy-branding scans passed; PHP lint depends on local PHP availability.
+
 - Promoted overlay package 0.6.0 and Windows MSI from development commit 7338e23 with checksums 29d9149b16764b15d7d97f97661d2b75eaa3af4720bae4df3b016a29e6355a4e and eb4a0372106be8e27d91393a8783e9e2a6f1b48d3f49757669542a52babc58ce. Validation: generated package tar listing, MSI build, checksum update, public agent --once check, and legacy-branding scans passed; PHP lint depends on local PHP availability.
 
 - Added README prerequisites for LibreNMS `unix-agent` and `applications`
