@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-06
+
+- Promoted generic LibreNMS Windows Agent overlay package and Windows MSI 0.6.6 from validated development commit b1b869c so FactoryTalk/public collector updates install through a real MSI version boundary.
+- Corrected the public README to reference the promoted 0.6.6 MSI and the current 22-collector diagnostic output.
+
 ## 2026-07-05
 
 - Added public README performance and scaling guidance for Windows-agent poller worker-time cost, rollout batches, and Poller Cluster Health checks.

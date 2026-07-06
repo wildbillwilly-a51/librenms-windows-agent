@@ -1,5 +1,11 @@
 # Work Log
 
+## 2026-07-06
+
+- Promoted overlay package 0.6.6 and Windows MSI from development commit b1b869c with checksums 51850d31f413840ecd455bc6e0aff214a3bc1f911bada8c54ac4b054c947ac89 and 2cab3b4c1609cf1acd9c0f82d042227b9afa7030af096bf8eb1709e1cb15ddce. Validation: generated package tar listing, MSI build, checksum update, public agent --once check, raw URL verification, and legacy-branding scans passed; PHP lint depends on local PHP availability.
+- Corrected the public README after the 0.6.6 promotion so direct MSI examples point at `librenms-windows-agent-0.6.6.msi` and diagnostics expect `collectors_run=22`.
+- Validation: README stale-reference scan and `git diff --check` passed.
+
 ## 2026-07-05
 
 - Added a public README performance and scaling section with observed Windows-agent poller worker-time cost, capacity math for 100-150 Windows devices, and rollout checks using LibreNMS Poller Cluster Health.

@@ -71,7 +71,7 @@ iwr -UseBasicParsing https://raw.githubusercontent.com/wildbillwilly-a51/librenm
 Direct MSI link:
 
 ```text
-https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/artifacts/librenms-windows-agent-0.6.5.msi
+https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/artifacts/librenms-windows-agent-0.6.6.msi
 ```
 
 The default Windows install is normally enough. It installs the
@@ -187,7 +187,7 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Install a specific overlay version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/install.sh | sudo bash -s -- --version 0.6.5
+curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/install.sh | sudo bash -s -- --version 0.6.6
 ```
 
 Preview without changing the node:
@@ -201,19 +201,19 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Interactive install after downloading the MSI:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.5.msi
+msiexec /i librenms-windows-agent-0.6.6.msi
 ```
 
 Silent install after downloading the MSI:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.5.msi /qn
+msiexec /i librenms-windows-agent-0.6.6.msi /qn
 ```
 
 Silent install with explicit MSI properties:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.5.msi /qn LISTEN_ADDRESS=0.0.0.0 LISTEN_PORT=6556 ADD_FIREWALL_RULE=1 START_SERVICE=1
+msiexec /i librenms-windows-agent-0.6.6.msi /qn LISTEN_ADDRESS=0.0.0.0 LISTEN_PORT=6556 ADD_FIREWALL_RULE=1 START_SERVICE=1
 ```
 
 Supported MSI properties:
@@ -228,7 +228,7 @@ Supported MSI properties:
 Silent uninstall:
 
 ```powershell
-msiexec /x librenms-windows-agent-0.6.5.msi /qn
+msiexec /x librenms-windows-agent-0.6.6.msi /qn
 ```
 
 ### Collector Expectations
@@ -277,5 +277,5 @@ A useful local smoke test on a Windows host:
 & "C:\Program Files\LibreNMS\Windows Agent\LibreNMS.WindowsAgent.Service.exe" --once --config "C:\ProgramData\LibreNMS\Windows Agent\agent.json" | Select-String '^<<<windows_agent|collectors_run|collect_duration_ms'
 ```
 
-Expected output includes `<<<windows_agent>>>`, `collectors_run=21`, and
+Expected output includes `<<<windows_agent>>>`, `collectors_run=22`, and
 `collectors_failed=0`.
