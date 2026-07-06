@@ -78,3 +78,7 @@
 ## 2026-07-05
 
 - Promoted overlay package 0.6.5 and Windows MSI from development commit 17acd26 with checksums 2d1f8417e4887e5258cb7e9f4e1ac7f33aa1f7c5909e8505cda5e87072e66f9a and 22ba5d2f727056124389369892332d6e411a0c50d97222c1ead485d3aaa6043a. Validation: generated package tar listing, MSI build, checksum update, public agent --once check, and legacy-branding scans passed; PHP lint depends on local PHP availability.
+
+## 2026-07-06
+
+- Promoted overlay package 0.6.5 and Windows MSI from development commit 3a85b98 with checksums c0a097ca28293a38f184e53a1c6fa4465fecd2b12347bb2d60a357b74f949854 and b8c9828a8ad1ff816bf0e357f99702cfde97f6cda807fa3019c903631ba79666. Validation: generated package tar listing, MSI build, checksum update, public agent --once check, and legacy-branding scans passed; PHP lint depends on local PHP availability.
