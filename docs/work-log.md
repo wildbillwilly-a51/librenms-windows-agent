@@ -1,5 +1,10 @@
 # Work Log
 
+## 2026-07-07
+
+- Corrected the public README after the 0.6.8 promotion so the direct MSI link, specific overlay version example, `msiexec` install commands, and silent uninstall command point at `librenms-windows-agent-0.6.8.msi`.
+- Validation: current README/reference scan and `git diff --check` passed; raw URL checks for the 0.6.8 MSI and overlay were already verified during promotion.
+
 ## 2026-07-06
 
 - Promoted overlay package 0.6.6 and Windows MSI from development commit b1b869c with checksums 51850d31f413840ecd455bc6e0aff214a3bc1f911bada8c54ac4b054c947ac89 and 2cab3b4c1609cf1acd9c0f82d042227b9afa7030af096bf8eb1709e1cb15ddce. Validation: generated package tar listing, MSI build, checksum update, public agent --once check, raw URL verification, and legacy-branding scans passed; PHP lint depends on local PHP availability.

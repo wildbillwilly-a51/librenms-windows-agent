@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-07
+
+- Corrected the public README current-version examples so the direct MSI link and `msiexec` commands reference the promoted 0.6.8 MSI.
+
 ## 2026-07-06
 
 - Promoted generic LibreNMS Windows Agent overlay package and Windows MSI 0.6.6 from validated development commit b1b869c so FactoryTalk/public collector updates install through a real MSI version boundary.
