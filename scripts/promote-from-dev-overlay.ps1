@@ -139,6 +139,56 @@ function Update-CurrentState {
     Set-Utf8NoBom -Path $Path -Value $content
 }
 
+function Update-CurrentVersionReferences {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Paths,
+        [Parameter(Mandatory = $true)][string]$Version
+    )
+
+    foreach ($path in $Paths) {
+        $content = Get-Content -LiteralPath $path -Raw
+        $content = [regex]::Replace(
+            $content,
+            'librenms-windows-agent-overlay-\d+\.\d+\.\d+\.tar\.gz',
+            ('librenms-windows-agent-overlay-{0}.tar.gz' -f $Version))
+        $content = [regex]::Replace(
+            $content,
+            'librenms-windows-agent-\d+\.\d+\.\d+\.msi',
+            ('librenms-windows-agent-{0}.msi' -f $Version))
+        $content = [regex]::Replace(
+            $content,
+            '--version \d+\.\d+\.\d+',
+            ('--version {0}' -f $Version))
+        Set-Utf8NoBom -Path $path -Value $content
+    }
+}
+
+function Assert-CurrentVersionReferences {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Paths,
+        [Parameter(Mandatory = $true)][string]$Version
+    )
+
+    $versionPattern = '\d+\.\d+\.\d+'
+    $expectedOverlay = "librenms-windows-agent-overlay-$Version.tar.gz"
+    $expectedMsi = "librenms-windows-agent-$Version.msi"
+    $failures = New-Object System.Collections.Generic.List[string]
+
+    foreach ($path in $Paths) {
+        $content = Get-Content -LiteralPath $path -Raw
+        $matches = [regex]::Matches($content, "librenms-windows-agent-overlay-$versionPattern\.tar\.gz|librenms-windows-agent-$versionPattern\.msi|--version $versionPattern")
+        foreach ($match in $matches) {
+            if ($match.Value -ne $expectedOverlay -and $match.Value -ne $expectedMsi -and $match.Value -ne "--version $Version") {
+                $failures.Add("$path contains stale current-version reference: $($match.Value)")
+            }
+        }
+    }
+
+    if ($failures.Count -gt 0) {
+        throw "Current public docs contain stale version references:`n$($failures -join "`n")"
+    }
+}
+
 function Update-InstallerVersion {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -329,6 +379,13 @@ try {
     Update-CurrentState -Path (Join-Path $repoRoot 'CURRENT-STATE.md') -Version $Version
     Update-InstallerVersion -Path (Join-Path $repoRoot 'install.sh') -Version $Version
     Update-AgentInstallerVersion -Path (Join-Path $repoRoot 'install-agent.ps1') -Version $Version
+    $currentVersionDocs = @(
+        (Join-Path $repoRoot 'README.md'),
+        (Join-Path $repoRoot 'CURRENT-STATE.md'),
+        (Join-Path $repoRoot 'docs\release-runbook.md'),
+        (Join-Path $repoRoot 'AGENTS.md')
+    )
+    Update-CurrentVersionReferences -Paths $currentVersionDocs -Version $Version
 
     $record = @(
         ('### {0}' -f $Version),
@@ -388,11 +445,12 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw 'git diff --check failed.'
     }
+    Assert-CurrentVersionReferences -Paths $currentVersionDocs -Version $Version
 
     if ($NoCommit) {
         Write-Output 'Promotion files updated. No commit created because -NoCommit was set.'
     } else {
-        & git -C $repoRoot add artifacts "install.sh" "install-agent.ps1" "SHA256SUMS" "CURRENT-STATE.md" "CHANGELOG.md" "docs/upstream-sync.md" "docs/work-log.md" "README.md" "docs/release-runbook.md"
+        & git -C $repoRoot add artifacts "install.sh" "install-agent.ps1" "SHA256SUMS" "CURRENT-STATE.md" "CHANGELOG.md" "docs/upstream-sync.md" "docs/work-log.md" "README.md" "docs/release-runbook.md" "AGENTS.md"
         if ($LASTEXITCODE -ne 0) {
             throw 'git add failed.'
         }

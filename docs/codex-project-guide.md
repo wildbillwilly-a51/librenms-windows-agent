@@ -27,6 +27,11 @@ snapshot is verified as public-safe. Promotion into this installer repo is the
 review boundary; after a scoped local commit is created, sync GitHub as part of
 the same task unless the user explicitly says not to push.
 
+Treat `README.md` as part of every release or promotion. If current artifact
+links, MSI names, overlay names, install commands, script names, or user-facing
+behavior change, update the README in the same commit and verify it no longer
+references the previous current version.
+
 ## Public-Safe Rules
 
 - Do not add private hostnames, IP addresses, device IDs, credentials, customer

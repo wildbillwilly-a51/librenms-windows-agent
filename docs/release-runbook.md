@@ -17,6 +17,11 @@ Stop if unrelated local changes are present.
 For installer-only changes, edit `install.sh`, `install-agent.ps1`, and
 `README.md` as needed.
 
+The public README is a release surface. Every promotion or installer change
+must update current download links, explicit version examples, script names,
+artifact names, command examples, and any changed install/upgrade behavior in
+`README.md` before commit.
+
 For overlay or Windows MSI changes:
 
 1. Validate the overlay behavior in the private development project.
@@ -28,9 +33,9 @@ For overlay or Windows MSI changes:
 
 The script builds the development overlay and public Windows MSI into temp
 directories, converts overlay content to generic public identifiers, updates
-`artifacts/`, regenerates `SHA256SUMS`, updates release docs, validates the
-result, creates a local commit, pushes `main` to GitHub, and verifies raw
-GitHub URLs.
+`artifacts/`, regenerates `SHA256SUMS`, updates `README.md` and release docs,
+validates the result, creates a local commit, pushes `main` to GitHub, and
+verifies raw GitHub URLs.
 
 Use `-NoCommit` or `-NoPush` only when testing the promotion script itself.
 
@@ -39,9 +44,9 @@ Use `-NoCommit` or `-NoPush` only when testing the promotion script itself.
 ```powershell
 bash -n ./install.sh
 powershell.exe -NoProfile -Command "[void][scriptblock]::Create((Get-Content -Raw .\install-agent.ps1))"
-tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.3.tar.gz
-Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.3.tar.gz
-Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-0.6.3.msi
+tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.9.tar.gz
+Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.9.tar.gz
+Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-0.6.9.msi
 git diff --check
 ```
 
@@ -51,7 +56,7 @@ If PHP is available, extract the package and lint all PHP files:
 $tmp = Join-Path $env:TEMP "librenms-windows-agent-overlay-lint"
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $tmp | Out-Null
-tar -xzf .\artifacts\librenms-windows-agent-overlay-0.6.3.tar.gz -C $tmp
+tar -xzf .\artifacts\librenms-windows-agent-overlay-0.6.9.tar.gz -C $tmp
 Get-ChildItem -Path $tmp -Recurse -Filter *.php | ForEach-Object { php -l $_.FullName }
 ```
 
@@ -91,6 +96,6 @@ After pushing, verify raw URLs:
 curl.exe -fsSI https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/install.sh
 curl.exe -fsSI https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/install-agent.ps1
 curl.exe -fsSI https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/SHA256SUMS
-curl.exe -fsSI https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/artifacts/librenms-windows-agent-overlay-0.6.3.tar.gz
-curl.exe -fsSI https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/artifacts/librenms-windows-agent-0.6.3.msi
+curl.exe -fsSI https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/artifacts/librenms-windows-agent-overlay-0.6.9.tar.gz
+curl.exe -fsSI https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/artifacts/librenms-windows-agent-0.6.9.msi
 ```

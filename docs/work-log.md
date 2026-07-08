@@ -104,4 +104,8 @@
 
 ## 2026-07-08
 
+- Corrected the public README and current project docs after the 0.6.9 promotion so direct MSI links, specific overlay version examples, `msiexec` install commands, and silent uninstall commands point at `librenms-windows-agent-0.6.9.msi`.
+- Hardened `scripts/promote-from-dev-overlay.ps1` so future promotions update README/current-version docs and fail before commit if current public docs still contain stale promoted-version references.
+- Updated `AGENTS.md`, `docs/release-runbook.md`, and `docs/codex-project-guide.md` to make README current-link/script/artifact updates an explicit release requirement.
+- Validation: README/current-version scan, promotion-script PowerShell parse, raw URL checks for the 0.6.9 MSI and overlay, and `git diff --check` passed.
 - Promoted overlay package 0.6.9 and Windows MSI from development commit b212262 with checksums 702f6ead433c2d7e80864f5d264ec0c4e0af8f81913388a6639201ace5189c29 and 3b56e59c09668e39e61d600eff629e0accd2b75c9b7810d8354f26d244952492. Validation: generated package tar listing, MSI build, checksum update, public agent --once check, and legacy-branding scans passed; PHP lint depends on local PHP availability.

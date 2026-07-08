@@ -48,8 +48,8 @@ Use the smallest relevant validation first:
 
 ```powershell
 bash -n ./install.sh
-tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.0.tar.gz
-Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.0.tar.gz
+tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.9.tar.gz
+Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.9.tar.gz
 ```
 
 When PHP is available, also lint the PHP files extracted from the overlay
@@ -65,6 +65,10 @@ update logs.
 Default completion steps:
 
 - Review `git status --short`.
+- Update `README.md` whenever current public links, artifact names, command
+  examples, scripts, files, install behavior, upgrade behavior, or rollback
+  instructions change. A promotion is incomplete if `README.md` still points
+  at the previous current version.
 - Update `docs/work-log.md` with a short dated entry covering the work,
   validation, and any skipped validation.
 - Update `CHANGELOG.md` with a concise sanitized summary when the scoped local

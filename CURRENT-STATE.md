@@ -14,7 +14,7 @@ project.
 - Published overlay package:
   `artifacts/librenms-windows-agent-overlay-0.6.9.tar.gz`
 - Published Windows MSI:
-  `artifacts/librenms-windows-agent-0.6.3.msi`
+  `artifacts/librenms-windows-agent-0.6.9.msi`
 - Package checksum manifest: `SHA256SUMS`
 - Project rules: `AGENTS.md`
 - Work history: `docs/work-log.md`
@@ -64,9 +64,9 @@ Smallest useful local validation:
 ```powershell
 bash -n ./install.sh
 powershell.exe -NoProfile -Command "[void][scriptblock]::Create((Get-Content -Raw .\install-agent.ps1))"
-tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.3.tar.gz
-Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.3.tar.gz
-Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-0.6.3.msi
+tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.9.tar.gz
+Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.9.tar.gz
+Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-0.6.9.msi
 ```
 
 Before publishing, also scan public content for credentials, private
