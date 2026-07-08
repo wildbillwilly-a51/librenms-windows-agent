@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = '0.6.6',
+    [string]$Version = '0.6.7',
     [string]$RepoOwner = 'wildbillwilly-a51',
     [string]$RepoName = 'librenms-windows-agent-installer',
     [string]$RepoBranch = 'main',
