@@ -111,3 +111,7 @@
 - Updated `AGENTS.md`, `docs/release-runbook.md`, and `docs/codex-project-guide.md` to make README current-link/script/artifact updates an explicit release requirement.
 - Validation: README/current-version scan, promotion-script PowerShell parse, raw URL checks for the 0.6.9 MSI and overlay, and `git diff --check` passed.
 - Promoted overlay package 0.6.9 and Windows MSI from development commit b212262 with checksums 702f6ead433c2d7e80864f5d264ec0c4e0af8f81913388a6639201ace5189c29 and 3b56e59c09668e39e61d600eff629e0accd2b75c9b7810d8354f26d244952492. Validation: generated package tar listing, MSI build, checksum update, public agent --once check, and legacy-branding scans passed; PHP lint depends on local PHP availability.
+
+## 2026-07-09
+
+- Promoted overlay package 0.6.11 and Windows MSI from development commit 751f167 with checksums d6d5045ec8c4b717261a11f63abd821a4fd9b54741e2f3bbd6265520c297d50f and 9c70201e5ba89cc84c7c827f8ae44de67c18d783c6d447334df6855cf53192f8. Validation: generated package tar listing, MSI build, checksum update, public agent --once check, and legacy-branding scans passed; PHP lint depends on local PHP availability.

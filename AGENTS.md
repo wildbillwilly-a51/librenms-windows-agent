@@ -48,8 +48,8 @@ Use the smallest relevant validation first:
 
 ```powershell
 bash -n ./install.sh
-tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.10.tar.gz
-Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.10.tar.gz
+tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.11.tar.gz
+Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.11.tar.gz
 ```
 
 When PHP is available, also lint the PHP files extracted from the overlay

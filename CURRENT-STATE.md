@@ -12,9 +12,9 @@ project.
 - LibreNMS overlay installer entry point: `install.sh`
 - Windows agent installer entry point: `install-agent.ps1`
 - Published overlay package:
-  `artifacts/librenms-windows-agent-overlay-0.6.10.tar.gz`
+  `artifacts/librenms-windows-agent-overlay-0.6.11.tar.gz`
 - Published Windows MSI:
-  `artifacts/librenms-windows-agent-0.6.10.msi`
+  `artifacts/librenms-windows-agent-0.6.11.msi`
 - Package checksum manifest: `SHA256SUMS`
 - Project rules: `AGENTS.md`
 - Work history: `docs/work-log.md`
@@ -24,7 +24,7 @@ distribution mirror for sanitized installer content.
 
 ## Current Release
 
-- Current version: `0.6.10`
+- Current version: `0.6.11`
 - Public LibreNMS overlay install command:
 
 ```bash
@@ -64,9 +64,9 @@ Smallest useful local validation:
 ```powershell
 bash -n ./install.sh
 powershell.exe -NoProfile -Command "[void][scriptblock]::Create((Get-Content -Raw .\install-agent.ps1))"
-tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.10.tar.gz
-Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.10.tar.gz
-Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-0.6.10.msi
+tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.11.tar.gz
+Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.11.tar.gz
+Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-0.6.11.msi
 ```
 
 Before publishing, also scan public content for credentials, private

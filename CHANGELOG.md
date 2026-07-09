@@ -87,3 +87,7 @@
 
 - Corrected the public README/current docs to reference the promoted 0.6.9 MSI and overlay artifacts, and hardened the promotion workflow so README/current-version references are updated and validated before commit.
 - Promoted generic LibreNMS Windows Agent overlay package and Windows MSI 0.6.9 from validated development commit b212262.
+
+## 2026-07-09
+
+- Promoted generic LibreNMS Windows Agent overlay package and Windows MSI 0.6.11 from validated development commit 751f167.

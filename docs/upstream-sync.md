@@ -276,3 +276,20 @@ Every sync must include a public-safety scan.
   converted overlay files to generic public identifiers, regenerated checksums,
   and scanned generated public payloads for legacy/site-specific branding.
 - PHP lint: run when PHP is available on the promotion workstation.
+
+### 0.6.11
+
+- Public package: `artifacts/librenms-windows-agent-overlay-0.6.11.tar.gz`
+- Public Windows MSI: `artifacts/librenms-windows-agent-0.6.11.msi`
+- Upstream development commit: `751f167`
+- Overlay SHA256:
+  `d6d5045ec8c4b717261a11f63abd821a4fd9b54741e2f3bbd6265520c297d50f`
+- Windows MSI SHA256:
+  `9c70201e5ba89cc84c7c827f8ae44de67c18d783c6d447334df6855cf53192f8`
+- Compatibility: requires Windows agent output using `windows_agent` and
+  `windows_agent_*` section names.
+- Promotion method: `scripts/promote-from-dev-overlay.ps1` built the
+  development overlay package and public MSI into temporary directories,
+  converted overlay files to generic public identifiers, regenerated checksums,
+  and scanned generated public payloads for legacy/site-specific branding.
+- PHP lint: run when PHP is available on the promotion workstation.
