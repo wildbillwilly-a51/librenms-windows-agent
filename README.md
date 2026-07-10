@@ -81,7 +81,21 @@ firewall rule, starts the service, and preserves existing config on upgrade.
 `0.0.0.0` is the local bind address on the Windows host. It is not the LibreNMS
 server or poller IP.
 
-### 5. Poll And Verify
+### 5. Enable The Windows Agent Application On The Device
+
+LibreNMS also requires the `Windows Agent` application to be enabled on each
+Windows device. This is separate from the global `Applications` and
+`Unix Agent` poller modules.
+
+GUI path:
+
+1. Open the Windows device in LibreNMS.
+2. Open the device config/settings page.
+3. Go to the `Applications` tab.
+4. Enable `Windows Agent`.
+5. Save the device settings.
+
+### 6. Poll And Verify
 
 Force a first poll if desired:
 
@@ -101,7 +115,7 @@ timeout 5 nc -vz "$WINDOWS_HOST" 6556
 timeout 15 bash -c "cat < /dev/null | nc '$WINDOWS_HOST' 6556" | head -40
 ```
 
-### 6. Plan Poller Capacity
+### 7. Plan Poller Capacity
 
 The Windows agent adds poller worker time to each Windows device that has
 `Unix Agent` enabled. Field validation with the full default collector set
@@ -135,7 +149,8 @@ tune collector runtime before continuing the rollout.
 ### Per-Device Module Overrides
 
 Use per-device settings only when a device should differ from the global
-LibreNMS module defaults.
+LibreNMS module defaults. These settings are different from the per-device
+`Applications` tab where `Windows Agent` is enabled.
 
 GUI path:
 

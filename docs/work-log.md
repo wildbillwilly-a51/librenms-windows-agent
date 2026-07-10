@@ -1,5 +1,11 @@
 # Work Log
 
+## 2026-07-10
+
+- Added the missing primary runbook step to enable the `Windows Agent` application on each LibreNMS device under the device `Applications` tab after installing the Windows agent.
+- Clarified that per-device module overrides are separate from the per-device `Windows Agent` application enablement.
+- Validation: documentation-only update; `git diff --check` passed.
+
 ## 2026-07-07
 
 - Corrected the public README after the 0.6.8 promotion so the direct MSI link, specific overlay version example, `msiexec` install commands, and silent uninstall command point at `librenms-windows-agent-0.6.8.msi`.
