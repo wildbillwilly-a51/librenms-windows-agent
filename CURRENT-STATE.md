@@ -1,95 +1,85 @@
 # Current State
 
-This is the read-first handoff for the generic LibreNMS Windows Agent Installer
+This is the read-first handoff for the universal LibreNMS Windows Agent
 project.
 
 ## Project Boundary
 
-- Local project root: the `librenms-windows-agent-installer` folder on the
-  maintainer workstation.
-- Public GitHub distribution mirror:
-  `https://github.com/wildbillwilly-a51/librenms-windows-agent-installer`
-- LibreNMS overlay installer entry point: `install.sh`
-- Windows agent installer entry point: `install-agent.ps1`
-- Published overlay package:
-  `artifacts/librenms-windows-agent-overlay-0.6.11.tar.gz`
-- Published Windows MSI:
-  `artifacts/librenms-windows-agent-0.6.11.msi`
-- Package checksum manifest: `SHA256SUMS`
-- Project rules: `AGENTS.md`
-- Work history: `docs/work-log.md`
+This repository is now the canonical development and public distribution
+source for:
 
-The local Git repository is the primary project record. GitHub is the public
-distribution mirror for sanitized installer content.
+- the Windows agent core and service under `src/`;
+- portable agent tests and LibreNMS fixtures under `tests/`;
+- WiX MSI source under `installer/`;
+- native generic LibreNMS overlay source under `librenms-overlay/`;
+- public install, build, release, checksum, and rollback workflows.
+
+Private sibling projects are not upstream sources for universal features. They
+may consume public builds for environment-specific deployment validation, but
+their hostnames, IPs, credentials, device IDs, deployment scripts, branding,
+and private exports do not belong here.
 
 ## Current Release
 
-- Current version: `0.6.11`
-- Public LibreNMS overlay install command:
+- Version: `0.6.11`
+- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.11.tar.gz`
+- Windows MSI: `artifacts/librenms-windows-agent-0.6.11.msi`
+- Checksums: `SHA256SUMS`
+- Public overlay installer: `install.sh`
+- Public Windows installer: `install-agent.ps1`
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/install.sh | sudo bash
-```
+The source migration preserves the current `0.6.11` public artifacts and their
+checksums. The next functional release should be built natively from this
+repository with a new version.
 
-- Public Windows agent silent install command:
+## Product Contract
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -UseBasicParsing https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent-installer/main/install-agent.ps1 -OutFile $env:TEMP\install-agent.ps1; & $env:TEMP\install-agent.ps1 -Silent"
-```
+- Windows service: `LibreNMSWindowsAgent`
+- Listener: Checkmk-compatible TCP on port `6556`
+- Protocol sections: `windows_agent` and `windows_agent_*`
+- LibreNMS application type: `windows-agent`
+- Default collector count: `22`
+- Supported MSI upgrade identity remains unchanged.
 
-The repository owner path is account-derived. All installer, overlay, app, and
-package identifiers are generic.
+New visibility is non-alerting by default unless explicitly approved. Preserve
+existing section names and RRD schemas; add graph families for new metric
+shapes.
 
-## Current Functionality
+## Development Workflow
 
-- Publishes a Windows MSI that installs the `LibreNMSWindowsAgent` service.
-- Installs a generic LibreNMS server-side overlay for Windows Agent visibility.
-- Expects Windows agents to emit `windows_agent` and `windows_agent_*` sections
-  through LibreNMS `unix-agent`.
-- Adds the LibreNMS application type `windows-agent` with UI label
-  `Windows Agent`.
-- Installs graph/page/parser files from the overlay package.
-- Installs a reapply command and systemd timer so the overlay can be restored
-  after LibreNMS updates.
-- Verifies the downloaded package with `SHA256SUMS` before installation.
-
-The Windows MSI supports silent `msiexec` properties for listener address,
-listener port, firewall rule, service start, config path, and config
-preservation.
-
-## Validation Baseline
-
-Smallest useful local validation:
+Run the smallest relevant validation first:
 
 ```powershell
+dotnet run --project .\tests\LibreNMS.WindowsAgent.Tests\LibreNMS.WindowsAgent.Tests.csproj -c Release
 bash -n ./install.sh
-powershell.exe -NoProfile -Command "[void][scriptblock]::Create((Get-Content -Raw .\install-agent.ps1))"
-tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.11.tar.gz
-Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.11.tar.gz
-Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-0.6.11.msi
+.\scripts\build-overlay-package.ps1 -ArtifactsDir <temporary-output-directory>
+.\scripts\build-msi.ps1 -ArtifactsDir <temporary-output-directory>
 ```
 
-Before publishing, also scan public content for credentials, private
-environment details, and legacy site-specific branding. When PHP is installed,
-extract the overlay package and run `php -l` over all packaged PHP files.
+For an intentional release:
 
-## Relationship To The Development Project
+```powershell
+.\scripts\build-release.ps1 -UpdateChecksums
+```
 
-The private homelab development project remains the development and validation
-source for new Windows Agent visibility features. This repository is the
-public, generic distribution product.
+Before publishing, review the full committed snapshot for secrets, private
+environment facts, machine-user paths, and legacy branding. When PHP is
+available, run PHP lint and both overlay fixture runners.
 
-Recommended durable link:
+## Current Validation Limitation
 
-1. Develop and validate new overlay behavior in the private development project.
-2. Run `scripts/promote-from-dev-overlay.ps1` from this installer repo.
-3. Record the upstream source commit, package version, checksum, validation, and
-   compatibility notes in `docs/upstream-sync.md`.
-4. Commit locally in this repository.
-5. Push the verified public-safe snapshot to GitHub automatically as part of
-   the installer repo workflow.
+The source migration workstation currently has a .NET runtime but no .NET SDK,
+so C# compilation, console tests, and WiX MSI rebuilding require an SDK-enabled
+environment. Overlay packaging, shell syntax, PowerShell parsing, tar listing,
+checksum validation, and source safety scans remain locally available.
 
-Long term, the more reliable design is to make the generic overlay source live
-in this public repository and have the private development project consume or
-test that generic source. That avoids repeated text conversion from a
-site-specific overlay into a generic product.
+Public GitHub synchronization is pending because the current shell has no
+non-interactive Git credential. The verified local commits remain the source of
+truth until authentication is restored.
+
+## Next Recommended Action
+
+Restore Git authentication and publish the verified local commits. Then install
+or use an approved .NET SDK environment, run the migrated agent tests and native
+MSI build, and begin the next universal collector or overlay work directly in
+this repository.

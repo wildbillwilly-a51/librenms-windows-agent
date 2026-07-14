@@ -1,0 +1,46 @@
+{
+  "name": "datto service stopped fixture",
+  "device": {
+    "device_id": 1001,
+    "hostname": "windows-agent-datto-stopped.example.test"
+  },
+  "app_id": 2001,
+  "agent_data": {
+    "windows_agent": "version=0.6.0.0 protocol=checkmk host=windows-agent-datto-stopped utc=2026-07-03T12:00:00Z",
+    "windows_agent_windows_os": "caption=\"Microsoft Windows Server 2022 Datacenter\"",
+    "windows_agent_pending_reboot": "pending=0 sources=none",
+    "windows_agent_windows_update": "reboot_required=0 service_state=Running",
+    "windows_agent_services": "installed_count=0",
+    "windows_agent_performance": "type=summary collect_duration_ms=2500 collectors_run=19 collectors_failed=0 collectors_timed_out=0 payload_bytes=14000 process_working_set_bytes=40000000 process_private_bytes=33000000",
+    "windows_agent_backup_storage_summary": "state=ok vss_writers_total=1 vss_writers_stable=1 vss_writers_failed=0 vss_writers_retryable_failed=0 vss_writers_non_retryable_failed=0 backup_services_total=1 backup_services_not_running=1",
+    "windows_agent_backup_services": "name=DattoBackupAgent display=\"Datto Backup Agent Service\" state=Stopped start_mode=Auto source=datto_backup_service",
+    "windows_agent_datto_backup_summary": "state=critical detected=1 service_running=0 provider_present=0 provider_issue=0 processes_total=0 evidence_state=unknown recent_errors=0 recent_critical_failures=0 last_success_age_hours=-1 stale_warning=0 stale_critical=0 health_issues=1",
+    "windows_agent_datto_backup_services": "name=DattoBackupAgent display=\"Datto Backup Agent Service\" role=backup_agent state=Stopped start_mode=Auto path_exists=1 version=3.0.0.0 path=\"C:\\\\Program Files\\\\Datto\\\\Datto Windows Agent\\\\DattoBackupAgent.exe\"",
+    "windows_agent_datto_backup_processes": "name=DattoBackupAgent matched_count=0",
+    "windows_agent_datto_backup_evidence": "source=\"\" type=last_success state=unknown timestamp_utc=\"\" age_hours=-1\nsource=local_logs_events type=recent_errors scanned_sources=0 recent_errors=0 recent_critical_failures=0"
+  },
+  "expect": {
+    "status_prefix": "OK:",
+    "status_contains": [
+      "datto_state=critical",
+      "datto_issues=1"
+    ],
+    "fields": {
+      "backup_services_not_running": 1,
+      "datto_backup_detected": 1,
+      "datto_backup_service_running": 0,
+      "datto_backup_health_issues": 1
+    },
+    "data": {
+      "datto_backup_summary.state": "critical",
+      "datto_backup_services.0.state": "Stopped",
+      "datto_backup_processes.0.matched_count": "0"
+    },
+    "datastore": {
+      "windows-agent-windows-agent-backup-storage.services_not_running": 1,
+      "windows-agent-windows-agent-datto-backup.detected": 1,
+      "windows-agent-windows-agent-datto-backup.service_running": 0,
+      "windows-agent-windows-agent-datto-backup.health_issues": 1
+    }
+  }
+}

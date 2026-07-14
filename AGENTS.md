@@ -1,17 +1,19 @@
 # LibreNMS Windows Agent Installer Project Rules
 
-This repository is the standalone public installer package for the generic
-LibreNMS Windows Agent overlay.
+This repository is the canonical universal development and public distribution
+project for the LibreNMS Windows Agent and LibreNMS overlay.
 
 ## Scope
 
 Work in this repository is scoped to:
 
-- the public one-command installer script
-- the generic LibreNMS overlay tarball under `artifacts/`
-- checksum and usage documentation
-- project workflow files such as this file, `CHANGELOG.md`, and
-  `docs/work-log.md`
+- Windows agent source under `src/`
+- agent and overlay tests under `tests/`
+- Windows MSI source under `installer/`
+- the generic LibreNMS overlay source under `librenms-overlay/`
+- native build and maintenance scripts under `scripts/`
+- public one-command installers and release artifacts
+- checksum, architecture, collector, release, and usage documentation
 
 This repo must stay generic. Do not add lab-specific hostnames, IP addresses,
 device IDs, credentials, private keys, tokens, or environment-specific
@@ -19,13 +21,15 @@ LibreNMS details.
 
 ## Source Of Truth
 
-The local Git repository is the primary project record. The GitHub repository is
-a sanitized public distribution mirror for installer content.
+This repository is the product source of truth. Do not develop universal agent
+or overlay behavior in a private sibling repository and copy it here through
+identifier conversion. Build the generic MSI and overlay directly from this
+source tree.
 
-The handoff from the private development project into this installer repository
-is the review and authorization boundary. After a scoped installer repo commit
-is created and public-safety checks pass, push the committed snapshot to GitHub
-as part of task completion.
+The local Git repository is the primary project record. GitHub is the sanitized
+public source and distribution mirror. After a scoped commit is created and the
+complete snapshot passes public-safety checks, push it as part of task
+completion.
 
 ## Safety Rules
 
@@ -34,8 +38,12 @@ as part of task completion.
 - Keep installer and overlay naming generic. Do not introduce site-specific
   package names, section names, service names, URLs other than the unavoidable
   GitHub owner path, or documentation text.
-- Keep the overlay server-side only. Windows agent installation is outside this
-  repository unless explicitly requested.
+- Preserve the stable `windows_agent` / `windows_agent_*` protocol and
+  `windows-agent` LibreNMS application identity unless the user approves a
+  breaking change.
+- Add new RRD graph families instead of changing existing RRD schemas.
+- Keep new visibility non-alerting by default unless alerts are explicitly
+  approved.
 - Do not publish secrets, private infrastructure facts, customer names, private
   hostnames, private IP inventories, SSH keys, tokens, cookies, certificates, or
   live LibreNMS credentials.
@@ -47,14 +55,17 @@ as part of task completion.
 Use the smallest relevant validation first:
 
 ```powershell
+dotnet run --project .\tests\LibreNMS.WindowsAgent.Tests\LibreNMS.WindowsAgent.Tests.csproj -c Release
 bash -n ./install.sh
+.\scripts\build-overlay-package.ps1 -ArtifactsDir <temporary-output-directory>
 tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.11.tar.gz
 Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.11.tar.gz
 ```
 
-When PHP is available, also lint the PHP files extracted from the overlay
-package before publishing. Also scan public content for legacy site-specific
-branding before publishing.
+For release work, run `scripts/build-release.ps1`. When PHP is available, also
+run the overlay fixture tests and lint packaged PHP files. Always scan the
+complete public snapshot for credentials, private infrastructure, machine-user
+paths, and legacy site-specific branding before publishing.
 
 ### Default work tracking
 

@@ -1,0 +1,85 @@
+{
+  "name": "horizon detected fixture",
+  "device": {
+    "device_id": 1001,
+    "hostname": "windows-agent-horizon-1.example.test"
+  },
+  "app_id": 2001,
+  "agent_data": {
+    "windows_agent": "version=0.7.0.0 protocol=checkmk host=windows-agent-horizon-1 utc=2026-07-03T18:00:00Z",
+    "windows_agent_windows_os": "caption=\"Microsoft Windows Server 2022 Standard\"",
+    "windows_agent_pending_reboot": "pending=0 sources=\"\"",
+    "windows_agent_windows_update": "reboot_required=0 service_state=Running",
+    "windows_agent_services": "installed_count=0",
+    "windows_agent_performance": "type=summary collect_duration_ms=1420 collectors_run=21 collectors_failed=0 collectors_timed_out=0 payload_bytes=15400 process_working_set_bytes=47185920 process_private_bytes=34078720",
+    "windows_agent_performance_summary": "state=ok cpu_queue_length=0 cpu_pressure=0 memory_available_mb=8192 memory_committed_percent=40 memory_pressure=0 pages_per_sec=0 paging_pressure=0 disk_read_ms_max=0 disk_write_ms_max=0 disk_queue_length_max=0 disk_pressure=0 network_bytes_per_sec_total=0 network_errors_total=0 network_issue=0 pressure_issues=0",
+    "windows_agent_sql_server_summary": "state=not_detected instances_total=0 instances_running=0 instances_not_running=0 listener_ports_total=0",
+    "windows_agent_iis_summary": "state=not_detected sites_total=0 sites_running=0 sites_stopped=0 app_pools_total=0 app_pools_running=0 app_pools_stopped=0 bindings_total=0",
+    "windows_agent_horizon_summary": "state=ok detected=1 services_total=2 services_not_running=0 processes_total=1 ports_total=4 ports_listening=2 ports_missing=0 certificates_total=1 certificates_expired=0 certificates_expiring=0 health_issues=0",
+    "windows_agent_horizon_services": "name=VMwareViewConnectionServer display=\"VMware Horizon View Connection Server\" state=Running start_mode=Auto role=connection_server path=\"C:\\\\Program Files\\\\VMware\\\\VMware View\\\\Server\\\\bin\\\\ws_tomcatservice.exe\"\nname=VMwareViewFramework display=\"VMware Horizon Framework Component\" state=Running start_mode=Auto role=horizon path=\"C:\\\\Program Files\\\\VMware\\\\VMware View\\\\Server\\\\bin\\\\ws_framework.exe\"",
+    "windows_agent_horizon_processes": "name=ws_tomcatservice.exe pid=2400 path=\"C:\\\\Program Files\\\\VMware\\\\VMware View\\\\Server\\\\bin\\\\ws_tomcatservice.exe\"",
+    "windows_agent_horizon_ports": "port=443 listening=1 addresses=0.0.0.0\nport=8443 listening=1 addresses=0.0.0.0\nport=4172 listening=0 addresses=\"\"\nport=32111 listening=0 addresses=\"\"",
+    "windows_agent_horizon_certificates": "store=My subject=\"CN=windows-agent-horizon-1.example.test\" issuer=\"CN=LibreNMS Issuing CA\" thumbprint=ABCDEF1234567890 not_after_utc=2027-07-03T18:00:00.0000000Z days_remaining=365 expired=0 expiring_warning=0 expiring_critical=0 has_private_key=1",
+    "windows_agent_tls_certificates_summary": "state=not_detected store_count=0 certificate_count=0 expired_count=0 expiring_warning_count=0 expiring_critical_count=0 not_yet_valid_count=0 invalid_chain_count=0 weak_key_count=0 weak_signature_count=0 missing_private_key_count=0 bound_count=0 binding_missing_count=0 unhealthy_count=0",
+    "windows_agent_backup_storage_summary": "state=not_detected vss_writers_total=0 vss_writers_stable=0 vss_writers_failed=0 vss_writers_retryable_failed=0 vss_writers_non_retryable_failed=0 backup_services_total=0 backup_services_not_running=0",
+    "windows_agent_datto_backup_summary": "state=not_detected detected=0 service_running=0 provider_present=0 provider_issue=0 processes_total=0 evidence_state=unknown recent_errors=0 recent_critical_failures=0 last_success_age_hours=-1 stale_warning=0 stale_critical=0 health_issues=0",
+    "windows_agent_ad_dc_health_summary": "state=not_applicable reason=not_domain_controller dc_detected=0 core_services_total=0 core_services_not_running=0 dns_service_present=0 dns_service_running=0 dns_service_issue=0 sysvol_share_present=0 netlogon_share_present=0 shares_missing=0 time_state=not_applicable time_service_running=0 time_issues=0 health_issues=0"
+  },
+  "expect": {
+    "status_prefix": "OK:",
+    "status_contains": [
+      "version=0.7.0.0",
+      "os=Microsoft Windows Server 2022 Standard",
+      "horizon_state=ok",
+      "horizon_issues=0",
+      "datto_state=not_detected"
+    ],
+    "fields": {
+      "agent_up": 1,
+      "pending_reboot": 0,
+      "windows_update_reboot_required": 0,
+      "agent_collect_duration_ms": 1420,
+      "horizon_detected": 1,
+      "horizon_services_total": 2,
+      "horizon_services_not_running": 0,
+      "horizon_processes_total": 1,
+      "horizon_ports_total": 4,
+      "horizon_ports_listening": 2,
+      "horizon_certificates_total": 1,
+      "horizon_certificates_expired": 0,
+      "horizon_certificates_expiring": 0,
+      "horizon_health_issues": 0
+    },
+    "data": {
+      "horizon_summary.state": "ok",
+      "horizon_services.0.name": "VMwareViewConnectionServer",
+      "horizon_ports.0.port": "443",
+      "horizon_certificates.0.thumbprint": "ABCDEF1234567890"
+    },
+    "datastore": {
+      "windows-agent-windows-agent-horizon.detected": 1,
+      "windows-agent-windows-agent-horizon.services_down": 0,
+      "windows-agent-windows-agent-horizon.ports_listening": 2,
+      "windows-agent-windows-agent-horizon.cert_expired": 0,
+      "windows-agent-windows-agent-horizon.cert_expiring": 0,
+      "windows-agent-windows-agent-horizon.health_issues": 0
+    },
+    "app_page": {
+      "contains": [
+        "VMware Horizon",
+        "windows-agent-details-horizon",
+        "windows-agent-graphs-horizon",
+        "VMwareViewConnectionServer",
+        "Horizon State and Issues",
+        "Horizon Listeners and Certificates",
+        "data-type=\"application_windows-agent-windows-agent_horizon_state_health\"",
+        "data-type=\"application_windows-agent-windows-agent_horizon_edges\""
+      ],
+      "not_contains": [
+        "<h3 class=\"panel-title\">VMware Horizon visibility</h3>",
+        "data-type=\"application_windows-agent-windows-agent_horizon\"",
+        "No watched TCP ports configured."
+      ]
+    }
+  }
+}

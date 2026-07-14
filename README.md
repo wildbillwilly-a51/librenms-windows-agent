@@ -1,7 +1,7 @@
-# LibreNMS Windows Agent Installer
+# LibreNMS Windows Agent
 
-Public installer repo for the generic LibreNMS Windows Agent and LibreNMS
-server overlay.
+Canonical universal source and public distribution repository for the LibreNMS
+Windows Agent and LibreNMS server overlay.
 
 The Windows agent listens on TCP `6556` and emits Checkmk-style
 `windows_agent_*` sections. The LibreNMS overlay teaches LibreNMS how to parse
@@ -294,3 +294,36 @@ A useful local smoke test on a Windows host:
 
 Expected output includes `<<<windows_agent>>>`, `collectors_run=22`, and
 `collectors_failed=0`.
+
+## Development
+
+Universal agent, collector, MSI, and overlay work is developed directly in this
+repository. The source tree uses only the public `LibreNMS.WindowsAgent`
+namespaces and `windows_agent_*` protocol; no private identifier-conversion
+promotion step is required.
+
+Key paths:
+
+- `src/LibreNMS.WindowsAgent.Core` — protocol, configuration, collector runner,
+  and shared health logic.
+- `src/LibreNMS.WindowsAgent.Service` — Windows service host and collectors.
+- `tests/LibreNMS.WindowsAgent.Tests` — portable console test suite.
+- `tests/librenms-overlay` — parser and app-page fixtures.
+- `installer/` — WiX MSI and Windows configuration actions.
+- `librenms-overlay/` — native generic LibreNMS parser, application, graph,
+  installer, rollback, and validation source.
+
+Build and test:
+
+```powershell
+dotnet run --project .\tests\LibreNMS.WindowsAgent.Tests\LibreNMS.WindowsAgent.Tests.csproj -c Release
+.\scripts\build-overlay-package.ps1 -ArtifactsDir <temporary-output-directory>
+.\scripts\build-msi.ps1 -ArtifactsDir <temporary-output-directory>
+```
+
+Build both release payloads and refresh `SHA256SUMS` only when intentionally
+preparing a release:
+
+```powershell
+.\scripts\build-release.ps1 -UpdateChecksums
+```

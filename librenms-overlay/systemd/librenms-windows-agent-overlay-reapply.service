@@ -1,0 +1,7 @@
+[Unit]
+Description=Reapply Windows Agent LibreNMS overlay
+Documentation=file:/usr/local/lib/librenms-windows-agent-overlay/current/README.md
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/librenms-windows-agent-overlay-reapply

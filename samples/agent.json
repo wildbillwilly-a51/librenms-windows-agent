@@ -1,0 +1,289 @@
+{
+  "listener": {
+    "address": "0.0.0.0",
+    "port": 6556,
+    "cacheRefreshSeconds": 240,
+    "initialCacheWaitSeconds": 2,
+    "allowedClients": []
+  },
+  "collectors": {
+    "timeoutSeconds": 10,
+    "enabled": [
+      "agent",
+      "os",
+      "uptime",
+      "cpu",
+      "memory",
+      "disks",
+      "services",
+      "roles",
+      "active_directory",
+      "logged_on_users",
+      "pending_reboot",
+      "windows_update",
+      "event_logs",
+      "processes",
+      "tcp_ports",
+      "performance_depth",
+      "sql_server",
+      "iis",
+      "horizon",
+      "factorytalk",
+      "tls_certificates",
+      "backup_storage"
+    ],
+    "watchedServices": [
+      "EventLog",
+      "LanmanServer",
+      "Winmgmt"
+    ],
+    "services": {
+      "mode": "classified",
+      "includeUnknownVendorServices": true,
+      "groups": {
+        "core_windows": {
+          "include": [
+            "EventLog",
+            "Winmgmt",
+            "RpcSs",
+            "Schedule",
+            "LanmanServer",
+            "LanmanWorkstation",
+            "W32Time",
+            "PlugPlay"
+          ]
+        },
+        "domain_identity": {
+          "include": [
+            "NTDS",
+            "Netlogon",
+            "Kdc",
+            "ADWS",
+            "DFSR",
+            "DNS",
+            "DHCPServer"
+          ]
+        },
+        "database": {
+          "include": [
+            "SQLBrowser",
+            "MSDTC"
+          ],
+          "patterns": [
+            "MSSQL*",
+            "SQLAgent*",
+            "MSSQLFDLauncher*",
+            "ReportServer*",
+            "postgresql*",
+            "mysql*",
+            "mariadb*"
+          ]
+        },
+        "web_app": {
+          "include": [
+            "W3SVC",
+            "WAS",
+            "IISADMIN",
+            "AppHostSvc"
+          ],
+          "patterns": [
+            "Tomcat*",
+            "*AppPool*",
+            "*Worker*"
+          ]
+        },
+        "backup_storage": {
+          "include": [
+            "VSS",
+            "SDRSVC",
+            "DFSR"
+          ],
+          "patterns": [
+            "Veeam*",
+            "VSSProvider*"
+          ]
+        },
+        "security_management": {
+          "include": [
+            "WinDefend",
+            "Sense",
+            "SNMP",
+            "WinRM",
+            "VMTools"
+          ],
+          "patterns": [
+            "*Defender*",
+            "*CrowdStrike*",
+            "*Sentinel*",
+            "*Sophos*",
+            "*CarbonBlack*",
+            "*Tanium*",
+            "*N-able*",
+            "*RMM*"
+          ]
+        }
+      },
+      "exclude": [
+        "MapsBroker",
+        "WSearch",
+        "Spooler"
+      ]
+    },
+    "roles": {
+      "mode": "auto"
+    },
+    "activeDirectory": {
+      "mode": "auto",
+      "includeReplicationTargets": true,
+      "includeDfsr": true,
+      "includeDcHealth": true,
+      "includeDns": true,
+      "includeTime": true,
+      "includeSysvolNetlogon": true,
+      "includeSecurityEvents": true,
+      "securityEventSinceHours": 24,
+      "securityEventMaxEvents": 2000,
+      "commandTimeoutSeconds": 20
+    },
+    "loggedOnUsers": {
+      "mode": "auto",
+      "commandTimeoutSeconds": 10
+    },
+    "eventLogs": [
+      {
+        "logName": "System",
+        "sinceHours": 24,
+        "maxEvents": 5000,
+        "includeHighValueDetails": true,
+        "highValueMaxSignatures": 25,
+        "highValueMaxSamplesPerSignature": 5,
+        "highValueMaxMessageChars": 400,
+        "highValueLevels": [
+          "Critical",
+          "Error"
+        ],
+        "highValueProviders": [],
+        "highValueEventIds": []
+      },
+      {
+        "logName": "Application",
+        "sinceHours": 24,
+        "maxEvents": 5000,
+        "includeHighValueDetails": true,
+        "highValueMaxSignatures": 25,
+        "highValueMaxSamplesPerSignature": 5,
+        "highValueMaxMessageChars": 400,
+        "highValueLevels": [
+          "Critical",
+          "Error"
+        ],
+        "highValueProviders": [],
+        "highValueEventIds": []
+      }
+    ],
+    "watchedProcesses": [],
+    "watchedTcpPorts": [
+      {
+        "name": "librenms_agent",
+        "address": "0.0.0.0",
+        "port": 6556
+      }
+    ],
+    "performanceDepth": {
+      "mode": "auto",
+      "includeDisks": true,
+      "includeNetwork": true,
+      "includeTopProcesses": true,
+      "topProcesses": 5,
+      "diskLatencyWarningMs": 50,
+      "diskQueueWarning": 2,
+      "memoryAvailableWarningMb": 1024,
+      "memoryCommittedWarningPercent": 90,
+      "pagingWarningPagesPerSec": 50,
+      "cpuQueueWarning": 4
+    },
+    "sqlServer": {
+      "mode": "auto"
+    },
+    "iis": {
+      "mode": "auto",
+      "includeSites": true,
+      "includeAppPools": true,
+      "includeBindings": true,
+      "includeCertificates": true,
+      "commandTimeoutSeconds": 10
+    },
+    "horizon": {
+      "mode": "auto",
+      "includeServices": true,
+      "includeProcesses": true,
+      "includePorts": true,
+      "includeCertificates": true,
+      "ports": [
+        443,
+        8443,
+        4172,
+        32111
+      ],
+      "certificateWarningDays": 30,
+      "certificateCriticalDays": 7
+    },
+    "factoryTalk": {
+      "mode": "auto",
+      "includeProducts": true,
+      "includeServices": true,
+      "includeProcesses": true,
+      "includePorts": true,
+      "ports": [
+        27000,
+        27001,
+        27002,
+        27003,
+        27004,
+        27005,
+        27006,
+        27007,
+        27008,
+        27009,
+        22350,
+        4244,
+        4245,
+        9111,
+        44818
+      ]
+    },
+    "tlsCertificates": {
+      "mode": "auto",
+      "stores": [
+        "My",
+        "WebHosting"
+      ],
+      "includeExpired": true,
+      "validateChain": true,
+      "checkHttpSysBindings": true,
+      "minimumRsaKeySize": 2048,
+      "warningDays": 30,
+      "criticalDays": 7
+    },
+    "backupStorage": {
+      "mode": "auto",
+      "includeVssWriters": true,
+      "includeBackupServices": true,
+      "includeDattoBackup": true,
+      "expectedBackupMode": "auto",
+      "dattoBackupWarningHours": 24,
+      "dattoBackupCriticalHours": 48,
+      "dattoBackupEvidenceSinceHours": 48,
+      "dattoBackupMaxLogBytes": 262144,
+      "dattoBackupLogPaths": [
+        "%ProgramFiles%\\Datto\\Datto Windows Agent",
+        "%ProgramData%\\Datto\\Datto Windows Agent"
+      ],
+      "commandTimeoutSeconds": 15
+    }
+  },
+  "logging": {
+    "level": "info",
+    "path": "%ProgramData%\\LibreNMS\\Windows Agent\\agent.log"
+  }
+}

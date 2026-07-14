@@ -2,6 +2,10 @@
 
 ## 2026-07-14
 
+- Transitioned the repository into the canonical universal development source
+  for the Windows agent, collectors, MSI, tests, and LibreNMS overlay.
+- Added native generic build and release workflows and retired private-source
+  identifier-conversion promotion.
 - Synchronized the repository's low-intervention Codex workflow, including
   scoped work tracking, autonomous work packages, prototype and portable-resume
   guidance, and isolated sanitized-backup tooling.

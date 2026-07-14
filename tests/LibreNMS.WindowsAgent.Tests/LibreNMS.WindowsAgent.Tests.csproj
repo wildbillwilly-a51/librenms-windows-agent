@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>LibreNMS.WindowsAgent.Tests</RootNamespace>
+    <AssemblyName>LibreNMS.WindowsAgent.Tests</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LibreNMS.WindowsAgent.Core\LibreNMS.WindowsAgent.Core.csproj" />
+  </ItemGroup>
+</Project>

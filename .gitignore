@@ -31,6 +31,13 @@ diagnostics/
 tmp/
 temp/
 
+# Native .NET/WiX development output
+**/bin/
+**/obj/
+artifacts/librenms-windows-agent/
+artifacts/*.zip
+artifacts/native-build-validation/
+
 # new-project-setup:v2:start
 # Machine-local private documentation
 *.local.md

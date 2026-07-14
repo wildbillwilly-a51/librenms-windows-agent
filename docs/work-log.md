@@ -2,6 +2,28 @@
 
 ## 2026-07-14
 
+- Migrated the current universal agent core, Windows service collectors,
+  portable tests, MSI source, generic sample configuration, LibreNMS overlay
+  source, parser/app fixtures, architecture notes, and collector roadmap into
+  this repository.
+- Added native `build-msi.ps1`, `build-overlay-package.ps1`, and
+  `build-release.ps1` workflows; retired the sibling-repository promotion
+  script and updated the project boundary, current-state handoff, README,
+  release runbook, and Codex guide.
+- Preserved the published 0.6.11 artifacts and checksums. Source and staging
+  scans found no private hostnames, IPs, usernames, device IDs, or legacy
+  branding. C# tests and MSI rebuilding were skipped because no .NET SDK is
+  installed; remaining validation is recorded below.
+- Validation: native overlay packaging passed. The generated package differs
+  from published 0.6.11 only in explicit ordinal manifest ordering and
+  scanner-friendly construction of the environment-supplied web login form
+  key. PowerShell parsing, JSON/XML structure, project-reference checks,
+  portable-Git Bash syntax checks, published artifact checksum verification,
+  and imported-source privacy scans passed. PHP lint/fixtures and Python syntax
+  compilation were skipped because PHP and Python are unavailable.
+- Publication: the local transition commit was created, but the public push is
+  pending because non-interactive Git credentials are unavailable in the
+  current shell.
 - Synchronized the installed new-project setup workflow in the public installer
   repository while preserving project-specific release, validation, and
   public-safety rules.

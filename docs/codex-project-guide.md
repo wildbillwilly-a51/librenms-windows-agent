@@ -13,13 +13,17 @@ Use this file when opening this folder as its own Codex project.
 
 ## Operating Model
 
-This repository is intentionally small. Most tasks should touch only one of
-these surfaces:
+This repository is the canonical universal product source. Most tasks should
+touch only the relevant surfaces:
 
-- `install.sh` for installer behavior.
-- `README.md` for public usage.
-- `artifacts/librenms-windows-agent-overlay-*.tar.gz` and `SHA256SUMS` for
-  release payload updates.
+- `src/` for agent core, service host, and collectors.
+- `tests/` for portable agent and LibreNMS fixture coverage.
+- `installer/` for MSI behavior.
+- `librenms-overlay/` for LibreNMS parser, app UI, graphs, rollback, and
+  validation behavior.
+- `scripts/build-*.ps1` for native builds and releases.
+- `install.sh`, `install-agent.ps1`, and `README.md` for public installation.
+- `artifacts/` and `SHA256SUMS` for intentional release payload updates.
 - `docs/` for project state, workflow, and release notes.
 
 Keep the local Git repo primary. Push to GitHub only after the committed
@@ -50,22 +54,28 @@ bash -n ./install.sh
 git diff --check
 ```
 
-Overlay package update:
+Agent tests:
 
 ```powershell
-.\scripts\promote-from-dev-overlay.ps1
+dotnet run --project .\tests\LibreNMS.WindowsAgent.Tests\LibreNMS.WindowsAgent.Tests.csproj -c Release
 ```
 
-Promotion test without commit:
+Overlay package test:
 
 ```powershell
-.\scripts\promote-from-dev-overlay.ps1 -NoCommit
+.\scripts\build-overlay-package.ps1 -ArtifactsDir <temporary-output-directory>
 ```
 
-Promotion test with local commit but no GitHub sync:
+MSI build test:
 
 ```powershell
-.\scripts\promote-from-dev-overlay.ps1 -NoPush
+.\scripts\build-msi.ps1 -ArtifactsDir <temporary-output-directory>
+```
+
+Intentional release build:
+
+```powershell
+.\scripts\build-release.ps1 -UpdateChecksums
 ```
 
 Snapshot review before push:

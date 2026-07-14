@@ -1,0 +1,76 @@
+{
+  "name": "classified services stopped neutral fixture",
+  "device": {
+    "device_id": 1001,
+    "hostname": "windows-agent-neutral-services.example"
+  },
+  "app_id": 2001,
+  "agent_data": {
+    "windows_agent": "version=0.6.0.0 protocol=checkmk host=windows-agent-neutral-services utc=2026-07-03T18:00:00Z",
+    "windows_agent_windows_os": "caption=\"Microsoft Windows Server 2022 Datacenter\"",
+    "windows_agent_pending_reboot": "pending=0 sources=none",
+    "windows_agent_windows_update": "reboot_required=0 service_state=Running",
+    "windows_agent_services_summary": "group=optional_windows total=1 not_running=1",
+    "windows_agent_services": "installed_count=1\nname=Spooler display=\"Print Spooler\" state=Stopped start_mode=Manual group=optional_windows source=pattern",
+    "windows_agent_event_logs": "configured_count=1\nlog=System critical_count=0 error_count=2 warning_count=0",
+    "windows_agent_event_log_high_value_summary": "configured_logs=1 signatures_total=1 events_total=2 samples_total=1 truncated=0 max_signatures=25 max_samples_per_signature=5",
+    "windows_agent_event_log_high_value": "log=System provider=\"Service Control Manager\" event_id=7036 level=Error level_code=2 count=2 first_seen_utc=2026-07-03T17:00:00Z last_seen_utc=2026-07-03T18:00:00Z sample_index=1 sample_time_utc=2026-07-03T18:00:00Z message_excerpt=\"The service entered the stopped state.\"",
+    "windows_agent_performance": "type=summary collect_duration_ms=2000 collectors_run=20 collectors_failed=0 collectors_timed_out=0 payload_bytes=15000 process_working_set_bytes=40000000 process_private_bytes=33000000",
+    "windows_agent_performance_summary": "state=ok cpu_queue_length=0 cpu_pressure=0 memory_available_mb=4096 memory_committed_percent=40 memory_pressure=0 pages_per_sec=0 paging_pressure=0 disk_read_ms_max=0 disk_write_ms_max=0 disk_queue_length_max=0 disk_pressure=0 network_bytes_per_sec_total=0 network_errors_total=0 network_issue=0 pressure_issues=0",
+    "windows_agent_sql_server_summary": "state=not_detected instances_total=0 instances_running=0 instances_not_running=0 listener_ports_total=0",
+    "windows_agent_iis_summary": "state=not_detected sites_total=0 sites_running=0 sites_stopped=0 app_pools_total=0 app_pools_running=0 app_pools_stopped=0 bindings_total=0",
+    "windows_agent_horizon_summary": "state=not_detected detected=0 services_total=0 services_not_running=0 processes_total=0 ports_total=0 ports_listening=0 ports_missing=0 certificates_total=0 certificates_expired=0 certificates_expiring=0 health_issues=0",
+    "windows_agent_tls_certificates_summary": "state=not_detected store_count=0 certificate_count=0 expired_count=0 expiring_warning_count=0 expiring_critical_count=0 not_yet_valid_count=0 invalid_chain_count=0 weak_key_count=0 weak_signature_count=0 missing_private_key_count=0 bound_count=0 binding_missing_count=0 unhealthy_count=0",
+    "windows_agent_backup_storage_summary": "state=ok vss_writers_total=1 vss_writers_stable=1 vss_writers_failed=0 vss_writers_retryable_failed=0 vss_writers_non_retryable_failed=0 backup_services_total=1 backup_services_not_running=1",
+    "windows_agent_vss_writers": "name=\"System Writer\" state=Stable last_error=\"No error\" failure_type=\"\"",
+    "windows_agent_backup_services": "name=wbengine display=\"Block Level Backup Engine Service\" state=Stopped start_mode=Manual source=windows_backup_service",
+    "windows_agent_datto_backup_summary": "state=not_detected detected=0 service_running=0 provider_present=0 provider_issue=0 processes_total=0 evidence_state=unknown recent_errors=0 recent_critical_failures=0 last_success_age_hours=-1 stale_warning=0 stale_critical=0 health_issues=0",
+    "windows_agent_ad_dc_health_summary": "state=not_applicable reason=not_domain_controller dc_detected=0 core_services_total=0 core_services_not_running=0 dns_service_present=0 dns_service_running=0 dns_service_issue=0 sysvol_share_present=0 netlogon_share_present=0 shares_missing=0 time_state=not_applicable time_service_running=0 time_issues=0 health_issues=0"
+  },
+  "expect": {
+    "status_prefix": "OK:",
+    "status_contains": [
+      "watched_services_not_running=0",
+      "classified_services_down=1"
+    ],
+    "fields": {
+      "pending_reboot": 0,
+      "windows_update_reboot_required": 0,
+      "watched_services_total": 0,
+      "watched_services_not_running": 0,
+      "service_groups_total": 1,
+      "classified_services_total": 1,
+      "classified_services_not_running": 1,
+      "event_log_critical_count": 0,
+      "event_log_error_count": 2,
+      "vss_writers_failed": 0,
+      "backup_services_not_running": 1,
+      "watched_processes_not_running": 0,
+      "watched_tcp_ports_not_listening": 0,
+      "agent_collectors_failed": 0,
+      "agent_collectors_timed_out": 0
+    },
+    "data": {
+      "service_group_summaries.optional_windows.not_running": "1",
+      "classified_service_groups.optional_windows.0.state": "Stopped"
+    },
+    "datastore": {
+      "windows-agent-windows-agent.watched_services_not_running": 0,
+      "windows-agent-windows-agent-classified-services.not_running": 1,
+      "windows-agent-windows-agent-backup-storage.vss_writers_failed": 0,
+      "windows-agent-windows-agent-backup-storage.services_not_running": 1
+    },
+    "app_page": {
+      "contains": [
+        "Classified stopped",
+        "Print Spooler",
+        "Stopped",
+        "Critical/errors",
+        "Services down"
+      ],
+      "not_contains": [
+        "glyphicon-exclamation-sign text-danger"
+      ]
+    }
+  }
+}
