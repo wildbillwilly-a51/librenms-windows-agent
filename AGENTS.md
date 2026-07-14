@@ -94,3 +94,43 @@ unless reviewed, scanned, and intentionally added.
 
 If GitHub push is unavailable, keep the local commit and report push as skipped
 or pending. Do not rewrite history to repair a failed push.
+
+<!-- new-project-setup:v2:start -->
+### New project setup invocation
+
+A bare or primary `$new-project-setup` invocation runs install/sync for this
+project. Inspect first, then run the installed skill's
+`scripts/apply-project-setup.ps1` against this project. Do not stop after merely
+loading the skill. Questions about the skill are consultation-only.
+
+### Default work tracking
+
+For normal file-changing work, review status, update the local private
+`docs/work-log.md`, update public-safe `CHANGELOG.md` when appropriate, run
+focused validation, commit only scoped paths, then run
+`scripts/github-backup.ps1`. The backup helper uses committed policy and an
+isolated sanitized history. Never push source history as backup. Recheck branch,
+HEAD, and scoped paths immediately before commit.
+
+### Autonomous work packages
+
+Complete bounded objectives end-to-end within one approved risk lane. Continue
+through implementation and focused validation without routine checkpoints, but
+stop before deployment, schema/migration, auth/security, destructive data,
+global installs, dependency changes, broad redesign, or material scope growth
+unless approved.
+
+### Prototype lane
+
+Use only when the user explicitly requests a quick local prototype or
+throwaway exploration. Complete the local core workflow and smoke validation,
+but skip routine logs, handoff, commit, and backup unless asked to preserve it.
+
+### Portable resume
+
+For cross-computer or externally stateful work, keep a public-safe
+`docs/codex-handoff.md` with the current objective, one next action, blockers,
+deployment state, and remaining validation. Keep confidential operational detail
+in `*.local.md`. Fast-forward only when clean and stop on dirty, diverged, or
+concurrent state.
+<!-- new-project-setup:v2:end -->

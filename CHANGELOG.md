@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-14
+
+- Synchronized the repository's low-intervention Codex workflow, including
+  scoped work tracking, autonomous work packages, prototype and portable-resume
+  guidance, and isolated sanitized-backup tooling.
+
 ## 2026-07-07
 
 - Corrected the public README current-version examples so the direct MSI link and `msiexec` commands reference the promoted 0.6.8 MSI.

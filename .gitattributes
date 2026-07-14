@@ -3,3 +3,15 @@
 *.sh text eol=lf
 SHA256SUMS text eol=lf
 *.tar.gz binary
+
+# new-project-setup:v2:start
+* text=auto
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.sh text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+# new-project-setup:v2:end

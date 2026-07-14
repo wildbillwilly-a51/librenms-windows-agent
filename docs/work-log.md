@@ -1,5 +1,21 @@
 # Work Log
 
+## 2026-07-14
+
+- Synchronized the installed new-project setup workflow in the public installer
+  repository while preserving project-specific release, validation, and
+  public-safety rules.
+- Added the versioned workflow marker, managed ignore and line-ending policy,
+  autonomous/prototype/portable-resume guidance, and the isolated sanitized
+  GitHub backup helper.
+- Validation: managed setup check, PowerShell helper parse, and Git diff checks
+  passed. The isolated-backup scan inspected committed `HEAD` and blocked only
+  on the intentionally published MSI and overlay archives under the
+  `unreviewed-binary` rule; no blanket allowances were added. The GitHub CLI is
+  also not installed, so isolated GitHub backup remains pending. The existing
+  public distribution push is handled by this repository's normal
+  verified-snapshot workflow.
+
 ## 2026-07-10
 
 - Added the missing primary runbook step to enable the `Windows Agent` application on each LibreNMS device under the device `Applications` tab after installing the Windows agent.
