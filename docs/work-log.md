@@ -11,8 +11,16 @@
   export, Git history, and ignored internal artifacts.
 - Updated the canonical project name, public installer repository defaults,
   and README URLs from `librenms-windows-agent-installer` to
-  `librenms-windows-agent`. GitHub repository renaming and publication remain
-  pending until GitHub authentication is available.
+  `librenms-windows-agent`.
+- Renamed the private GitHub repository to `librenms-windows-agent-legacy`,
+  renamed the public canonical repository to `librenms-windows-agent`, updated
+  both local remotes, and published the canonical commits. The final local
+  canonical directory rename is pending because the active Codex workspace
+  holds the directory open.
+- Validation: installer PowerShell parsing, Bash syntax, `git diff --check`,
+  active old-name reference scanning, and release checksum verification passed.
+  The isolated backup scanner reported only the intentionally tracked MSI and
+  overlay release binaries and no text, credential, or infrastructure finding.
 
 ## 2026-07-14
 
