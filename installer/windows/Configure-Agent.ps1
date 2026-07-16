@@ -19,7 +19,10 @@ param(
     [Alias('c')]
     [string]$ConfigPath = '',
     [Alias('k')]
-    [int]$PreserveConfig = 1
+    [int]$PreserveConfig = 1,
+    [Alias('n')]
+    [ValidateSet(0, 1)]
+    [int]$EnableFactoryTalkNativeCounters = 1
 )
 
 $ErrorActionPreference = 'Stop'
@@ -59,7 +62,7 @@ function Write-JsonConfig {
 }
 
 New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
-Write-InstallLog "Configuring $serviceName from installDir=$InstallDir dataDir=$DataDir listen=${ListenAddress}:$ListenPort firewall=$AddFirewallRule start=$StartService preserveConfig=$PreserveConfig configPath=$ConfigPath"
+Write-InstallLog "Configuring $serviceName from installDir=$InstallDir dataDir=$DataDir listen=${ListenAddress}:$ListenPort firewall=$AddFirewallRule start=$StartService preserveConfig=$PreserveConfig factoryTalkNativeCounters=$EnableFactoryTalkNativeCounters configPath=$ConfigPath"
 
 $shouldWriteConfig = (-not (Test-Path -LiteralPath $configTarget)) -or ($PreserveConfig -eq 0)
 if ($shouldWriteConfig) {
@@ -84,8 +87,13 @@ if (Test-Path -LiteralPath $configTarget) {
     $config.listener.port = $ListenPort
     $config.listener.allowedClients = @()
     $config.logging.path = (Join-Path $DataDir 'agent.log')
+    if (-not $config.collectors.factoryTalk) {
+        $config.collectors | Add-Member -NotePropertyName factoryTalk -NotePropertyValue ([pscustomobject]@{}) -Force
+    }
+    $nativeCountersMode = if ($EnableFactoryTalkNativeCounters -eq 1) { 'local' } else { 'disabled' }
+    $config.collectors.factoryTalk | Add-Member -NotePropertyName nativeCountersMode -NotePropertyValue $nativeCountersMode -Force
     Write-JsonConfig -Path $configTarget -Config $config
-    Write-InstallLog "Listener config normalized: address=${ListenAddress} port=$ListenPort allowedClients=any"
+    Write-InstallLog "Config normalized: address=${ListenAddress} port=$ListenPort allowedClients=any factoryTalkNativeCountersMode=$nativeCountersMode"
 }
 
 if (-not (Test-Path -LiteralPath $exePath)) {

@@ -16,6 +16,7 @@
     <Property Id="ADD_FIREWALL_RULE" Value="1" />
     <Property Id="START_SERVICE" Value="1" />
     <Property Id="PRESERVE_CONFIG" Value="1" />
+    <Property Id="ENABLE_FACTORYTALK_NATIVE_COUNTERS" Value="1" Secure="yes" />
     <Property Id="CONFIG_PATH" Value="__DEFAULT__" Secure="yes" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
@@ -86,7 +87,7 @@
       Execute="deferred"
       Impersonate="no"
       Return="check"
-      ExeCommand="powershell.exe -NoP -EP Bypass -Command &quot;&amp; '[INSTALLFOLDER]c.ps1' -i '[INSTALLFOLDER]' -d '[DATADIR]' -a '[LISTEN_ADDRESS]' -p [LISTEN_PORT] -f [ADD_FIREWALL_RULE] -s [START_SERVICE] -c '[CONFIG_PATH]' -k [PRESERVE_CONFIG]&quot;" />
+      ExeCommand="powershell.exe -NoP -EP Bypass -Command &quot;&amp; '[INSTALLFOLDER]c.ps1' -i '[INSTALLFOLDER]' -d '[DATADIR]' -a '[LISTEN_ADDRESS]' -p [LISTEN_PORT] -f [ADD_FIREWALL_RULE] -s [START_SERVICE] -c '[CONFIG_PATH]' -k [PRESERVE_CONFIG] -n [ENABLE_FACTORYTALK_NATIVE_COUNTERS]&quot;" />
 
     <CustomAction
       Id="RemoveFirewallRule"

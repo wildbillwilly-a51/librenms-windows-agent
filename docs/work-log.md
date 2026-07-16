@@ -2,6 +2,22 @@
 
 ## 2026-07-16
 
+- Added the `ENABLE_FACTORYTALK_NATIVE_COUNTERS` MSI property, defaulting to
+  enabled. The installer applies `nativeCountersMode=local` to both fresh and
+  preserved configurations; setting the property to `0` provides a direct
+  rollback without disabling Windows-native FactoryTalk runtime metrics.
+- Built release 0.6.13 and refreshed the MSI, overlay, current installer
+  defaults, documentation, and checksum manifest. Overlay SHA256:
+  `e948079cd045fc08bd3d6b6bdef6434e93832bc1393218ca4d6150ca9e7768ab`.
+  MSI SHA256:
+  `f762c5c137261a8b6d47a4bb5fc167379e8623f51be3514938ecd2c3e302c66e`.
+- Validation passed for all portable .NET tests, the .NET Framework service and
+  WiX builds, MSI metadata, PowerShell/Bash parsing, package contents, and
+  checksums. A non-privileged temporary install-layout test also confirmed the
+  enabled and disabled property paths update a preserved configuration and pass
+  agent validation. PHP was unavailable locally, so overlay PHP lint was
+  skipped; the 0.6.13 overlay source is unchanged from the previously linted
+  0.6.12 release.
 - Implemented FactoryTalk Windows-native runtime metrics and a safe opt-in
   FactoryTalk Diagnostics Counter Monitor snapshot path. The snapshot runner is
   localhost-only, verifies Rockwell Authenticode trust, skips concurrent/manual

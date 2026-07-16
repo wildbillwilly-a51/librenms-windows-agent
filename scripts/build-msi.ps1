@@ -43,6 +43,7 @@ function Assert-MsiMetadata {
     if ((Get-MsiProperty $MsiPath 'ProductName') -ne 'LibreNMS Windows Agent') { throw 'Unexpected MSI product name.' }
     if ((Get-MsiProperty $MsiPath 'ProductVersion') -ne $ExpectedVersion) { throw 'Unexpected MSI product version.' }
     if ((Get-MsiProperty $MsiPath 'UpgradeCode') -ne $expectedUpgradeCode) { throw 'Unexpected MSI upgrade code.' }
+    if ((Get-MsiProperty $MsiPath 'ENABLE_FACTORYTALK_NATIVE_COUNTERS') -ne '1') { throw 'FactoryTalk native counters are not enabled by default in the MSI.' }
     $productCode = Get-MsiProperty $MsiPath 'ProductCode'
     if (-not $productCode -or $productCode -eq $legacyFixedProductCode) { throw 'MSI ProductCode was not regenerated.' }
 }

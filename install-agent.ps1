@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = '0.6.12',
+    [string]$Version = '0.6.13',
     [string]$RepoOwner = 'wildbillwilly-a51',
     [string]$RepoName = 'librenms-windows-agent',
     [string]$RepoBranch = 'main',
@@ -10,6 +10,8 @@ param(
     [int]$AddFirewallRule = 1,
     [int]$StartService = 1,
     [int]$PreserveConfig = 1,
+    [ValidateSet(0, 1)]
+    [int]$EnableFactoryTalkNativeCounters = 1,
     [string]$ConfigPath = '',
     [switch]$Silent
 )
@@ -81,7 +83,10 @@ function Get-ServiceExecutablePath {
 }
 
 function Assert-AgentInstalled {
-    param([Parameter(Mandatory = $true)][string]$ExpectedVersion)
+    param(
+        [Parameter(Mandatory = $true)][string]$ExpectedVersion,
+        [Parameter(Mandatory = $true)][string]$ExpectedFactoryTalkNativeCountersMode
+    )
 
     $expectedExe = Join-Path $env:ProgramFiles 'LibreNMS\Windows Agent\LibreNMS.WindowsAgent.Service.exe'
     $serviceExe = Get-ServiceExecutablePath
@@ -99,6 +104,11 @@ function Assert-AgentInstalled {
     $configPath = Join-Path $env:ProgramData 'LibreNMS\Windows Agent\agent.json'
     if (-not (Test-Path -LiteralPath $configPath)) {
         throw "LibreNMS Windows Agent config was not found after installation: $configPath"
+    }
+    $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+    $actualNativeCountersMode = [string]$config.collectors.factoryTalk.nativeCountersMode
+    if ($actualNativeCountersMode -ne $ExpectedFactoryTalkNativeCountersMode) {
+        throw "FactoryTalk native counter mode mismatch. Expected $ExpectedFactoryTalkNativeCountersMode but found $actualNativeCountersMode in $configPath."
     }
 
     $service = Get-Service -Name LibreNMSWindowsAgent -ErrorAction SilentlyContinue
@@ -152,7 +162,8 @@ $arguments = @(
     "LISTEN_PORT=$ListenPort",
     "ADD_FIREWALL_RULE=$AddFirewallRule",
     "START_SERVICE=$StartService",
-    "PRESERVE_CONFIG=$PreserveConfig"
+    "PRESERVE_CONFIG=$PreserveConfig",
+    "ENABLE_FACTORYTALK_NATIVE_COUNTERS=$EnableFactoryTalkNativeCounters"
 )
 
 if ($ConfigPath) {
@@ -168,8 +179,10 @@ if ($process.ExitCode -ne 0 -and $process.ExitCode -ne 3010) {
     throw "msiexec failed with exit code $($process.ExitCode)."
 }
 
-$installed = Assert-AgentInstalled -ExpectedVersion $Version
+$expectedNativeCountersMode = if ($EnableFactoryTalkNativeCounters -eq 1) { 'local' } else { 'disabled' }
+$installed = Assert-AgentInstalled -ExpectedVersion $Version -ExpectedFactoryTalkNativeCountersMode $expectedNativeCountersMode
 Write-Output "Installed LibreNMS Windows Agent $Version"
 Write-Output "Executable: $($installed.ExePath)"
 Write-Output "Config: $($installed.ConfigPath)"
+Write-Output "FactoryTalk native counters: $expectedNativeCountersMode"
 Write-Output "Service: LibreNMSWindowsAgent ($($installed.ServiceStatus))"

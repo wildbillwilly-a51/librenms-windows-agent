@@ -2,6 +2,9 @@
 
 ## 2026-07-16
 
+- Promoted generic overlay and Windows MSI release 0.6.13. Normal MSI installs
+  and upgrades now enable the complete bounded FactoryTalk collection set,
+  including localhost Counter Monitor snapshots, with an explicit MSI opt-out.
 - Migrated the project-maintenance workflow from version 2 to version 6 with
   adaptive execution, proportional durable memory, and audited Git history.
 - Added bounded FactoryTalk Windows-native process runtime metrics and new

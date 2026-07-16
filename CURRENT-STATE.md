@@ -25,18 +25,19 @@ and private exports do not belong here.
 
 ## Current Release
 
-- Version: `0.6.12`
-- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.12.tar.gz`
-- Windows MSI: `artifacts/librenms-windows-agent-0.6.12.msi`
+- Version: `0.6.13`
+- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.13.tar.gz`
+- Windows MSI: `artifacts/librenms-windows-agent-0.6.13.msi`
 - Checksums: `SHA256SUMS`
-- Overlay SHA256: `1e65f17d76750e0690afef82a806d33670ae60423648dec27209c2a11f899b8d`
-- Windows MSI SHA256: `925456f75a8d56c0eeb73af3fc610de4f4379f50a80cb3443e0933c8d8f40582`
+- Overlay SHA256: `e948079cd045fc08bd3d6b6bdef6434e93832bc1393218ca4d6150ca9e7768ab`
+- Windows MSI SHA256: `f762c5c137261a8b6d47a4bb5fc167379e8623f51be3514938ecd2c3e302c66e`
 - Public overlay installer: `install.sh`
 - Public Windows installer: `install-agent.ps1`
 
-Release `0.6.12` adds FactoryTalk Windows-native runtime metrics and an opt-in,
-localhost-only Diagnostics Counter Monitor snapshot collector. Counter Monitor
-execution remains disabled by default.
+Release `0.6.13` enables the complete bounded FactoryTalk collection set for
+normal MSI installs and upgrades, including localhost-only Diagnostics Counter
+Monitor snapshots. `ENABLE_FACTORYTALK_NATIVE_COUNTERS=0` provides an explicit
+MSI opt-out.
 
 ## Product Contract
 
@@ -82,7 +83,7 @@ must be run on a PHP-capable environment before or during overlay deployment.
 
 ## Next Recommended Action
 
-Install the 0.6.12 overlay on the LibreNMS management node and every applicable
-poller, then upgrade a non-production FactoryTalk host to the 0.6.12 MSI. Verify
-Windows-native runtime sections first. Enable `nativeCountersMode=local` only
-for the approved pilot and observe at least two fifteen-minute snapshot cycles.
+Install the 0.6.13 overlay on the LibreNMS management node and every applicable
+poller, then upgrade an authorized non-production FactoryTalk host to the 0.6.13
+MSI. Verify Windows-native runtime sections and observe at least two
+fifteen-minute Counter Monitor snapshot cycles.

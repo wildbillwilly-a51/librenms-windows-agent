@@ -71,12 +71,14 @@ iwr -UseBasicParsing https://raw.githubusercontent.com/wildbillwilly-a51/librenm
 Direct MSI link:
 
 ```text
-https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/artifacts/librenms-windows-agent-0.6.12.msi
+https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/artifacts/librenms-windows-agent-0.6.13.msi
 ```
 
 The default Windows install is normally enough. It installs the
 `LibreNMSWindowsAgent` service, listens on `0.0.0.0:6556`, creates the Windows
 firewall rule, starts the service, and preserves existing config on upgrade.
+On FactoryTalk hosts, the MSI also enables the complete bounded FactoryTalk
+feature set, including localhost Counter Monitor snapshots every 15 minutes.
 
 `0.0.0.0` is the local bind address on the Windows host. It is not the LibreNMS
 server or poller IP.
@@ -202,7 +204,7 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Install a specific overlay version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.12
+curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.13
 ```
 
 Preview without changing the node:
@@ -216,19 +218,19 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Interactive install after downloading the MSI:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.12.msi
+msiexec /i librenms-windows-agent-0.6.13.msi
 ```
 
 Silent install after downloading the MSI:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.12.msi /qn
+msiexec /i librenms-windows-agent-0.6.13.msi /qn
 ```
 
 Silent install with explicit MSI properties:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.12.msi /qn LISTEN_ADDRESS=0.0.0.0 LISTEN_PORT=6556 ADD_FIREWALL_RULE=1 START_SERVICE=1
+msiexec /i librenms-windows-agent-0.6.13.msi /qn LISTEN_ADDRESS=0.0.0.0 LISTEN_PORT=6556 ADD_FIREWALL_RULE=1 START_SERVICE=1 ENABLE_FACTORYTALK_NATIVE_COUNTERS=1
 ```
 
 Supported MSI properties:
@@ -239,11 +241,14 @@ Supported MSI properties:
 - `START_SERVICE`, default `1`
 - `CONFIG_PATH`, optional explicit config path
 - `PRESERVE_CONFIG`, default `1`
+- `ENABLE_FACTORYTALK_NATIVE_COUNTERS`, default `1`; use `0` to disable native
+  Counter Monitor snapshots while retaining Windows-native FactoryTalk runtime
+  metrics
 
 Silent uninstall:
 
 ```powershell
-msiexec /x librenms-windows-agent-0.6.12.msi /qn
+msiexec /x librenms-windows-agent-0.6.13.msi /qn
 ```
 
 ### Collector Expectations
@@ -261,10 +266,11 @@ Backup health is expectation-driven:
 - `none`: no local backup expectation.
 
 FactoryTalk runtime visibility uses bounded local Windows process performance
-counters and is enabled by default when FactoryTalk is detected. Native
-FactoryTalk Diagnostics Counter Monitor snapshots are implemented as an
-explicit local opt-in and remain disabled on new and upgraded agents unless the
-configuration sets:
+counters and is enabled by default when FactoryTalk is detected. Release 0.6.13
+MSI installs and upgrades enable the complete FactoryTalk feature set by
+setting native FactoryTalk Diagnostics Counter Monitor collection to `local`,
+including when the existing configuration is preserved. Non-MSI configurations
+retain the conservative `disabled` default. The effective MSI configuration is:
 
 ```json
 "factoryTalk": {
