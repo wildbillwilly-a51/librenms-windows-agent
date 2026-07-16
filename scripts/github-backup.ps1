@@ -1,10 +1,13 @@
+# new-project-setup:managed-helper:v1
 [CmdletBinding()]
 param(
     [string]$ProjectRoot = ".",
     [string]$ConfigPath = ".github-backup.json",
     [string]$Repository,
     [string]$RemoteName = "github-backup",
-    [switch]$ScanOnly
+    [string]$SourceCommit,
+    [switch]$ScanOnly,
+    [switch]$AuditSourceHistory
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,6 +16,12 @@ $BackupAuthorName = "Codex Sanitized Backup"
 $BackupAuthorEmail = "codex-sanitized-backup@users.noreply.github.com"
 $MaxTextBytes = 5MB
 $RegexTimeout = [TimeSpan]::FromSeconds(2)
+$StagingOwnerFormat = 1
+$PathComparison = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+    [StringComparison]::OrdinalIgnoreCase
+} else {
+    [StringComparison]::Ordinal
+}
 
 function Invoke-External {
     param(
@@ -36,6 +45,130 @@ function Invoke-External {
     }
 
     return [pscustomobject]@{ ExitCode = $exitCode; Output = @($output) }
+}
+
+function Get-NormalizedFullPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $full = [IO.Path]::GetFullPath($Path)
+    $root = [IO.Path]::GetPathRoot($full)
+    if ($full.Length -gt $root.Length) {
+        $full = $full.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    }
+    return $full
+}
+
+function Test-SamePath {
+    param([string]$Left, [string]$Right)
+    return [string]::Equals((Get-NormalizedFullPath $Left), (Get-NormalizedFullPath $Right), $PathComparison)
+}
+
+function Assert-ContainedPath {
+    param([string]$Path, [string]$Parent, [string]$Label)
+
+    $fullPath = Get-NormalizedFullPath $Path
+    $fullParent = Get-NormalizedFullPath $Parent
+    $prefix = $fullParent + [IO.Path]::DirectorySeparatorChar
+    if (-not $fullPath.StartsWith($prefix, $PathComparison)) {
+        throw "$Label must remain inside its expected parent."
+    }
+    return $fullPath
+}
+
+function Test-RedirectedItem {
+    param([object]$Item)
+
+    if (($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) { return $false }
+    if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { return $true }
+    $linkType = if ($Item.PSObject.Properties['LinkType']) { [string]$Item.LinkType } else { '' }
+    $targets = if ($Item.PSObject.Properties['Target']) { @($Item.Target) } else { @() }
+    return -not [string]::IsNullOrWhiteSpace($linkType) -or $targets.Count -gt 0
+}
+
+function Assert-NoRedirectedPath {
+    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Label)
+
+    $full = Get-NormalizedFullPath $Path
+    $pathRoot = [IO.Path]::GetPathRoot($full)
+    $cursor = $pathRoot
+    $relative = $full.Substring($pathRoot.Length)
+    foreach ($segment in $relative.Split(@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar), [StringSplitOptions]::RemoveEmptyEntries)) {
+        $cursor = Join-Path $cursor $segment
+        if (-not (Test-Path -LiteralPath $cursor)) { break }
+        $item = Get-Item -Force -LiteralPath $cursor
+        if (Test-RedirectedItem $item) {
+            throw "$Label crosses a redirected path component."
+        }
+    }
+    return $full
+}
+
+function Resolve-SafeProjectRoot {
+    param([string]$Path)
+
+    $candidate = Assert-NoRedirectedPath (Get-NormalizedFullPath $Path) 'ProjectRoot'
+    if (-not (Test-Path -LiteralPath $candidate -PathType Container)) {
+        throw "ProjectRoot must be an existing directory."
+    }
+    $resolved = (Resolve-Path -LiteralPath $candidate).Path
+    if (-not (Test-SamePath $candidate $resolved)) { throw "ProjectRoot must not be a redirected link." }
+    $gitRoot = ((Invoke-External 'git' @('-C', $resolved, 'rev-parse', '--show-toplevel')).Output | Select-Object -First 1).Trim()
+    if (-not (Test-SamePath $resolved $gitRoot)) { throw "ProjectRoot must be the Git repository root." }
+    Assert-NoRedirectedPath $resolved 'ProjectRoot' | Out-Null
+    return Get-NormalizedFullPath $resolved
+}
+
+function Invoke-TestFault {
+    param([string]$Name, [string]$ContextPath)
+
+    if ([string]$env:NEW_PROJECT_SETUP_TEST_FAULT -cne $Name) { return }
+    $action = [string]$env:NEW_PROJECT_SETUP_TEST_ACTION
+    if ([string]::IsNullOrWhiteSpace($action)) { throw "Injected test fault at $Name." }
+    if (-not [IO.Path]::IsPathRooted($action) -or [IO.Path]::GetExtension($action) -ine '.ps1') {
+        throw "The injected test action must be an absolute local PowerShell script path."
+    }
+    $actionPath = Assert-NoRedirectedPath $action 'Injected test action'
+    if (-not (Test-Path -LiteralPath $actionPath -PathType Leaf)) { throw "The injected test action is unavailable." }
+    & $actionPath $Name $ContextPath | Out-Null
+}
+
+function Write-Utf8Atomically {
+    param([string]$Path, [string]$Content, [string]$ExpectedParent, [string]$Label)
+
+    Assert-ContainedPath $Path $ExpectedParent $Label | Out-Null
+    $directory = Split-Path -Parent $Path
+    Assert-NoRedirectedPath $directory "$Label parent" | Out-Null
+    if (Test-Path -LiteralPath $Path) { Assert-NoRedirectedPath $Path $Label | Out-Null }
+    $operationId = [Guid]::NewGuid().ToString('N')
+    $tempPath = Join-Path $directory ('.' + [IO.Path]::GetFileName($Path) + '.codex-' + $operationId + '.tmp')
+    $backupPath = Join-Path $directory ('.' + [IO.Path]::GetFileName($Path) + '.codex-' + $operationId + '.bak')
+    Assert-ContainedPath $tempPath $ExpectedParent "$Label temporary path" | Out-Null
+    Assert-ContainedPath $backupPath $ExpectedParent "$Label rollback path" | Out-Null
+    try {
+        [IO.File]::WriteAllText($tempPath, $Content, [Text.UTF8Encoding]::new($false))
+        Assert-NoRedirectedPath $directory "$Label parent" | Out-Null
+        Assert-NoRedirectedPath $tempPath "$Label temporary path" | Out-Null
+        Assert-ContainedPath $Path $ExpectedParent $Label | Out-Null
+        if (Test-Path -LiteralPath $Path) {
+            [IO.File]::Replace($tempPath, $Path, $backupPath)
+            Assert-NoRedirectedPath $backupPath "$Label rollback path" | Out-Null
+            Assert-ContainedPath $backupPath $ExpectedParent "$Label rollback path" | Out-Null
+            Remove-Item -LiteralPath $backupPath -Force
+        }
+        else { [IO.File]::Move($tempPath, $Path) }
+    }
+    finally {
+        if (Test-Path -LiteralPath $tempPath) {
+            Assert-NoRedirectedPath $tempPath "$Label temporary path" | Out-Null
+            Assert-ContainedPath $tempPath $ExpectedParent "$Label temporary path" | Out-Null
+            Remove-Item -LiteralPath $tempPath -Force
+        }
+        if (Test-Path -LiteralPath $backupPath) {
+            Assert-NoRedirectedPath $backupPath "$Label rollback path" | Out-Null
+            Assert-ContainedPath $backupPath $ExpectedParent "$Label rollback path" | Out-Null
+            Remove-Item -LiteralPath $backupPath -Force
+        }
+    }
 }
 
 function Convert-GlobToRegex {
@@ -73,10 +206,96 @@ function Get-Sha256Text {
 function Get-RepositoryFromUrl {
     param([Parameter(Mandatory = $true)][string]$Url)
 
-    if ($Url -match '^(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([^/]+/[^/]+?)(?:\.git)?$') {
+    $trimmed = $Url.Trim()
+    if ($trimmed -match '^(?i:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([^/\s]+/[^/\s]+?)(?:\.git)?/?$') {
         return $Matches[1]
     }
     return $null
+}
+
+function Test-SameRepository {
+    param([string]$Left, [string]$Right)
+    return -not [string]::IsNullOrWhiteSpace($Left) -and
+        -not [string]::IsNullOrWhiteSpace($Right) -and
+        [string]::Equals($Left.TrimEnd('/'), $Right.TrimEnd('/'), [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Resolve-GitHubRepository {
+    param([Parameter(Mandatory = $true)][string]$RepositoryValue, [switch]$AllowMissing)
+
+    $view = Invoke-External 'gh' @('repo', 'view', $RepositoryValue, '--json', 'nameWithOwner,url,visibility,isEmpty') -AllowFailure
+    if ($view.ExitCode -ne 0) {
+        if ($AllowMissing) { return $null }
+        throw "Unable to resolve the configured GitHub repository."
+    }
+    try { $data = ($view.Output -join [Environment]::NewLine) | ConvertFrom-Json }
+    catch { throw "GitHub returned invalid repository metadata." }
+    $canonical = [string]$data.nameWithOwner
+    $url = [string]$data.url
+    if ($canonical -notmatch '^[^/\s]+/[^/\s]+$' -or -not (Test-SameRepository $canonical (Get-RepositoryFromUrl $url))) {
+        throw "GitHub returned inconsistent repository identity metadata."
+    }
+    if ([string]$data.visibility -cne 'PRIVATE') { throw "Backup repository must be private: $canonical" }
+    return [pscustomobject]@{
+        Repository = $canonical
+        Url = $url
+        IsEmpty = [bool]$data.isEmpty
+    }
+}
+
+function Get-RemoteUrlState {
+    param([string]$RepoRoot, [string]$Name)
+
+    $fetch = Invoke-External 'git' @('-C', $RepoRoot, 'remote', 'get-url', '--all', $Name)
+    $push = Invoke-External 'git' @('-C', $RepoRoot, 'remote', 'get-url', '--push', '--all', $Name)
+    return [pscustomobject]@{
+        Fetch = [string[]]@($fetch.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+        Push = [string[]]@($push.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    }
+}
+
+function Test-RemoteMatchesRepository {
+    param([object]$UrlState, [string]$ExpectedRepository)
+
+    if ($UrlState.Fetch.Count -eq 0 -or $UrlState.Push.Count -eq 0) { return $false }
+    foreach ($url in @($UrlState.Fetch) + @($UrlState.Push)) {
+        if (-not (Test-SameRepository (Get-RepositoryFromUrl ([string]$url)) $ExpectedRepository)) { return $false }
+    }
+    return $true
+}
+
+function Disable-RemotePush {
+    param([string]$RepoRoot, [string]$Name)
+
+    Invoke-External 'git' @('-C', $RepoRoot, 'config', '--unset-all', "remote.${Name}.pushurl") -AllowFailure | Out-Null
+    Invoke-External 'git' @('-C', $RepoRoot, 'config', '--add', "remote.${Name}.pushurl", 'DISABLED') | Out-Null
+    $pushUrls = [string[]]@((Invoke-External 'git' @('-C', $RepoRoot, 'remote', 'get-url', '--push', '--all', $Name)).Output)
+    if ($pushUrls.Count -ne 1 -or $pushUrls[0].Trim() -cne 'DISABLED') {
+        throw "Unable to disable the unverified legacy remote: $Name"
+    }
+
+    $branch = ((Invoke-External 'git' @('-C', $RepoRoot, 'branch', '--show-current')).Output | Select-Object -First 1).Trim()
+    if ($branch) {
+        $upstreamRemote = Invoke-External 'git' @('-C', $RepoRoot, 'config', '--get', "branch.${branch}.remote") -AllowFailure
+        if ($upstreamRemote.ExitCode -eq 0 -and (($upstreamRemote.Output | Select-Object -First 1).Trim()) -ceq $Name) {
+            Invoke-External 'git' @('-C', $RepoRoot, 'branch', '--unset-upstream') | Out-Null
+        }
+    }
+    Write-Warning "Disabled push and upstream tracking for unverified legacy remote: $Name"
+}
+
+function Get-RemoteBranchTip {
+    param([string]$Url, [string]$Branch)
+
+    $ref = "refs/heads/$Branch"
+    $result = Invoke-External 'git' @('ls-remote', '--exit-code', '--heads', $Url, $ref) -AllowFailure
+    if ($result.ExitCode -eq 2) { return [pscustomobject]@{ Exists = $false; Sha = $null; Ref = $ref } }
+    if ($result.ExitCode -ne 0) { throw "Unable to inspect the exact backup branch." }
+    $lines = @($result.Output | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+    if ($lines.Count -ne 1 -or [string]$lines[0] -notmatch '^([0-9a-fA-F]{40,64})\s+(.+)$' -or $Matches[2] -cne $ref) {
+        throw "Backup branch inspection returned an ambiguous result."
+    }
+    return [pscustomobject]@{ Exists = $true; Sha = $Matches[1].ToLowerInvariant(); Ref = $ref }
 }
 
 function New-CompiledRegex {
@@ -177,10 +396,14 @@ function Test-FingerprintedAllowance {
 }
 
 function Get-CommittedConfig {
-    param([string]$RepoRoot, [string]$RelativePath)
+    param([string]$RepoRoot, [string]$RelativePath, [string]$Commit)
 
-    if ([IO.Path]::IsPathRooted($RelativePath) -or $RelativePath.Replace('\', '/') -match '(^|/)\.\.(/|$)') {
+    if ([string]::IsNullOrWhiteSpace($RelativePath) -or [IO.Path]::IsPathRooted($RelativePath) -or
+        $RelativePath.Replace('\', '/') -match '(^|/)\.\.(/|$)' -or $RelativePath.IndexOf([char]0) -ge 0) {
         throw "ConfigPath must be a project-relative committed path."
+    }
+    if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT -and $RelativePath -match ':') {
+        throw "ConfigPath must not use an alternate data stream."
     }
     $path = $RelativePath.Replace('\', '/').TrimStart('/')
     $defaults = [pscustomobject]@{
@@ -191,7 +414,7 @@ function Get-CommittedConfig {
         confidential_patterns = @()
     }
 
-    $show = Invoke-External 'git' @('-C', $RepoRoot, 'show', "HEAD:$path") -AllowFailure
+    $show = Invoke-External 'git' @('-C', $RepoRoot, 'show', "${Commit}:$path") -AllowFailure
     if ($show.ExitCode -eq 0) {
         $loaded = ($show.Output -join [Environment]::NewLine) | ConvertFrom-Json
         foreach ($property in @('repository', 'exclude', 'allow_findings', 'allow_binary', 'confidential_patterns')) {
@@ -199,12 +422,14 @@ function Get-CommittedConfig {
         }
     }
 
-    $worktreePath = Join-Path $RepoRoot $path.Replace('/', [IO.Path]::DirectorySeparatorChar)
+    $worktreePath = Get-NormalizedFullPath (Join-Path $RepoRoot $path.Replace('/', [IO.Path]::DirectorySeparatorChar))
+    Assert-ContainedPath $worktreePath $RepoRoot 'ConfigPath' | Out-Null
     if (Test-Path -LiteralPath $worktreePath) {
+        Assert-NoRedirectedPath $worktreePath 'ConfigPath' | Out-Null
         $worktreeText = Get-Content -Raw -LiteralPath $worktreePath
         $committedText = if ($show.ExitCode -eq 0) { $show.Output -join [Environment]::NewLine } else { $null }
         if ($worktreeText.TrimEnd() -ne ([string]$committedText).TrimEnd()) {
-            Write-Warning "Ignoring dirty or untracked $path; backup policy comes only from committed HEAD."
+            Write-Warning "Ignoring dirty or untracked $path; backup policy comes only from committed $Commit."
         }
     }
     return $defaults
@@ -229,6 +454,44 @@ function Get-TreeEntries {
     return $entries
 }
 
+function Get-ConfidentialPathFindings {
+    param([string]$Path, [object[]]$Rules)
+
+    $matches = New-Object Collections.Generic.List[string]
+    foreach ($rule in $Rules) {
+        try { $matched = $rule.Regex.IsMatch($Path) }
+        catch [Text.RegularExpressions.RegexMatchTimeoutException] {
+            $matches.Add('regex-timeout')
+            continue
+        }
+        if ($matched) { $matches.Add([string]$rule.Id) }
+    }
+    return [string[]]@($matches | Sort-Object -Unique)
+}
+
+function Get-RedactedPathLabel {
+    param([string]$Path)
+    return "<confidential-path:$((Get-Sha256Text $Path).Substring(0, 12))>"
+}
+
+function Test-CommitMetadata {
+    param([string]$RepoRoot, [string]$Commit, [object[]]$Rules)
+
+    $findings = New-Object Collections.Generic.List[object]
+    $metadata = (Invoke-External 'git' @('-C', $RepoRoot, 'cat-file', 'commit', $Commit)).Output -join [Environment]::NewLine
+    foreach ($rule in $Rules) {
+        try { $matched = $rule.Regex.IsMatch($metadata) }
+        catch [Text.RegularExpressions.RegexMatchTimeoutException] {
+            $findings.Add([pscustomobject]@{ Rule = 'regex-timeout'; Path = "<commit-metadata:$Commit>" })
+            continue
+        }
+        if ($matched) {
+            $findings.Add([pscustomobject]@{ Rule = $rule.Id; Path = "<commit-metadata:$Commit>" })
+        }
+    }
+    return [object[]]@($findings | Sort-Object Rule, Path -Unique)
+}
+
 function Test-CommitSnapshot {
     param(
         [string]$RepoRoot,
@@ -237,6 +500,7 @@ function Test-CommitSnapshot {
         [object[]]$Rules,
         [string]$TempParent,
         [switch]$HistoryAudit,
+        [switch]$SourceAudit,
         [switch]$KeepSnapshot
     )
 
@@ -257,24 +521,34 @@ function Test-CommitSnapshot {
         foreach ($rule in $defaultExcludes) {
             if ($entry.Path -match $rule.Regex) { $reason = $rule.Id; break }
         }
-        if (-not $reason -and -not $HistoryAudit) {
+        if (-not $reason -and (-not $HistoryAudit -or $SourceAudit)) {
             foreach ($glob in @($Config.exclude)) {
                 if (Test-GlobMatch $entry.Path ([string]$glob)) { $reason = 'project-exclude'; break }
             }
         }
 
+        $pathFindings = @(Get-ConfidentialPathFindings $entry.Path $Rules)
+        $reportPath = if ($pathFindings.Count -gt 0) { Get-RedactedPathLabel $entry.Path } else { $entry.Path }
+
         if ($reason) {
             if ($HistoryAudit) {
-                $findings.Add([pscustomobject]@{ Rule = 'forbidden-history-path'; Path = $entry.Path })
+                $findings.Add([pscustomobject]@{ Rule = 'forbidden-history-path'; Path = $reportPath })
+                foreach ($pathRule in $pathFindings) {
+                    $findings.Add([pscustomobject]@{ Rule = $pathRule; Path = $reportPath })
+                }
             } else {
-                $excluded.Add([pscustomobject]@{ Path = $entry.Path; Reason = $reason })
+                $excluded.Add([pscustomobject]@{ Path = $entry.Path; ReportPath = $reportPath; Reason = $reason })
             }
             continue
         }
+        foreach ($pathRule in $pathFindings) {
+            $findings.Add([pscustomobject]@{ Rule = $pathRule; Path = $reportPath })
+        }
         if ($entry.Type -ne 'blob' -or $entry.Mode -notin @('100644', '100755')) {
-            $findings.Add([pscustomobject]@{ Rule = 'unsupported-git-object'; Path = $entry.Path })
+            $findings.Add([pscustomobject]@{ Rule = 'unsupported-git-object'; Path = $reportPath })
             continue
         }
+        $entry | Add-Member -NotePropertyName ReportPath -NotePropertyValue $reportPath
         $included.Add($entry)
     }
 
@@ -290,26 +564,34 @@ function Test-CommitSnapshot {
     Remove-Item -LiteralPath $archivePath -Force
 
     foreach ($entry in $excluded) {
-        $excludedPath = Join-Path $snapshotRoot $entry.Path.Replace('/', [IO.Path]::DirectorySeparatorChar)
-        if (Test-Path -LiteralPath $excludedPath) { Remove-Item -LiteralPath $excludedPath -Force -Recurse }
+        $excludedPath = Get-NormalizedFullPath (Join-Path $snapshotRoot $entry.Path.Replace('/', [IO.Path]::DirectorySeparatorChar))
+        Assert-ContainedPath $excludedPath $snapshotRoot 'Excluded snapshot path' | Out-Null
+        if (Test-Path -LiteralPath $excludedPath) {
+            if (Test-Path -LiteralPath $excludedPath -PathType Container) { Assert-NoRedirectedTree $excludedPath 'Excluded snapshot path' }
+            else { Assert-NoRedirectedPath $excludedPath 'Excluded snapshot path' | Out-Null }
+            Assert-ContainedPath $excludedPath $snapshotRoot 'Excluded snapshot path' | Out-Null
+            Remove-Item -LiteralPath $excludedPath -Force -Recurse
+        }
     }
 
     foreach ($entry in $included) {
-        $localPath = Join-Path $snapshotRoot $entry.Path.Replace('/', [IO.Path]::DirectorySeparatorChar)
+        $localPath = Get-NormalizedFullPath (Join-Path $snapshotRoot $entry.Path.Replace('/', [IO.Path]::DirectorySeparatorChar))
+        Assert-ContainedPath $localPath $snapshotRoot 'Snapshot entry' | Out-Null
+        if (Test-Path -LiteralPath $localPath) { Assert-NoRedirectedPath $localPath 'Snapshot entry' | Out-Null }
         if (-not (Test-Path -LiteralPath $localPath -PathType Leaf)) {
-            $findings.Add([pscustomobject]@{ Rule = 'missing-snapshot-entry'; Path = $entry.Path })
+            $findings.Add([pscustomobject]@{ Rule = 'missing-snapshot-entry'; Path = $entry.ReportPath })
             continue
         }
         $bytes = [IO.File]::ReadAllBytes($localPath)
         $sha256 = Get-Sha256Bytes $bytes
         $decoded = Get-TextContent $bytes
         if ($decoded.Kind -eq 'oversize') {
-            $findings.Add([pscustomobject]@{ Rule = 'oversize-file'; Path = $entry.Path })
+            $findings.Add([pscustomobject]@{ Rule = 'oversize-file'; Path = $entry.ReportPath })
             continue
         }
         if ($decoded.Kind -eq 'binary') {
             if (-not (Test-FingerprintedAllowance $Config.allow_binary 'binary-file' $entry.Path $sha256)) {
-                $findings.Add([pscustomobject]@{ Rule = 'unreviewed-binary'; Path = $entry.Path })
+                $findings.Add([pscustomobject]@{ Rule = 'unreviewed-binary'; Path = $entry.ReportPath })
             }
             continue
         }
@@ -322,17 +604,19 @@ function Test-CommitSnapshot {
             }
             try { $matched = $rule.Regex.IsMatch($content) }
             catch [Text.RegularExpressions.RegexMatchTimeoutException] {
-                $findings.Add([pscustomobject]@{ Rule = 'regex-timeout'; Path = $entry.Path })
+                $findings.Add([pscustomobject]@{ Rule = 'regex-timeout'; Path = $entry.ReportPath })
                 continue
             }
             if ($matched -and -not (Test-FingerprintedAllowance $Config.allow_findings $rule.Id $entry.Path $sha256)) {
-                $findings.Add([pscustomobject]@{ Rule = $rule.Id; Path = $entry.Path })
+                $findings.Add([pscustomobject]@{ Rule = $rule.Id; Path = $entry.ReportPath })
             }
         }
     }
 
-    $includedPaths = [string[]]($included | ForEach-Object { $_.Path })
-    $excludedItems = [object[]]($excluded | ForEach-Object { $_ })
+    $includedPaths = [string[]]($included | ForEach-Object { $_.ReportPath })
+    $excludedItems = [object[]]($excluded | ForEach-Object {
+        [pscustomobject]@{ Path = $_.ReportPath; Reason = $_.Reason }
+    })
     $findingItems = [object[]]($findings | Sort-Object Rule, Path -Unique)
     $result = [pscustomobject]@{
         Included = $includedPaths
@@ -340,12 +624,12 @@ function Test-CommitSnapshot {
         Findings = $findingItems
         SnapshotRoot = $snapshotRoot
     }
-    if (-not $KeepSnapshot) { Remove-Item -LiteralPath $snapshotRoot -Force -Recurse }
+    if (-not $KeepSnapshot) { Remove-SafeDirectory $snapshotRoot $TempParent 'Snapshot path' }
     return $result
 }
 
 function Write-AuditManifest {
-    param([string]$AuditPath, [string]$SourceHead, [object]$Result)
+    param([string]$AuditPath, [string]$AuditParent, [string]$SourceHead, [object]$Result)
 
     $manifest = [ordered]@{
         format = 1
@@ -354,22 +638,22 @@ function Write-AuditManifest {
         excluded = @($Result.Excluded)
         findings = @($Result.Findings)
     } | ConvertTo-Json -Depth 6
-    Set-Content -LiteralPath $AuditPath -Value $manifest -Encoding utf8
+    Write-Utf8Atomically $AuditPath ($manifest + "`n") $AuditParent 'Audit manifest'
 }
 
 function Assert-SourceHead {
     param([string]$RepoRoot, [string]$Expected)
-    $current = ((Invoke-External 'git' @('-C', $RepoRoot, 'rev-parse', 'HEAD')).Output | Select-Object -First 1).Trim()
-    if ($current -ne $Expected) { throw "Source HEAD changed during backup. No push was made." }
+    $current = ((Invoke-External 'git' @('-C', $RepoRoot, 'rev-parse', '--verify', 'HEAD^{commit}')).Output | Select-Object -First 1).Trim()
+    if ($current -cne $Expected) { throw "Source HEAD changed during backup. No push was made." }
 }
 
 function Test-BackupHistory {
-    param([string]$RepoRoot, [object]$Config, [object[]]$Rules, [string]$TempParent)
+    param([string]$RepoRoot, [string]$TipCommit, [object]$Config, [object[]]$Rules, [string]$TempParent)
 
     $findings = New-Object Collections.Generic.List[object]
-    $roots = @((Invoke-External 'git' @('-C', $RepoRoot, 'rev-list', '--max-parents=0', 'main')).Output | Where-Object { $_ })
+    $roots = @((Invoke-External 'git' @('-C', $RepoRoot, 'rev-list', '--max-parents=0', $TipCommit)).Output | Where-Object { $_ })
     if ($roots.Count -ne 1) { $findings.Add([pscustomobject]@{ Rule = 'invalid-history-roots'; Path = '.' }) }
-    $merges = @((Invoke-External 'git' @('-C', $RepoRoot, 'rev-list', '--min-parents=2', 'main')).Output | Where-Object { $_ })
+    $merges = @((Invoke-External 'git' @('-C', $RepoRoot, 'rev-list', '--min-parents=2', $TipCommit)).Output | Where-Object { $_ })
     if ($merges.Count -gt 0) { $findings.Add([pscustomobject]@{ Rule = 'merge-history'; Path = '.' }) }
 
     if ($roots.Count -eq 1) {
@@ -385,161 +669,387 @@ function Test-BackupHistory {
         }
     }
 
-    foreach ($identity in (Invoke-External 'git' @('-C', $RepoRoot, 'log', 'main', '--format=%an|%ae')).Output) {
-        if ([string]$identity -ne "${BackupAuthorName}|${BackupAuthorEmail}") {
+    $expectedIdentity = "${BackupAuthorName}|${BackupAuthorEmail}|${BackupAuthorName}|${BackupAuthorEmail}"
+    foreach ($identity in (Invoke-External 'git' @('-C', $RepoRoot, 'log', $TipCommit, '--format=%an|%ae|%cn|%ce')).Output) {
+        if ([string]$identity -cne $expectedIdentity) {
             $findings.Add([pscustomobject]@{ Rule = 'unsafe-commit-identity'; Path = '.' })
             break
         }
     }
 
-    foreach ($commit in (Invoke-External 'git' @('-C', $RepoRoot, 'rev-list', '--reverse', 'main')).Output) {
+    foreach ($commit in (Invoke-External 'git' @('-C', $RepoRoot, 'rev-list', '--reverse', $TipCommit)).Output) {
+        foreach ($finding in @(Test-CommitMetadata $RepoRoot ([string]$commit) $Rules)) { $findings.Add($finding) }
         $scan = Test-CommitSnapshot $RepoRoot ([string]$commit) $Config $Rules $TempParent -HistoryAudit
         foreach ($finding in $scan.Findings) { $findings.Add($finding) }
     }
     return @($findings | Sort-Object Rule, Path -Unique)
 }
 
-$resolvedProjectRoot = (Resolve-Path -LiteralPath $ProjectRoot).Path
-if (-not (Test-Path -LiteralPath (Join-Path $resolvedProjectRoot '.git'))) {
-    throw "ProjectRoot must be a Git repository root: $resolvedProjectRoot"
+function Test-SourceHistory {
+    param([string]$RepoRoot, [string]$TipCommit, [object]$Config, [object[]]$Rules, [string]$TempParent, [string]$BaseCommit)
+
+    $findings = New-Object Collections.Generic.List[object]
+    $revision = if ($BaseCommit) { "${BaseCommit}..${TipCommit}" } else { $TipCommit }
+    foreach ($commit in (Invoke-External 'git' @('-C', $RepoRoot, 'rev-list', '--reverse', $revision)).Output) {
+        foreach ($finding in @(Test-CommitMetadata $RepoRoot ([string]$commit) $Rules)) { $findings.Add($finding) }
+        $scan = Test-CommitSnapshot $RepoRoot ([string]$commit) $Config $Rules $TempParent -HistoryAudit -SourceAudit
+        foreach ($finding in $scan.Findings) { $findings.Add($finding) }
+    }
+    return @($findings | Sort-Object Rule, Path -Unique)
 }
+
+function Assert-NoRedirectedTree {
+    param([string]$Root, [string]$Label)
+
+    Assert-NoRedirectedPath $Root $Label | Out-Null
+    $pending = New-Object Collections.Generic.Stack[string]
+    $pending.Push((Get-NormalizedFullPath $Root))
+    while ($pending.Count -gt 0) {
+        $directory = $pending.Pop()
+        foreach ($item in @(Get-ChildItem -Force -LiteralPath $directory)) {
+            if (Test-RedirectedItem $item) {
+                throw "$Label contains a redirected path component."
+            }
+            if ($item.PSIsContainer) { $pending.Push($item.FullName) }
+        }
+    }
+}
+
+function Remove-SafeDirectory {
+    param([string]$Path, [string]$ExpectedParent, [string]$Label)
+
+    Assert-ContainedPath $Path $ExpectedParent $Label | Out-Null
+    Assert-NoRedirectedTree $Path $Label
+    Assert-ContainedPath $Path $ExpectedParent $Label | Out-Null
+    Remove-Item -LiteralPath $Path -Force -Recurse
+}
+
+function Get-StagingOwnerPath {
+    param([string]$StagingRoot)
+    return Join-Path $StagingRoot '.git\codex-staging-owner.json'
+}
+
+function Write-StagingOwner {
+    param([string]$StagingRoot, [string]$BoundStagingRoot, [string]$SourceKey, [string]$Repository)
+
+    $gitDirectory = Join-Path $StagingRoot '.git'
+    $ownerPath = Get-StagingOwnerPath $StagingRoot
+    $content = ([ordered]@{
+        format = $StagingOwnerFormat
+        source_key = $SourceKey
+        repository = $Repository
+        staging_path = (Get-NormalizedFullPath $BoundStagingRoot)
+    } | ConvertTo-Json) + "`n"
+    Write-Utf8Atomically $ownerPath $content $gitDirectory 'Staging ownership record'
+}
+
+function Assert-StagingRepositoryShape {
+    param([string]$StagingRoot, [string]$StagingParent, [string]$Repository)
+
+    Assert-ContainedPath $StagingRoot $StagingParent 'Backup staging path' | Out-Null
+    Assert-NoRedirectedPath $StagingRoot 'Backup staging path' | Out-Null
+    if (-not (Test-Path -LiteralPath $StagingRoot -PathType Container)) { throw "Backup staging path is missing." }
+    $gitDirectory = Join-Path $StagingRoot '.git'
+    if (-not (Test-Path -LiteralPath $gitDirectory -PathType Container)) {
+        throw "Backup staging must use its own Git directory."
+    }
+    Assert-NoRedirectedPath $gitDirectory 'Backup staging Git directory' | Out-Null
+    $topLevel = ((Invoke-External 'git' @('-C', $StagingRoot, 'rev-parse', '--show-toplevel')).Output | Select-Object -First 1).Trim()
+    $absoluteGit = ((Invoke-External 'git' @('-C', $StagingRoot, 'rev-parse', '--absolute-git-dir')).Output | Select-Object -First 1).Trim()
+    if (-not (Test-SamePath $topLevel $StagingRoot) -or -not (Test-SamePath $absoluteGit $gitDirectory)) {
+        throw "Backup staging repository escapes its owned path."
+    }
+    $originState = Get-RemoteUrlState $StagingRoot 'origin'
+    if (-not (Test-RemoteMatchesRepository $originState $Repository)) {
+        throw "Backup staging origin does not match the canonical backup repository."
+    }
+}
+
+function Assert-OwnedStaging {
+    param([string]$StagingRoot, [string]$StagingParent, [string]$SourceKey, [string]$Repository)
+
+    Assert-StagingRepositoryShape $StagingRoot $StagingParent $Repository
+    $ownerPath = Get-StagingOwnerPath $StagingRoot
+    if (-not (Test-Path -LiteralPath $ownerPath -PathType Leaf)) { throw "Backup staging ownership is missing." }
+    Assert-NoRedirectedPath $ownerPath 'Staging ownership record' | Out-Null
+    try { $owner = Get-Content -Raw -LiteralPath $ownerPath | ConvertFrom-Json }
+    catch { throw "Backup staging ownership is invalid." }
+    if ([int]$owner.format -ne $StagingOwnerFormat -or [string]$owner.source_key -cne $SourceKey -or
+        -not (Test-SameRepository ([string]$owner.repository) $Repository) -or
+        -not (Test-SamePath ([string]$owner.staging_path) $StagingRoot)) {
+        throw "Backup staging ownership does not match this source and repository."
+    }
+}
+
+function Initialize-StagingOwnership {
+    param([string]$StagingRoot, [string]$StagingParent, [string]$SourceKey, [string]$Repository)
+
+    Assert-StagingRepositoryShape $StagingRoot $StagingParent $Repository
+    $ownerPath = Get-StagingOwnerPath $StagingRoot
+    if (Test-Path -LiteralPath $ownerPath) {
+        Assert-OwnedStaging $StagingRoot $StagingParent $SourceKey $Repository
+        return
+    }
+    $status = (Invoke-External 'git' @('-C', $StagingRoot, 'status', '--porcelain')).Output
+    if ($status.Count -gt 0) {
+        throw "Unowned backup staging contains changes and will not be adopted or cleaned."
+    }
+    Write-StagingOwner $StagingRoot $StagingRoot $SourceKey $Repository
+    Assert-OwnedStaging $StagingRoot $StagingParent $SourceKey $Repository
+}
+
+function Assert-SafeStagingWorktree {
+    param([string]$StagingRoot)
+
+    foreach ($item in @(Get-ChildItem -Force -LiteralPath $StagingRoot | Where-Object { $_.Name -ne '.git' })) {
+        Assert-ContainedPath $item.FullName $StagingRoot 'Backup staging child' | Out-Null
+        if ($item.PSIsContainer) { Assert-NoRedirectedTree $item.FullName 'Backup staging child' }
+        else { Assert-NoRedirectedPath $item.FullName 'Backup staging child' | Out-Null }
+    }
+}
+
+function Clear-OwnedStagingWorktree {
+    param([string]$StagingRoot, [string]$StagingParent, [string]$SourceKey, [string]$Repository)
+
+    Assert-OwnedStaging $StagingRoot $StagingParent $SourceKey $Repository
+    Invoke-TestFault 'backup-before-staging-cleanup' $StagingRoot
+    Assert-OwnedStaging $StagingRoot $StagingParent $SourceKey $Repository
+    Assert-SafeStagingWorktree $StagingRoot
+    $head = Invoke-External 'git' @('-C', $StagingRoot, 'rev-parse', '--verify', 'HEAD^{commit}') -AllowFailure
+    if ($head.ExitCode -eq 0) {
+        Invoke-External 'git' @('-C', $StagingRoot, 'restore', '--staged', '--worktree', '--source=HEAD', '--', '.') | Out-Null
+    } else {
+        Invoke-External 'git' @('-C', $StagingRoot, 'read-tree', '--empty') | Out-Null
+    }
+    foreach ($item in @(Get-ChildItem -Force -LiteralPath $StagingRoot | Where-Object { $_.Name -ne '.git' })) {
+        Assert-OwnedStaging $StagingRoot $StagingParent $SourceKey $Repository
+        Assert-ContainedPath $item.FullName $StagingRoot 'Backup staging child' | Out-Null
+        if ($item.PSIsContainer) { Assert-NoRedirectedTree $item.FullName 'Backup staging child' }
+        else { Assert-NoRedirectedPath $item.FullName 'Backup staging child' | Out-Null }
+        Assert-ContainedPath $item.FullName $StagingRoot 'Backup staging child' | Out-Null
+        Remove-Item -LiteralPath $item.FullName -Force -Recurse
+    }
+}
+
+function New-OwnedStaging {
+    param(
+        [string]$StagingRoot,
+        [string]$StagingParent,
+        [string]$SourceKey,
+        [string]$Repository,
+        [string]$TargetUrl,
+        [object]$RemoteMain
+    )
+
+    $constructionRoot = Join-Path $StagingParent ('.codex-backup-new-' + [Guid]::NewGuid().ToString('N'))
+    Assert-ContainedPath $constructionRoot $StagingParent 'Backup construction path' | Out-Null
+    New-Item -ItemType Directory -Path $constructionRoot | Out-Null
+    try {
+        Assert-NoRedirectedPath $constructionRoot 'Backup construction path' | Out-Null
+        Invoke-External 'git' @('-C', $constructionRoot, 'init', '-b', 'main') | Out-Null
+        Invoke-External 'git' @('-C', $constructionRoot, 'remote', 'add', 'origin', $TargetUrl) | Out-Null
+        Write-StagingOwner $constructionRoot $constructionRoot $SourceKey $Repository
+        if ($RemoteMain.Exists) {
+            $captureRef = "refs/codex/github-backup/$([Guid]::NewGuid().ToString('N'))"
+            Invoke-External 'git' @('-C', $constructionRoot, 'fetch', '--no-tags', '--no-write-fetch-head', $TargetUrl, "$($RemoteMain.Ref):$captureRef") | Out-Null
+            $captured = ((Invoke-External 'git' @('-C', $constructionRoot, 'rev-parse', '--verify', "${captureRef}^{commit}")).Output | Select-Object -First 1).Trim()
+            if ($captured -cne $RemoteMain.Sha) { throw "Backup branch changed while staging was initialized." }
+            Invoke-External 'git' @('-C', $constructionRoot, 'reset', '--hard', $captured) | Out-Null
+            Invoke-External 'git' @('-C', $constructionRoot, 'update-ref', '-d', $captureRef) | Out-Null
+        }
+        Assert-StagingRepositoryShape $constructionRoot $StagingParent $Repository
+        Write-StagingOwner $constructionRoot $StagingRoot $SourceKey $Repository
+        Assert-NoRedirectedPath $StagingParent 'Backup staging parent' | Out-Null
+        if (Test-Path -LiteralPath $StagingRoot) { throw "Backup staging path appeared during initialization." }
+        Move-Item -LiteralPath $constructionRoot -Destination $StagingRoot
+        Assert-OwnedStaging $StagingRoot $StagingParent $SourceKey $Repository
+    }
+    catch {
+        if (Test-Path -LiteralPath $constructionRoot) {
+            try {
+                $ownerPath = Get-StagingOwnerPath $constructionRoot
+                if (Test-Path -LiteralPath $ownerPath) {
+                    Write-StagingOwner $constructionRoot $constructionRoot $SourceKey $Repository
+                    Assert-OwnedStaging $constructionRoot $StagingParent $SourceKey $Repository
+                    Remove-SafeDirectory $constructionRoot $StagingParent 'Backup construction path'
+                }
+            } catch { }
+        }
+        throw
+    }
+}
+
 foreach ($required in @('git', 'tar')) {
     if (-not (Get-Command $required -ErrorAction SilentlyContinue)) { throw "Required command is unavailable: $required" }
 }
+$resolvedProjectRoot = Resolve-SafeProjectRoot $ProjectRoot
 if ($resolvedProjectRoot -match '(?i)[\\/](OneDrive|Dropbox|Google Drive)[\\/]') {
     Write-Warning "The Git root is cloud-synchronized. Use GitHub, not folder synchronization, between computers."
 }
 
-$sourceHead = ((Invoke-External 'git' @('-C', $resolvedProjectRoot, 'rev-parse', 'HEAD')).Output | Select-Object -First 1).Trim()
+$sourceHead = ((Invoke-External 'git' @('-C', $resolvedProjectRoot, 'rev-parse', '--verify', 'HEAD^{commit}')).Output | Select-Object -First 1).Trim()
+if ($SourceCommit) {
+    if ($SourceCommit -notmatch '^[0-9a-fA-F]{40,64}$' -or $sourceHead -cne $SourceCommit.ToLowerInvariant()) {
+        throw "SourceCommit must be the exact current immutable source HEAD."
+    }
+}
 $projectName = Split-Path -Leaf $resolvedProjectRoot
 $projectKey = (Get-Sha256Text $resolvedProjectRoot).Substring(0, 16)
-$localData = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { Join-Path ([IO.Path]::GetTempPath()) 'CodexLocalData' }
-$auditRoot = Join-Path $localData 'Codex\github-backup-audits'
+$localDataValue = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { Join-Path ([IO.Path]::GetTempPath()) 'CodexLocalData' }
+$localData = Get-NormalizedFullPath $localDataValue
+$auditRoot = Get-NormalizedFullPath (Join-Path $localData 'Codex\github-backup-audits')
+Assert-ContainedPath $auditRoot $localData 'Audit path' | Out-Null
+Assert-NoRedirectedPath $localData 'Local application data path' | Out-Null
 New-Item -ItemType Directory -Force -Path $auditRoot | Out-Null
-$auditPath = Join-Path $auditRoot "${projectName}-${projectKey}.json"
+Assert-NoRedirectedPath $auditRoot 'Audit path' | Out-Null
+$auditPath = Get-NormalizedFullPath (Join-Path $auditRoot "${projectName}-${projectKey}.json")
+$sourceHistoryCachePath = Get-NormalizedFullPath (Join-Path $auditRoot "${projectName}-${projectKey}-source-history.json")
+Assert-ContainedPath $auditPath $auditRoot 'Audit manifest' | Out-Null
+Assert-ContainedPath $sourceHistoryCachePath $auditRoot 'Source history cache' | Out-Null
 
-$config = Get-CommittedConfig $resolvedProjectRoot $ConfigPath
+$config = Get-CommittedConfig $resolvedProjectRoot $ConfigPath $sourceHead
 $rules = Get-ScanRules $config.confidential_patterns
 $scriptHash = (Get-FileHash -Algorithm SHA256 $MyInvocation.MyCommand.Path).Hash
 $policyHash = Get-Sha256Text (($config | ConvertTo-Json -Depth 8 -Compress) + '|' + $scriptHash)
-$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("codex-github-backup-" + [Guid]::NewGuid().ToString('N'))
+$tempParent = Get-NormalizedFullPath ([IO.Path]::GetTempPath())
+Assert-NoRedirectedPath $tempParent 'Temporary path' | Out-Null
+$tempRoot = Get-NormalizedFullPath (Join-Path $tempParent ("codex-github-backup-" + [Guid]::NewGuid().ToString('N')))
+Assert-ContainedPath $tempRoot $tempParent 'Temporary backup path' | Out-Null
 New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
+Assert-NoRedirectedPath $tempRoot 'Temporary backup path' | Out-Null
 $lockStream = $null
+$lockPath = $null
 
 try {
-    $sourceScan = Test-CommitSnapshot $resolvedProjectRoot 'HEAD' $config $rules $tempRoot -KeepSnapshot
-    Write-AuditManifest $auditPath $sourceHead $sourceScan
+    $sourceScan = Test-CommitSnapshot $resolvedProjectRoot $sourceHead $config $rules $tempRoot -KeepSnapshot
+    Write-AuditManifest $auditPath $auditRoot $sourceHead $sourceScan
     if ($sourceScan.Findings.Count -gt 0) {
         Write-Host "GitHub backup blocked. Matched values are not displayed:"
         $sourceScan.Findings | ForEach-Object { Write-Host "  [$($_.Rule)] $($_.Path)" }
         throw "Sanitized snapshot verification failed. Local audit: $auditPath"
     }
     Write-Host "Sanitized snapshot passed: $($sourceScan.Included.Count) included, $($sourceScan.Excluded.Count) excluded."
+    if ($AuditSourceHistory) {
+        $historyBase = $null
+        $cachedSourceAudit = if (Test-Path -LiteralPath $sourceHistoryCachePath) {
+            Assert-NoRedirectedPath $sourceHistoryCachePath 'Source history cache' | Out-Null
+            try { Get-Content -Raw -LiteralPath $sourceHistoryCachePath | ConvertFrom-Json } catch { $null }
+        } else { $null }
+        if ($cachedSourceAudit -and $cachedSourceAudit.policy_hash -ceq $policyHash -and
+            [string]$cachedSourceAudit.tip -match '^[0-9a-fA-F]{40,64}$') {
+            $tipExists = Invoke-External 'git' @('-C', $resolvedProjectRoot, 'cat-file', '-e', "$($cachedSourceAudit.tip)^{commit}") -AllowFailure
+            $tipIsAncestor = if ($tipExists.ExitCode -eq 0) {
+                Invoke-External 'git' @('-C', $resolvedProjectRoot, 'merge-base', '--is-ancestor', [string]$cachedSourceAudit.tip, $sourceHead) -AllowFailure
+            } else { $null }
+            if ($tipIsAncestor -and $tipIsAncestor.ExitCode -eq 0) { $historyBase = [string]$cachedSourceAudit.tip }
+        }
+        $historyFindings = @(Test-SourceHistory $resolvedProjectRoot $sourceHead $config $rules $tempRoot $historyBase)
+        if ($historyFindings.Count -gt 0) {
+            Write-Host "Source history audit blocked. Matched values are not displayed:"
+            $historyFindings | ForEach-Object { Write-Host "  [$($_.Rule)] $($_.Path)" }
+            throw "Source history is not safe to push. Local audit: $auditPath"
+        }
+        Invoke-TestFault 'backup-after-source-history-audit' $resolvedProjectRoot
+        Assert-SourceHead $resolvedProjectRoot $sourceHead
+        $sourceCache = (([ordered]@{ tip = $sourceHead; policy_hash = $policyHash } | ConvertTo-Json) + "`n")
+        Write-Utf8Atomically $sourceHistoryCachePath $sourceCache $auditRoot 'Source history cache'
+        Assert-SourceHead $resolvedProjectRoot $sourceHead
+        if ($historyBase) { Write-Host "Incremental source history audit passed from $historyBase." }
+        else { Write-Host "Full source history audit passed." }
+    }
+    Invoke-TestFault 'backup-after-source-audit' $resolvedProjectRoot
+    Assert-SourceHead $resolvedProjectRoot $sourceHead
     if ($ScanOnly) { return }
 
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw "GitHub CLI is unavailable; backup is pending." }
     if ((Invoke-External 'gh' @('auth', 'status') -AllowFailure).ExitCode -ne 0) { throw "GitHub authentication is unavailable; run gh auth login." }
 
     $targetRepository = if ($Repository) { $Repository } elseif ($config.repository) { [string]$config.repository } else { $null }
-    if (-not $targetRepository) {
-        $targetRepository = "${projectName}-sanitized-backup-v2"
-        $view = Invoke-External 'gh' @('repo', 'view', $targetRepository, '--json', 'nameWithOwner', '--jq', '.nameWithOwner') -AllowFailure
-        if ($view.ExitCode -ne 0) {
+    $autoSelected = -not $targetRepository
+    if ($autoSelected) {
+        $loginResult = Invoke-External 'gh' @('api', 'user', '--jq', '.login')
+        $login = (($loginResult.Output | Select-Object -First 1)).Trim()
+        if ($login -notmatch '^[A-Za-z0-9-]+$') { throw "Unable to determine the authenticated GitHub owner." }
+        $targetRepository = "$login/${projectName}-sanitized-backup-v2"
+        $repoInfo = Resolve-GitHubRepository $targetRepository -AllowMissing
+        if (-not $repoInfo) {
             Invoke-External 'gh' @('repo', 'create', $targetRepository, '--private') | Out-Null
-            $view = Invoke-External 'gh' @('repo', 'view', $targetRepository, '--json', 'nameWithOwner', '--jq', '.nameWithOwner')
+            $repoInfo = Resolve-GitHubRepository $targetRepository
         }
-        $targetRepository = ($view.Output | Select-Object -First 1).Trim()
+    } else {
+        $repoInfo = Resolve-GitHubRepository $targetRepository
+    }
+    $targetRepository = $repoInfo.Repository
+    $targetUrl = [string]$repoInfo.Url
+    $remoteMain = Get-RemoteBranchTip $targetUrl 'main'
+    if ($autoSelected -and -not $repoInfo.IsEmpty -and -not $remoteMain.Exists) {
+        throw "The automatically selected same-name backup repository is nonempty without an auditable main branch."
     }
 
-    $repoView = Invoke-External 'gh' @('repo', 'view', $targetRepository, '--json', 'url,visibility')
-    $repoInfo = ($repoView.Output -join [Environment]::NewLine) | ConvertFrom-Json
-    if ($repoInfo.visibility -ne 'PRIVATE') { throw "Backup repository must be private: $targetRepository" }
-    $targetUrl = [string]$repoInfo.url
-    $remoteHeads = Invoke-External 'git' @('ls-remote', '--heads', $targetUrl) -AllowFailure
-    $remoteHasHistory = $remoteHeads.ExitCode -eq 0 -and $remoteHeads.Output.Count -gt 0
-
-    $backupKey = (Get-Sha256Text "${resolvedProjectRoot}|${targetRepository}").Substring(0, 16)
-    $backupRoot = Join-Path $localData "Codex\github-backups\${projectName}-${backupKey}"
-    $backupParent = Split-Path -Parent $backupRoot
+    $backupKey = (Get-Sha256Text ("${resolvedProjectRoot}|" + $targetRepository.ToLowerInvariant())).Substring(0, 16)
+    $backupRoot = Get-NormalizedFullPath (Join-Path $localData "Codex\github-backups\${projectName}-${backupKey}")
+    $backupParent = Get-NormalizedFullPath (Split-Path -Parent $backupRoot)
+    Assert-ContainedPath $backupRoot $backupParent 'Backup staging path' | Out-Null
+    Assert-NoRedirectedPath $backupParent 'Backup staging parent' | Out-Null
     New-Item -ItemType Directory -Force -Path $backupParent | Out-Null
-    $lockPath = "${backupRoot}.lock"
+    Assert-NoRedirectedPath $backupParent 'Backup staging parent' | Out-Null
+    $lockPath = Get-NormalizedFullPath "${backupRoot}.lock"
+    Assert-ContainedPath $lockPath $backupParent 'Backup staging lock' | Out-Null
+    if (Test-Path -LiteralPath $lockPath) { Assert-NoRedirectedPath $lockPath 'Backup staging lock' | Out-Null }
     try { $lockStream = [IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None') }
     catch { throw "Another backup run owns the staging lock: $lockPath" }
 
-    if (-not (Test-Path -LiteralPath (Join-Path $backupRoot '.git'))) {
-        if (Test-Path -LiteralPath $backupRoot) { throw "Unexpected non-Git backup staging path: $backupRoot" }
-        if ($remoteHasHistory) {
-            Invoke-External 'git' @('clone', $targetUrl, $backupRoot) | Out-Null
-        } else {
-            New-Item -ItemType Directory -Force -Path $backupRoot | Out-Null
-            Invoke-External 'git' @('-C', $backupRoot, 'init', '-b', 'main') | Out-Null
-            Invoke-External 'git' @('-C', $backupRoot, 'remote', 'add', 'origin', $targetUrl) | Out-Null
-        }
-    }
-
-    $origin = ((Invoke-External 'git' @('-C', $backupRoot, 'remote', 'get-url', 'origin')).Output | Select-Object -First 1).Trim()
-    if ($origin -notin @($targetUrl, "${targetUrl}.git")) { throw "Backup staging origin mismatch: $backupRoot" }
-
-    $status = (Invoke-External 'git' @('-C', $backupRoot, 'status', '--porcelain')).Output
-    if ($status.Count -gt 0) {
-        $head = Invoke-External 'git' @('-C', $backupRoot, 'rev-parse', '--verify', 'HEAD') -AllowFailure
-        if ($head.ExitCode -eq 0) { Invoke-External 'git' @('-C', $backupRoot, 'restore', '--staged', '--worktree', '--source=HEAD', '--', '.') | Out-Null }
-        else { Invoke-External 'git' @('-C', $backupRoot, 'read-tree', '--empty') | Out-Null }
-        Get-ChildItem -Force -LiteralPath $backupRoot | Where-Object { $_.Name -ne '.git' } | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -Recurse }
-    }
-
-    if ($remoteHasHistory) {
-        Invoke-External 'git' @('-C', $backupRoot, 'fetch', 'origin', 'main') | Out-Null
-        $localHead = Invoke-External 'git' @('-C', $backupRoot, 'rev-parse', '--verify', 'HEAD') -AllowFailure
-        if ($localHead.ExitCode -eq 0) { Invoke-External 'git' @('-C', $backupRoot, 'merge', '--ff-only', 'origin/main') | Out-Null }
-        else { Invoke-External 'git' @('-C', $backupRoot, 'checkout', '-b', 'main', 'origin/main') | Out-Null }
-        $auditCachePath = Join-Path $backupRoot '.git\codex-history-audit.json'
-        $remoteAuditTip = ((Invoke-External 'git' @('-C', $backupRoot, 'rev-parse', 'origin/main')).Output | Select-Object -First 1).Trim()
-        $cachedAudit = if (Test-Path -LiteralPath $auditCachePath) {
-            try { Get-Content -Raw -LiteralPath $auditCachePath | ConvertFrom-Json } catch { $null }
-        } else { $null }
-        if (-not $cachedAudit -or $cachedAudit.tip -ne $remoteAuditTip -or $cachedAudit.policy_hash -ne $policyHash) {
-            $historyFindings = @(Test-BackupHistory $backupRoot $config $rules $tempRoot)
-            if ($historyFindings.Count -gt 0) {
-                Write-Host "Existing backup history failed audit:"
-                $historyFindings | ForEach-Object { Write-Host "  [$($_.Rule)] $($_.Path)" }
-                throw "Refusing to extend unverified backup history."
-            }
-            Set-Content -LiteralPath $auditCachePath -Encoding utf8 -Value (([ordered]@{ tip = $remoteAuditTip; policy_hash = $policyHash }) | ConvertTo-Json)
-        }
-    }
-
-    $sourceRemote = Invoke-External 'git' @('-C', $resolvedProjectRoot, 'remote', 'get-url', $RemoteName) -AllowFailure
-    if ($sourceRemote.ExitCode -eq 0) {
-        $configuredUrl = ($sourceRemote.Output | Select-Object -First 1).Trim()
-        if ($configuredUrl -notin @($targetUrl, "${targetUrl}.git")) {
-            $legacyName = "${RemoteName}-legacy"
-            $suffix = 1
-            while ((Invoke-External 'git' @('-C', $resolvedProjectRoot, 'remote', 'get-url', $legacyName) -AllowFailure).ExitCode -eq 0) {
-                $suffix++
-                $legacyName = "${RemoteName}-legacy-${suffix}"
-            }
-            Invoke-External 'git' @('-C', $resolvedProjectRoot, 'remote', 'rename', $RemoteName, $legacyName) | Out-Null
-            Invoke-External 'git' @('-C', $resolvedProjectRoot, 'remote', 'add', $RemoteName, $targetUrl) | Out-Null
-        }
+    if (Test-Path -LiteralPath $backupRoot) {
+        Initialize-StagingOwnership $backupRoot $backupParent $projectKey $targetRepository
     } else {
-        Invoke-External 'git' @('-C', $resolvedProjectRoot, 'remote', 'add', $RemoteName, $targetUrl) | Out-Null
+        New-OwnedStaging $backupRoot $backupParent $projectKey $targetRepository $targetUrl $remoteMain
     }
+    Assert-OwnedStaging $backupRoot $backupParent $projectKey $targetRepository
 
-    $originUrl = Invoke-External 'git' @('-C', $resolvedProjectRoot, 'remote', 'get-url', 'origin') -AllowFailure
-    if ($originUrl.ExitCode -eq 0 -and (Get-RepositoryFromUrl (($originUrl.Output | Select-Object -First 1).Trim())) -and (($originUrl.Output | Select-Object -First 1).Trim()) -notin @($targetUrl, "${targetUrl}.git")) {
-        Invoke-External 'git' @('-C', $resolvedProjectRoot, 'remote', 'set-url', '--push', 'origin', 'DISABLED') | Out-Null
-        $branch = ((Invoke-External 'git' @('-C', $resolvedProjectRoot, 'branch', '--show-current')).Output | Select-Object -First 1).Trim()
-        $upstreamRemote = Invoke-External 'git' @('-C', $resolvedProjectRoot, 'config', '--get', "branch.${branch}.remote") -AllowFailure
-        if ($upstreamRemote.ExitCode -eq 0 -and (($upstreamRemote.Output | Select-Object -First 1).Trim()) -eq 'origin') {
-            Invoke-External 'git' @('-C', $resolvedProjectRoot, 'branch', '--unset-upstream') | Out-Null
+    $existingHead = Invoke-External 'git' @('-C', $backupRoot, 'rev-parse', '--verify', 'HEAD^{commit}') -AllowFailure
+    if ($existingHead.ExitCode -eq 0) {
+        $existingTip = (($existingHead.Output | Select-Object -First 1)).Trim()
+        $existingFindings = @(Test-BackupHistory $backupRoot $existingTip $config $rules $tempRoot)
+        if ($existingFindings.Count -gt 0) {
+            Write-Host "Existing local backup history failed audit:"
+            $existingFindings | ForEach-Object { Write-Host "  [$($_.Rule)] $($_.Path)" }
+            throw "Refusing to clean or extend unverified local backup history."
         }
-        Write-Warning "Disabled push and upstream tracking for unverified legacy origin."
     }
+    $status = (Invoke-External 'git' @('-C', $backupRoot, 'status', '--porcelain')).Output
+    if ($status.Count -gt 0) { Clear-OwnedStagingWorktree $backupRoot $backupParent $projectKey $targetRepository }
 
-    Get-ChildItem -Force -LiteralPath $backupRoot | Where-Object { $_.Name -ne '.git' } | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -Recurse }
+    if ($remoteMain.Exists) {
+        $captureRef = "refs/codex/github-backup/$([Guid]::NewGuid().ToString('N'))"
+        try {
+            Invoke-External 'git' @('-C', $backupRoot, 'fetch', '--no-tags', '--no-write-fetch-head', $targetUrl, "$($remoteMain.Ref):$captureRef") | Out-Null
+            $capturedRemoteTip = ((Invoke-External 'git' @('-C', $backupRoot, 'rev-parse', '--verify', "${captureRef}^{commit}")).Output | Select-Object -First 1).Trim()
+            if ($capturedRemoteTip -cne $remoteMain.Sha) { throw "Backup branch changed while it was being captured." }
+            $remoteFindings = @(Test-BackupHistory $backupRoot $capturedRemoteTip $config $rules $tempRoot)
+            if ($remoteFindings.Count -gt 0) {
+                Write-Host "Existing remote backup history failed audit:"
+                $remoteFindings | ForEach-Object { Write-Host "  [$($_.Rule)] $($_.Path)" }
+                throw "Refusing to extend unverified remote backup history."
+            }
+            $currentBranch = ((Invoke-External 'git' @('-C', $backupRoot, 'branch', '--show-current')).Output | Select-Object -First 1).Trim()
+            if ($currentBranch -cne 'main') {
+                $mainExists = Invoke-External 'git' @('-C', $backupRoot, 'show-ref', '--verify', '--quiet', 'refs/heads/main') -AllowFailure
+                if ($mainExists.ExitCode -eq 0) { Invoke-External 'git' @('-C', $backupRoot, 'checkout', 'main') | Out-Null }
+                else { Invoke-External 'git' @('-C', $backupRoot, 'checkout', '-b', 'main', $capturedRemoteTip) | Out-Null }
+            }
+            Invoke-External 'git' @('-C', $backupRoot, 'merge', '--ff-only', $capturedRemoteTip) | Out-Null
+        }
+        finally { Invoke-External 'git' @('-C', $backupRoot, 'update-ref', '-d', $captureRef) -AllowFailure | Out-Null }
+    }
+    $currentBranch = ((Invoke-External 'git' @('-C', $backupRoot, 'branch', '--show-current')).Output | Select-Object -First 1).Trim()
+    if ($currentBranch -cne 'main') { throw "Owned backup staging must remain on the exact main branch." }
+
+    Clear-OwnedStagingWorktree $backupRoot $backupParent $projectKey $targetRepository
+    Assert-NoRedirectedTree $sourceScan.SnapshotRoot 'Sanitized snapshot'
     Get-ChildItem -Force -LiteralPath $sourceScan.SnapshotRoot | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $backupRoot -Force -Recurse }
-    Set-Content -LiteralPath (Join-Path $backupRoot '.codex-sanitized-backup.json') -Encoding utf8 -Value (([ordered]@{ format = $BackupFormat; source_project = $projectName }) | ConvertTo-Json)
+    $backupMarkerPath = Join-Path $backupRoot '.codex-sanitized-backup.json'
+    $backupMarker = (([ordered]@{ format = $BackupFormat; source_project = $projectName } | ConvertTo-Json) + "`n")
+    Write-Utf8Atomically $backupMarkerPath $backupMarker $backupRoot 'Backup marker'
 
     Invoke-External 'git' @('-C', $backupRoot, 'config', 'user.name', $BackupAuthorName) | Out-Null
     Invoke-External 'git' @('-C', $backupRoot, 'config', 'user.email', $BackupAuthorEmail) | Out-Null
@@ -551,22 +1061,94 @@ try {
     if ($staged.ExitCode -eq 1) {
         Assert-SourceHead $resolvedProjectRoot $sourceHead
         Invoke-External 'git' @('-C', $backupRoot, 'commit', '-m', "Update sanitized backup for $projectName") | Out-Null
-        $newCommitScan = Test-CommitSnapshot $backupRoot 'HEAD' $config $rules $tempRoot -HistoryAudit
-        if ($newCommitScan.Findings.Count -gt 0) { throw "Generated backup commit failed its own history audit." }
     } elseif ($staged.ExitCode -ne 0) {
         throw "Unable to determine staged backup changes."
     }
 
     Assert-SourceHead $resolvedProjectRoot $sourceHead
-    $localTip = ((Invoke-External 'git' @('-C', $backupRoot, 'rev-parse', 'HEAD')).Output | Select-Object -First 1).Trim()
-    $remoteTipResult = Invoke-External 'git' @('ls-remote', $targetUrl, 'refs/heads/main') -AllowFailure
-    $remoteTip = if ($remoteTipResult.Output.Count -gt 0) { (($remoteTipResult.Output | Select-Object -First 1) -split '\s+')[0] } else { $null }
-    if ($localTip -ne $remoteTip) { Invoke-External 'git' @('-C', $backupRoot, 'push', '-u', 'origin', 'HEAD:main') | Out-Null }
-    Set-Content -LiteralPath (Join-Path $backupRoot '.git\codex-history-audit.json') -Encoding utf8 -Value (([ordered]@{ tip = $localTip; policy_hash = $policyHash }) | ConvertTo-Json)
+    $localTip = ((Invoke-External 'git' @('-C', $backupRoot, 'rev-parse', '--verify', 'HEAD^{commit}')).Output | Select-Object -First 1).Trim()
+    $allLocalFindings = @(Test-BackupHistory $backupRoot $localTip $config $rules $tempRoot)
+    if ($allLocalFindings.Count -gt 0) {
+        Write-Host "Local backup history failed final audit:"
+        $allLocalFindings | ForEach-Object { Write-Host "  [$($_.Rule)] $($_.Path)" }
+        throw "Refusing to push unverified local backup history."
+    }
+    Invoke-TestFault 'backup-after-local-history-audit' $backupRoot
+    Assert-SourceHead $resolvedProjectRoot $sourceHead
+    Assert-OwnedStaging $backupRoot $backupParent $projectKey $targetRepository
+    $currentLocalTip = ((Invoke-External 'git' @('-C', $backupRoot, 'rev-parse', '--verify', 'HEAD^{commit}')).Output | Select-Object -First 1).Trim()
+    if ($currentLocalTip -cne $localTip) { throw "Backup staging HEAD changed after its final audit. No push was made." }
+
+    $repoBeforePush = Resolve-GitHubRepository $targetRepository
+    if (-not (Test-SameRepository $repoBeforePush.Repository $targetRepository)) { throw "Backup repository identity changed. No push was made." }
+    $currentRemote = Get-RemoteBranchTip ([string]$repoBeforePush.Url) 'main'
+    if ($currentRemote.Exists -ne $remoteMain.Exists -or ($currentRemote.Exists -and $currentRemote.Sha -cne $remoteMain.Sha)) {
+        throw "Backup branch changed after validation. No push was made."
+    }
+    if ($currentRemote.Exists) {
+        $ancestor = Invoke-External 'git' @('-C', $backupRoot, 'merge-base', '--is-ancestor', $currentRemote.Sha, $localTip) -AllowFailure
+        if ($ancestor.ExitCode -ne 0) { throw "Backup history is diverged or behind. No push was made." }
+    }
+    Assert-SourceHead $resolvedProjectRoot $sourceHead
+    Assert-OwnedStaging $backupRoot $backupParent $projectKey $targetRepository
+    $currentLocalTip = ((Invoke-External 'git' @('-C', $backupRoot, 'rev-parse', '--verify', 'HEAD^{commit}')).Output | Select-Object -First 1).Trim()
+    if ($currentLocalTip -cne $localTip) { throw "Backup staging HEAD changed before push. No push was made." }
+    if (-not $currentRemote.Exists -or $localTip -cne $currentRemote.Sha) {
+        Invoke-External 'git' @('-C', $backupRoot, 'push', [string]$repoBeforePush.Url, "${localTip}:refs/heads/main") | Out-Null
+    }
+    Assert-SourceHead $resolvedProjectRoot $sourceHead
+
+    $auditCachePath = Join-Path $backupRoot '.git\codex-history-audit.json'
+    $backupCache = (([ordered]@{ tip = $localTip; policy_hash = $policyHash } | ConvertTo-Json) + "`n")
+    Write-Utf8Atomically $auditCachePath $backupCache (Join-Path $backupRoot '.git') 'Backup history cache'
+
+    $sourceRemoteNames = [string[]]@((Invoke-External 'git' @('-C', $resolvedProjectRoot, 'remote')).Output | ForEach-Object { [string]$_ })
+    $sourceRemoteExists = $false
+    foreach ($name in $sourceRemoteNames) { if ($name -ceq $RemoteName) { $sourceRemoteExists = $true; break } }
+    if ($sourceRemoteExists -and -not (Test-RemoteMatchesRepository (Get-RemoteUrlState $resolvedProjectRoot $RemoteName) $targetRepository)) {
+        $legacyName = "${RemoteName}-legacy"
+        $suffix = 1
+        while ($sourceRemoteNames -ccontains $legacyName) {
+            $suffix++
+            $legacyName = "${RemoteName}-legacy-${suffix}"
+        }
+        Invoke-External 'git' @('-C', $resolvedProjectRoot, 'remote', 'rename', $RemoteName, $legacyName) | Out-Null
+        Disable-RemotePush $resolvedProjectRoot $legacyName
+        $sourceRemoteExists = $false
+    }
+    if (-not $sourceRemoteExists) { Invoke-External 'git' @('-C', $resolvedProjectRoot, 'remote', 'add', $RemoteName, $targetUrl) | Out-Null }
+
+    $sourceRemoteNames = [string[]]@((Invoke-External 'git' @('-C', $resolvedProjectRoot, 'remote')).Output | ForEach-Object { [string]$_ })
+    $legacyPattern = '^' + [Regex]::Escape($RemoteName) + '-legacy(?:-[0-9]+)?$'
+    foreach ($name in $sourceRemoteNames) {
+        if ($name -cmatch $legacyPattern) {
+            $legacyState = Get-RemoteUrlState $resolvedProjectRoot $name
+            if ($legacyState.Push.Count -ne 1 -or $legacyState.Push[0] -cne 'DISABLED') {
+                Disable-RemotePush $resolvedProjectRoot $name
+            }
+        }
+    }
+
+    $originExists = $false
+    foreach ($name in $sourceRemoteNames) { if ($name -ceq 'origin') { $originExists = $true; break } }
+    if ($originExists) {
+        $originState = Get-RemoteUrlState $resolvedProjectRoot 'origin'
+        $recognizedOrigin = $false
+        $differentOrigin = $false
+        foreach ($url in $originState.Fetch) {
+            $identity = Get-RepositoryFromUrl ([string]$url)
+            if ($identity) {
+                $recognizedOrigin = $true
+                if (-not (Test-SameRepository $identity $targetRepository)) { $differentOrigin = $true }
+            }
+        }
+        if ($recognizedOrigin -and $differentOrigin) {
+            Disable-RemotePush $resolvedProjectRoot 'origin'
+        }
+    }
     Write-Host "Isolated sanitized backup is current at $targetRepository. Local audit: $auditPath"
 }
 finally {
     if ($lockStream) { $lockStream.Dispose() }
-    if ($lockPath -and (Test-Path -LiteralPath $lockPath)) { Remove-Item -LiteralPath $lockPath -Force }
-    if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Force -Recurse }
+    if (Test-Path -LiteralPath $tempRoot) { Remove-SafeDirectory $tempRoot $tempParent 'Temporary backup path' }
 }

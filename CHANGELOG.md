@@ -2,6 +2,8 @@
 
 ## 2026-07-16
 
+- Migrated the project-maintenance workflow from version 2 to version 6 with
+  adaptive execution, proportional durable memory, and audited Git history.
 - Added bounded FactoryTalk Windows-native process runtime metrics and new
   LibreNMS runtime graphs without changing the existing FactoryTalk health RRD.
 - Added opt-in, localhost-only FactoryTalk Diagnostics Counter Monitor

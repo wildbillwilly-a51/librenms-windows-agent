@@ -38,7 +38,7 @@ artifacts/librenms-windows-agent/
 artifacts/*.zip
 artifacts/native-build-validation/
 
-# new-project-setup:v2:start
+# new-project-setup:v6:start
 # Machine-local private documentation
 *.local.md
 .github-backup.local.json
@@ -52,4 +52,4 @@ out/
 coverage/
 test-artifacts/
 playwright-report/
-# new-project-setup:v2:end
+# new-project-setup:v6:end
