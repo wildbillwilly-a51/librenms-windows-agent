@@ -73,6 +73,13 @@ $factorytalk_products_raw = $agent_data['windows_agent_factorytalk_products'] ??
 $factorytalk_services_raw = $agent_data['windows_agent_factorytalk_services'] ?? '';
 $factorytalk_processes_raw = $agent_data['windows_agent_factorytalk_processes'] ?? '';
 $factorytalk_ports_raw = $agent_data['windows_agent_factorytalk_ports'] ?? '';
+$factorytalk_runtime_summary_raw = $agent_data['windows_agent_factorytalk_runtime_summary'] ?? '';
+$factorytalk_runtime_processes_raw = $agent_data['windows_agent_factorytalk_runtime_processes'] ?? '';
+$factorytalk_native_summary_raw = $agent_data['windows_agent_factorytalk_native_summary'] ?? '';
+$factorytalk_linx_connections_raw = $agent_data['windows_agent_factorytalk_linx_connections'] ?? '';
+$factorytalk_linx_backplane_raw = $agent_data['windows_agent_factorytalk_linx_backplane'] ?? '';
+$factorytalk_linx_transactions_raw = $agent_data['windows_agent_factorytalk_linx_transactions'] ?? '';
+$factorytalk_livedata_raw = $agent_data['windows_agent_factorytalk_livedata'] ?? '';
 $tls_summary_raw = $agent_data['windows_agent_tls_certificates_summary'] ?? '';
 $tls_certificates_raw = $agent_data['windows_agent_tls_certificates'] ?? '';
 $backup_summary_raw = $agent_data['windows_agent_backup_storage_summary'] ?? '';
@@ -396,6 +403,13 @@ $factorytalk_products = $parse_rows($factorytalk_products_raw, 'name');
 $factorytalk_services = $parse_rows($factorytalk_services_raw, 'name');
 $factorytalk_processes = $parse_rows($factorytalk_processes_raw, 'name');
 $factorytalk_ports = $parse_rows($factorytalk_ports_raw, 'port');
+$factorytalk_runtime_summary = $parse_windows_agent_kv($factorytalk_runtime_summary_raw);
+$factorytalk_runtime_processes = $parse_rows($factorytalk_runtime_processes_raw, 'name');
+$factorytalk_native_summary = $parse_windows_agent_kv($factorytalk_native_summary_raw);
+$factorytalk_linx_connections = $parse_rows($factorytalk_linx_connections_raw, 'instance');
+$factorytalk_linx_backplane = $parse_rows($factorytalk_linx_backplane_raw, 'instance');
+$factorytalk_linx_transactions = $parse_rows($factorytalk_linx_transactions_raw, 'instance');
+$factorytalk_livedata = $parse_windows_agent_kv($factorytalk_livedata_raw);
 $tls_summary = $parse_windows_agent_kv($tls_summary_raw);
 $tls_certificates = $parse_rows($tls_certificates_raw, 'thumbprint');
 $backup_summary = $parse_windows_agent_kv($backup_summary_raw);
@@ -440,6 +454,38 @@ if (array_key_exists('process_cpu_percent', $agent_performance) || array_key_exi
     ) {
         $agent_resource_impact_level = 1;
     }
+}
+
+$factorytalk_active_in = 0;
+$factorytalk_active_out = 0;
+$factorytalk_accepted = 0;
+$factorytalk_attempted = 0;
+$factorytalk_closed = 0;
+foreach ($factorytalk_linx_connections as $row) {
+    if (strtolower((string) ($row['direction'] ?? '')) === 'incoming') {
+        $factorytalk_active_in += (int) ($row['active'] ?? 0);
+    } elseif (strtolower((string) ($row['direction'] ?? '')) === 'outgoing') {
+        $factorytalk_active_out += (int) ($row['active'] ?? 0);
+    }
+    $factorytalk_accepted += (int) ($row['accepted'] ?? 0);
+    $factorytalk_attempted += (int) ($row['attempted'] ?? 0);
+    $factorytalk_closed += (int) ($row['closed'] ?? 0);
+}
+
+$factorytalk_packets_received = 0;
+$factorytalk_packets_sent = 0;
+$factorytalk_send_failures = 0;
+foreach ($factorytalk_linx_backplane as $row) {
+    $factorytalk_packets_received += (int) ($row['packets_received'] ?? 0);
+    $factorytalk_packets_sent += (int) ($row['packets_sent'] ?? 0);
+    $factorytalk_send_failures += (int) ($row['send_failures'] ?? 0);
+}
+
+$factorytalk_transactions_in_use = 0;
+$factorytalk_transaction_pool_size = 0;
+foreach ($factorytalk_linx_transactions as $row) {
+    $factorytalk_transactions_in_use += (int) ($row['in_use'] ?? 0);
+    $factorytalk_transaction_pool_size += (int) ($row['pool_size'] ?? 0);
 }
 
 $fields = [
@@ -536,6 +582,28 @@ $fields = [
     'factorytalk_ports_total' => (int) ($factorytalk_summary['ports_total'] ?? 0),
     'factorytalk_ports_listening' => (int) ($factorytalk_summary['ports_listening'] ?? 0),
     'factorytalk_health_issues' => (int) ($factorytalk_summary['health_issues'] ?? 0),
+    'factorytalk_runtime_processes_total' => (int) ($factorytalk_runtime_summary['processes_total'] ?? 0),
+    'factorytalk_runtime_cpu_percent' => (float) ($factorytalk_runtime_summary['cpu_percent'] ?? 0),
+    'factorytalk_runtime_working_set_bytes' => (int) ($factorytalk_runtime_summary['working_set_bytes'] ?? 0),
+    'factorytalk_runtime_private_bytes' => (int) ($factorytalk_runtime_summary['private_bytes'] ?? 0),
+    'factorytalk_runtime_handle_count' => (int) ($factorytalk_runtime_summary['handle_count'] ?? 0),
+    'factorytalk_runtime_thread_count' => (int) ($factorytalk_runtime_summary['thread_count'] ?? 0),
+    'factorytalk_runtime_io_read_bytes_per_sec' => (float) ($factorytalk_runtime_summary['io_read_bytes_per_sec'] ?? 0),
+    'factorytalk_runtime_io_write_bytes_per_sec' => (float) ($factorytalk_runtime_summary['io_write_bytes_per_sec'] ?? 0),
+    'factorytalk_native_enabled' => (int) ($factorytalk_native_summary['enabled'] ?? 0),
+    'factorytalk_native_available' => (int) ($factorytalk_native_summary['available'] ?? 0),
+    'factorytalk_native_snapshot_age_seconds' => (int) ($factorytalk_native_summary['snapshot_age_seconds'] ?? -1),
+    'factorytalk_linx_active_in' => $factorytalk_active_in,
+    'factorytalk_linx_active_out' => $factorytalk_active_out,
+    'factorytalk_linx_accepted' => $factorytalk_accepted,
+    'factorytalk_linx_attempted' => $factorytalk_attempted,
+    'factorytalk_linx_closed' => $factorytalk_closed,
+    'factorytalk_linx_packets_received' => $factorytalk_packets_received,
+    'factorytalk_linx_packets_sent' => $factorytalk_packets_sent,
+    'factorytalk_linx_send_failures' => $factorytalk_send_failures,
+    'factorytalk_linx_transactions_in_use' => $factorytalk_transactions_in_use,
+    'factorytalk_linx_transaction_pool_size' => $factorytalk_transaction_pool_size,
+    'factorytalk_livedata_clients' => (int) ($factorytalk_livedata['clients'] ?? 0),
     'tls_certificates_total' => (int) ($tls_summary['certificate_count'] ?? 0),
     'tls_certificates_expired' => (int) ($tls_summary['expired_count'] ?? 0),
     'tls_certificates_expiring_warning' => (int) ($tls_summary['expiring_warning_count'] ?? 0),
@@ -706,6 +774,13 @@ $windows_agent_app->data = [
     'factorytalk_services' => $factorytalk_services,
     'factorytalk_processes' => $factorytalk_processes,
     'factorytalk_ports' => $factorytalk_ports,
+    'factorytalk_runtime_summary' => $factorytalk_runtime_summary,
+    'factorytalk_runtime_processes' => $factorytalk_runtime_processes,
+    'factorytalk_native_summary' => $factorytalk_native_summary,
+    'factorytalk_linx_connections' => $factorytalk_linx_connections,
+    'factorytalk_linx_backplane' => $factorytalk_linx_backplane,
+    'factorytalk_linx_transactions' => $factorytalk_linx_transactions,
+    'factorytalk_livedata' => $factorytalk_livedata,
     'tls_certificates_summary' => $tls_summary,
     'tls_certificates' => $tls_certificates,
     'backup_storage_summary' => $backup_summary,
@@ -970,6 +1045,94 @@ app('Datastore')->put($device, 'app', [
     'core_down' => $fields['factorytalk_core_services_not_running'],
     'ports_listening' => $fields['factorytalk_ports_listening'],
     'health_issues' => $fields['factorytalk_health_issues'],
+]);
+
+$factorytalk_runtime_rrd_def = RrdDefinition::make()
+    ->addDataset('processes', 'GAUGE', 0)
+    ->addDataset('cpu_pct', 'GAUGE', 0, 100)
+    ->addDataset('working_set', 'GAUGE', 0)
+    ->addDataset('private_bytes', 'GAUGE', 0)
+    ->addDataset('handles', 'GAUGE', 0)
+    ->addDataset('threads', 'GAUGE', 0)
+    ->addDataset('io_read_bps', 'GAUGE', 0)
+    ->addDataset('io_write_bps', 'GAUGE', 0);
+
+app('Datastore')->put($device, 'app', [
+    'name' => 'windows-agent-factorytalk-runtime',
+    'app_id' => $windows_agent_app->app_id,
+    'rrd_name' => ['app', 'windows-agent-factorytalk-runtime', $windows_agent_app->app_id],
+    'rrd_def' => $factorytalk_runtime_rrd_def,
+], [
+    'processes' => $fields['factorytalk_runtime_processes_total'],
+    'cpu_pct' => $fields['factorytalk_runtime_cpu_percent'],
+    'working_set' => $fields['factorytalk_runtime_working_set_bytes'],
+    'private_bytes' => $fields['factorytalk_runtime_private_bytes'],
+    'handles' => $fields['factorytalk_runtime_handle_count'],
+    'threads' => $fields['factorytalk_runtime_thread_count'],
+    'io_read_bps' => $fields['factorytalk_runtime_io_read_bytes_per_sec'],
+    'io_write_bps' => $fields['factorytalk_runtime_io_write_bytes_per_sec'],
+]);
+
+$factorytalk_connections_rrd_def = RrdDefinition::make()
+    ->addDataset('active_in', 'GAUGE', 0)
+    ->addDataset('active_out', 'GAUGE', 0)
+    ->addDataset('accepted', 'DERIVE', 0)
+    ->addDataset('attempted', 'DERIVE', 0)
+    ->addDataset('closed', 'DERIVE', 0);
+
+app('Datastore')->put($device, 'app', [
+    'name' => 'windows-agent-factorytalk-linx-connections',
+    'app_id' => $windows_agent_app->app_id,
+    'rrd_name' => ['app', 'windows-agent-factorytalk-linx-connections', $windows_agent_app->app_id],
+    'rrd_def' => $factorytalk_connections_rrd_def,
+], [
+    'active_in' => $fields['factorytalk_linx_active_in'],
+    'active_out' => $fields['factorytalk_linx_active_out'],
+    'accepted' => $fields['factorytalk_linx_accepted'],
+    'attempted' => $fields['factorytalk_linx_attempted'],
+    'closed' => $fields['factorytalk_linx_closed'],
+]);
+
+$factorytalk_traffic_rrd_def = RrdDefinition::make()
+    ->addDataset('packets_recv', 'DERIVE', 0)
+    ->addDataset('packets_sent', 'DERIVE', 0)
+    ->addDataset('send_fail', 'DERIVE', 0);
+
+app('Datastore')->put($device, 'app', [
+    'name' => 'windows-agent-factorytalk-linx-traffic',
+    'app_id' => $windows_agent_app->app_id,
+    'rrd_name' => ['app', 'windows-agent-factorytalk-linx-traffic', $windows_agent_app->app_id],
+    'rrd_def' => $factorytalk_traffic_rrd_def,
+], [
+    'packets_recv' => $fields['factorytalk_linx_packets_received'],
+    'packets_sent' => $fields['factorytalk_linx_packets_sent'],
+    'send_fail' => $fields['factorytalk_linx_send_failures'],
+]);
+
+$factorytalk_transactions_rrd_def = RrdDefinition::make()
+    ->addDataset('in_use', 'GAUGE', 0)
+    ->addDataset('pool_size', 'GAUGE', 0);
+
+app('Datastore')->put($device, 'app', [
+    'name' => 'windows-agent-factorytalk-linx-transactions',
+    'app_id' => $windows_agent_app->app_id,
+    'rrd_name' => ['app', 'windows-agent-factorytalk-linx-transactions', $windows_agent_app->app_id],
+    'rrd_def' => $factorytalk_transactions_rrd_def,
+], [
+    'in_use' => $fields['factorytalk_linx_transactions_in_use'],
+    'pool_size' => $fields['factorytalk_linx_transaction_pool_size'],
+]);
+
+$factorytalk_livedata_rrd_def = RrdDefinition::make()
+    ->addDataset('clients', 'GAUGE', 0);
+
+app('Datastore')->put($device, 'app', [
+    'name' => 'windows-agent-factorytalk-livedata',
+    'app_id' => $windows_agent_app->app_id,
+    'rrd_name' => ['app', 'windows-agent-factorytalk-livedata', $windows_agent_app->app_id],
+    'rrd_def' => $factorytalk_livedata_rrd_def,
+], [
+    'clients' => $fields['factorytalk_livedata_clients'],
 ]);
 
 $tls_rrd_def = RrdDefinition::make()

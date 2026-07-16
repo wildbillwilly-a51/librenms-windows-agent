@@ -151,6 +151,10 @@ namespace LibreNMS.WindowsAgent.Service
             }
             config.Collectors.FactoryTalk = config.Collectors.FactoryTalk ?? new FactoryTalkConfig();
             config.Collectors.FactoryTalk.Mode = string.IsNullOrWhiteSpace(config.Collectors.FactoryTalk.Mode) ? "auto" : config.Collectors.FactoryTalk.Mode.Trim();
+            config.Collectors.FactoryTalk.NativeCountersMode = NormalizeFactoryTalkNativeCountersMode(config.Collectors.FactoryTalk.NativeCountersMode);
+            config.Collectors.FactoryTalk.NativeCounterIntervalSeconds = Math.Max(300, config.Collectors.FactoryTalk.NativeCounterIntervalSeconds <= 0 ? 900 : config.Collectors.FactoryTalk.NativeCounterIntervalSeconds);
+            config.Collectors.FactoryTalk.NativeCounterTimeoutSeconds = Math.Max(5, Math.Min(60, config.Collectors.FactoryTalk.NativeCounterTimeoutSeconds <= 0 ? 30 : config.Collectors.FactoryTalk.NativeCounterTimeoutSeconds));
+            config.Collectors.FactoryTalk.NativeCounterExecutablePath = (config.Collectors.FactoryTalk.NativeCounterExecutablePath ?? string.Empty).Trim();
             config.Collectors.FactoryTalk.Ports = config.Collectors.FactoryTalk.Ports ?? new List<int>();
             if (config.Collectors.FactoryTalk.Ports.Count == 0)
             {
@@ -285,6 +289,13 @@ namespace LibreNMS.WindowsAgent.Service
 
             config.Logging.Level = string.IsNullOrWhiteSpace(config.Logging.Level) ? "info" : config.Logging.Level.Trim();
             config.Logging.Path = ExpandPath(config.Logging.Path);
+        }
+
+        private static string NormalizeFactoryTalkNativeCountersMode(string mode)
+        {
+            return string.Equals((mode ?? string.Empty).Trim(), "local", StringComparison.OrdinalIgnoreCase)
+                ? "local"
+                : "disabled";
         }
 
         public static string ExpandPath(string path)

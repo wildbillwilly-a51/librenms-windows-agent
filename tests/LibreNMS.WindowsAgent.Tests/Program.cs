@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Net;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using LibreNMS.WindowsAgent.Core;
@@ -47,6 +49,10 @@ namespace LibreNMS.WindowsAgent.Tests
                 ("factorytalk health not detected", FactoryTalkHealthNotDetected),
                 ("factorytalk health ok", FactoryTalkHealthOk),
                 ("factorytalk health core service warning", FactoryTalkHealthCoreServiceWarning),
+                ("factorytalk counter snapshot parses allowlist", FactoryTalkCounterSnapshotParsesAllowlist),
+                ("factorytalk counter snapshot ignores sensitive and unknown values", FactoryTalkCounterSnapshotIgnoresSensitiveAndUnknownValues),
+                ("factorytalk counter snapshot rejects dtd", FactoryTalkCounterSnapshotRejectsDtd),
+                ("factorytalk counter snapshot rejects oversized input", FactoryTalkCounterSnapshotRejectsOversizedInput),
                 ("ad dc health not applicable", ActiveDirectoryDcHealthNotApplicable),
                 ("ad dc health ok", ActiveDirectoryDcHealthOk),
                 ("ad dc health critical", ActiveDirectoryDcHealthCritical),
@@ -397,7 +403,11 @@ namespace LibreNMS.WindowsAgent.Tests
             AssertTrue(config.Collectors.FactoryTalk.IncludeProducts, "FactoryTalk product visibility should be included by default");
             AssertTrue(config.Collectors.FactoryTalk.IncludeServices, "FactoryTalk service visibility should be included by default");
             AssertTrue(config.Collectors.FactoryTalk.IncludeProcesses, "FactoryTalk process visibility should be included by default");
+            AssertTrue(config.Collectors.FactoryTalk.IncludeRuntimeMetrics, "FactoryTalk runtime visibility should be included by default");
             AssertTrue(config.Collectors.FactoryTalk.IncludePorts, "FactoryTalk port visibility should be included by default");
+            AssertEqual("disabled", config.Collectors.FactoryTalk.NativeCountersMode);
+            AssertEqual(900, config.Collectors.FactoryTalk.NativeCounterIntervalSeconds);
+            AssertEqual(30, config.Collectors.FactoryTalk.NativeCounterTimeoutSeconds);
             AssertTrue(config.Collectors.FactoryTalk.Ports.Contains(27000), "FactoryTalk Activation default port should be watched by default");
             AssertTrue(config.Collectors.FactoryTalk.Ports.Contains(4245), "FactoryTalk Linx default port should be watched by default");
             AssertTrue(config.Collectors.FactoryTalk.Ports.Contains(9111), "FactoryTalk Alarms and Events default port should be watched by default");
@@ -522,6 +532,58 @@ namespace LibreNMS.WindowsAgent.Tests
 
             AssertEqual("warning", result.State);
             AssertEqual(1, result.HealthIssues);
+        }
+
+        private static void FactoryTalkCounterSnapshotParsesAllowlist()
+        {
+            const string xml = @"<CounterMonitorReport><Data><SystemDiagnostics><DiagItem dispname=""LOCALHOST""><DiagItem dispname=""FactoryTalk Linx""><DiagItem dispname=""Engine""><DiagItem dispname=""Transaction Manager""><Property dispname=""Size of transaction pool"" type=""3"" value=""40""/><Property dispname=""Number of transactions in use"" type=""3"" value=""5""/></DiagItem></DiagItem><DiagItem dispname=""Drivers""><DiagItem dispname=""Backplane""><DiagItem dispname=""Slot 3""><Property dispname=""Number of Packets Received"" type=""3"" value=""120""/><Property dispname=""Number of Packets Sent"" type=""3"" value=""90""/><Property dispname=""Number of Send Failures"" type=""3"" value=""2""/></DiagItem></DiagItem><DiagItem dispname=""AB_ETHIP-PlantNetwork""><Property dispname=""IP Address"" type=""8"" value=""192.0.2.10""/><DiagItem dispname=""Incoming TCP Connections""><Property dispname=""Number of connections active"" type=""3"" value=""3""/><Property dispname=""Number of connections accepted"" type=""3"" value=""100""/><Property dispname=""Number of connections closed"" type=""3"" value=""97""/></DiagItem><DiagItem dispname=""Outgoing TCP Connections""><Property dispname=""Number of connections active"" type=""3"" value=""4""/><Property dispname=""Number of connections attempted"" type=""3"" value=""80""/><Property dispname=""Number of connections closed"" type=""3"" value=""76""/></DiagItem></DiagItem></DiagItem></DiagItem><DiagItem dispname=""FactoryTalk Linx Instance02""><DiagItem dispname=""Engine""><DiagItem dispname=""Transaction Manager""><Property dispname=""Size of transaction pool"" value=""20""/><Property dispname=""Number of transactions in use"" value=""1""/></DiagItem></DiagItem></DiagItem><DiagItem dispname=""FactoryTalk Live Data""><DiagItem dispname=""RnaDaSvr [Example.exe(1234)]""><Property dispname=""total number of FactoryTalk data clients"" type=""3"" value=""7""/></DiagItem></DiagItem></DiagItem></SystemDiagnostics></Data></CounterMonitorReport>";
+            var snapshot = ParseFactoryTalkSnapshot(xml);
+
+            AssertEqual(2, snapshot.Connections.Count);
+            AssertEqual("ethernet_ip", snapshot.Connections[0].Driver);
+            AssertEqual(3, (int)snapshot.Connections[0].Active);
+            AssertEqual(100, (int)snapshot.Connections[0].Accepted);
+            AssertEqual(80, (int)snapshot.Connections[1].Attempted);
+            AssertEqual(1, snapshot.BackplaneSlots.Count);
+            AssertEqual(3, snapshot.BackplaneSlots[0].Slot);
+            AssertEqual(120, (int)snapshot.BackplaneSlots[0].PacketsReceived);
+            AssertEqual(2, snapshot.Transactions.Count);
+            AssertEqual(2, snapshot.Transactions[1].Instance);
+            AssertEqual(7, (int)snapshot.LiveDataClients);
+            AssertEqual(1, snapshot.LiveDataSources);
+        }
+
+        private static void FactoryTalkCounterSnapshotIgnoresSensitiveAndUnknownValues()
+        {
+            const string xml = @"<CounterMonitorReport><Data><SystemDiagnostics><DiagItem dispname=""PRIVATE-HOST""><DiagItem dispname=""FactoryTalk Linx""><DiagItem dispname=""Drivers""><DiagItem dispname=""SECRET_DRIVER""><Property dispname=""IP Address"" value=""198.51.100.4""/><DiagItem dispname=""Incoming TCP Connections""><Property dispname=""Number of connections active"" value=""99""/></DiagItem></DiagItem></DiagItem><DiagItem dispname=""Shortcuts""><DiagItem dispname=""PRIVATE_CONTROLLER""><Property dispname=""arbitrary"" value=""123""/></DiagItem></DiagItem></DiagItem></DiagItem></SystemDiagnostics></Data></CounterMonitorReport>";
+            var snapshot = ParseFactoryTalkSnapshot(xml);
+
+            AssertEqual(0, snapshot.Connections.Count);
+            AssertEqual(0, snapshot.BackplaneSlots.Count);
+            AssertEqual(0, snapshot.Transactions.Count);
+            AssertEqual(0, (int)snapshot.LiveDataClients);
+        }
+
+        private static void FactoryTalkCounterSnapshotRejectsDtd()
+        {
+            const string xml = "<!DOCTYPE x [<!ENTITY probe SYSTEM 'file:///not-read'>]><CounterMonitorReport><Data>&probe;</Data></CounterMonitorReport>";
+            AssertThrows<Exception>(() => ParseFactoryTalkSnapshot(xml), "DTD-bearing snapshots must be rejected");
+        }
+
+        private static void FactoryTalkCounterSnapshotRejectsOversizedInput()
+        {
+            using (var stream = new MemoryStream(new byte[FactoryTalkCounterSnapshotParser.MaximumXmlBytes + 1]))
+            {
+                AssertThrows<InvalidDataException>(() => FactoryTalkCounterSnapshotParser.Parse(stream), "oversized snapshots must be rejected before parsing");
+            }
+        }
+
+        private static FactoryTalkCounterSnapshot ParseFactoryTalkSnapshot(string xml)
+        {
+            using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml)))
+            {
+                return FactoryTalkCounterSnapshotParser.Parse(stream);
+            }
         }
 
         private static void ActiveDirectoryDcHealthNotApplicable()
@@ -840,8 +902,8 @@ namespace LibreNMS.WindowsAgent.Tests
             var sessions = LoggedOnUserParser.ParseQuser(output);
 
             AssertEqual(2, sessions.Count);
-            AssertEqual("LibreNMS", sessions[0].Domain);
-            AssertEqual("walt", sessions[0].User);
+            AssertEqual("EXAMPLE", sessions[0].Domain);
+            AssertEqual("operator", sessions[0].User);
             AssertEqual("console", sessions[0].SessionName);
             AssertEqual("1", sessions[0].SessionId);
             AssertEqual("Active", sessions[0].State);
@@ -898,6 +960,20 @@ namespace LibreNMS.WindowsAgent.Tests
             {
                 throw new InvalidOperationException(message);
             }
+        }
+
+        private static void AssertThrows<TException>(Action action, string message) where TException : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (TException)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException(message);
         }
 
         private sealed class SlowCollector : IAgentCollector

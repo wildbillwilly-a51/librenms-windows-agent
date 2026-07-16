@@ -52,6 +52,13 @@ $factorytalk_products = $data['factorytalk_products'] ?? [];
 $factorytalk_services = $data['factorytalk_services'] ?? [];
 $factorytalk_processes = $data['factorytalk_processes'] ?? [];
 $factorytalk_ports = $data['factorytalk_ports'] ?? [];
+$factorytalk_runtime_summary = $data['factorytalk_runtime_summary'] ?? [];
+$factorytalk_runtime_processes = $data['factorytalk_runtime_processes'] ?? [];
+$factorytalk_native_summary = $data['factorytalk_native_summary'] ?? [];
+$factorytalk_linx_connections = $data['factorytalk_linx_connections'] ?? [];
+$factorytalk_linx_backplane = $data['factorytalk_linx_backplane'] ?? [];
+$factorytalk_linx_transactions = $data['factorytalk_linx_transactions'] ?? [];
+$factorytalk_livedata = $data['factorytalk_livedata'] ?? [];
 $tls_certificates_summary = $data['tls_certificates_summary'] ?? [];
 $tls_certificates = $data['tls_certificates'] ?? [];
 $backup_storage_summary = $data['backup_storage_summary'] ?? [];
@@ -602,6 +609,52 @@ if ($has_role_details($factorytalk_summary, $factorytalk_ports)) {
         return '<td>' . $esc($row['name'] ?? '') . '</td><td>' . $esc($row['port'] ?? '') . '</td><td>' . $state_label($row['listening'] ?? '0') . '</td><td>' . $esc($row['addresses'] ?? '') . '</td>';
     });
 }
+if (! empty($factorytalk_runtime_summary)) {
+    $runtime_state = $section_state($factorytalk_runtime_summary['state'] ?? 'unknown');
+    $factorytalk_details .= '<h4>FactoryTalk Runtime Metrics</h4><div class="well well-sm">' .
+        $runtime_state['html'] . ' ' .
+        $metric('Processes', $factorytalk_runtime_summary['processes_total'] ?? '0') . ' ' .
+        $metric('CPU', $format_percent($factorytalk_runtime_summary['cpu_percent'] ?? 0)) . ' ' .
+        $metric('Working set', $format_bytes($factorytalk_runtime_summary['working_set_bytes'] ?? 0)) . ' ' .
+        $metric('Private bytes', $format_bytes($factorytalk_runtime_summary['private_bytes'] ?? 0)) .
+        '</div>';
+}
+if (! empty($factorytalk_runtime_processes)) {
+    $factorytalk_details .= $table(['Process', 'PID', 'Role', 'CPU', 'Working set', 'Private bytes', 'Handles', 'Threads', 'Read/s', 'Write/s', 'Uptime (s)'], $factorytalk_runtime_processes, static function ($row) use ($esc, $format_bytes, $format_percent): string {
+        return '<td>' . $esc($row['name'] ?? '') . '</td><td>' . $esc($row['pid'] ?? '') . '</td><td>' . $esc($row['role'] ?? '') . '</td><td>' . $format_percent($row['cpu_percent'] ?? 0) . '</td><td>' . $format_bytes($row['working_set_bytes'] ?? 0) . '</td><td>' . $format_bytes($row['private_bytes'] ?? 0) . '</td><td>' . $esc($row['handle_count'] ?? '0') . '</td><td>' . $esc($row['thread_count'] ?? '0') . '</td><td>' . $format_bytes($row['io_read_bytes_per_sec'] ?? 0) . '</td><td>' . $format_bytes($row['io_write_bytes_per_sec'] ?? 0) . '</td><td>' . $esc($row['uptime_seconds'] ?? '0') . '</td>';
+    });
+}
+if (! empty($factorytalk_native_summary)) {
+    $native_state = $section_state($factorytalk_native_summary['state'] ?? 'unknown');
+    $factorytalk_details .= '<h4>Native Counter Snapshot</h4><div class="well well-sm">' .
+        $native_state['html'] . ' ' .
+        $metric('Mode', $factorytalk_native_summary['mode'] ?? 'disabled') . ' ' .
+        $metric('Available', $factorytalk_native_summary['available'] ?? '0') . ' ' .
+        $metric('Signed', $factorytalk_native_summary['signature_valid'] ?? '0') . ' ' .
+        $metric('Version', $factorytalk_native_summary['version'] ?? '') . ' ' .
+        $metric('Age (s)', $factorytalk_native_summary['snapshot_age_seconds'] ?? '-1') . ' ' .
+        $metric('Duration (ms)', $factorytalk_native_summary['snapshot_duration_ms'] ?? '0') . ' ' .
+        $metric('Last result', $factorytalk_native_summary['last_error'] ?? 'none') .
+        '</div>';
+}
+if (! empty($factorytalk_linx_connections)) {
+    $factorytalk_details .= '<h4>FactoryTalk Linx Connections</h4>' . $table(['Instance', 'Driver', 'Direction', 'Active', 'Accepted', 'Attempted', 'Closed'], $factorytalk_linx_connections, static function ($row) use ($esc): string {
+        return '<td>' . $esc($row['instance'] ?? '') . '</td><td>' . $esc($row['driver'] ?? '') . '</td><td>' . $esc($row['direction'] ?? '') . '</td><td>' . $esc($row['active'] ?? '0') . '</td><td>' . $esc($row['accepted'] ?? '0') . '</td><td>' . $esc($row['attempted'] ?? '0') . '</td><td>' . $esc($row['closed'] ?? '0') . '</td>';
+    });
+}
+if (! empty($factorytalk_linx_backplane)) {
+    $factorytalk_details .= '<h4>FactoryTalk Linx Backplane</h4>' . $table(['Instance', 'Slot', 'Packets received', 'Packets sent', 'Send failures'], $factorytalk_linx_backplane, static function ($row) use ($esc): string {
+        return '<td>' . $esc($row['instance'] ?? '') . '</td><td>' . $esc($row['slot'] ?? '') . '</td><td>' . $esc($row['packets_received'] ?? '0') . '</td><td>' . $esc($row['packets_sent'] ?? '0') . '</td><td>' . $esc($row['send_failures'] ?? '0') . '</td>';
+    });
+}
+if (! empty($factorytalk_linx_transactions)) {
+    $factorytalk_details .= '<h4>FactoryTalk Linx Transactions</h4>' . $table(['Instance', 'In use', 'Pool size'], $factorytalk_linx_transactions, static function ($row) use ($esc): string {
+        return '<td>' . $esc($row['instance'] ?? '') . '</td><td>' . $esc($row['in_use'] ?? '0') . '</td><td>' . $esc($row['pool_size'] ?? '0') . '</td>';
+    });
+}
+if (! empty($factorytalk_livedata)) {
+    $factorytalk_details .= '<h4>FactoryTalk Live Data</h4><div class="well well-sm">' . $metric('Clients', $factorytalk_livedata['clients'] ?? '0') . ' ' . $metric('Sources', $factorytalk_livedata['sources'] ?? '0') . '</div>';
+}
 
 $tls_details = '';
 if ($has_role_details($tls_certificates_summary, $tls_certificates)) {
@@ -787,9 +840,23 @@ $roles_tab .= $render_section_summary('horizon', 'VMware Horizon', $sections['ho
     ['label' => 'Horizon State and Issues', 'key' => 'windows-agent_horizon_state_health'],
     ['label' => 'Horizon Listeners and Certificates', 'key' => 'windows-agent_horizon_edges'],
 ]);
-$roles_tab .= $render_section_summary('factorytalk', 'FactoryTalk', $sections['factorytalk']['state'], $sections['factorytalk']['summary'], $factorytalk_details, [
+$factorytalk_graphs = [
     ['label' => 'FactoryTalk State and Issues', 'key' => 'windows-agent_factorytalk_state_health'],
-]);
+];
+if (! empty($factorytalk_runtime_summary) && ! in_array(strtolower((string) ($factorytalk_runtime_summary['state'] ?? '')), ['disabled', 'not_detected', 'unsupported'], true)) {
+    $factorytalk_graphs[] = ['label' => 'FactoryTalk Runtime CPU', 'key' => 'windows-agent_factorytalk_runtime_cpu'];
+    $factorytalk_graphs[] = ['label' => 'FactoryTalk Runtime Memory', 'key' => 'windows-agent_factorytalk_runtime_memory'];
+    $factorytalk_graphs[] = ['label' => 'FactoryTalk Runtime Processes', 'key' => 'windows-agent_factorytalk_runtime_processes'];
+    $factorytalk_graphs[] = ['label' => 'FactoryTalk Runtime I/O', 'key' => 'windows-agent_factorytalk_runtime_io'];
+}
+if (! empty($factorytalk_linx_connections) || ! empty($factorytalk_linx_backplane) || ! empty($factorytalk_linx_transactions) || ! empty($factorytalk_livedata)) {
+    $factorytalk_graphs[] = ['label' => 'FactoryTalk Linx Active Connections', 'key' => 'windows-agent_factorytalk_linx_connections_active'];
+    $factorytalk_graphs[] = ['label' => 'FactoryTalk Linx Connection Churn', 'key' => 'windows-agent_factorytalk_linx_connections_churn'];
+    $factorytalk_graphs[] = ['label' => 'FactoryTalk Linx Backplane Traffic', 'key' => 'windows-agent_factorytalk_linx_traffic'];
+    $factorytalk_graphs[] = ['label' => 'FactoryTalk Linx Transactions', 'key' => 'windows-agent_factorytalk_linx_transactions'];
+    $factorytalk_graphs[] = ['label' => 'FactoryTalk Live Data Clients', 'key' => 'windows-agent_factorytalk_livedata_clients'];
+}
+$roles_tab .= $render_section_summary('factorytalk', 'FactoryTalk', $sections['factorytalk']['state'], $sections['factorytalk']['summary'], $factorytalk_details, $factorytalk_graphs);
 $roles_tab .= $render_section_summary('roles', 'Detected Roles', $section_state(empty($roles) ? 'not_detected' : 'ok'), $metric('Rows', count($roles)), $role_details);
 $roles_tab .= $render_section_summary('ad', 'Active Directory Summary', $section_state($ad_summary['state'] ?? 'not_applicable'), $metric('Domain', $ad_summary['domain'] ?? '') . ' ' . $metric('Failures', $ad_summary['replication_failures'] ?? '0'), $ad_details);
 $roles_tab .= $render_section_summary('ad-dc', 'AD/DC Local Health', $sections['ad_dc']['state'], $sections['ad_dc']['summary'], $ad_dc_details, [

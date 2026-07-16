@@ -56,6 +56,12 @@ Default shape:
   service/process/log evidence only.
 - Windows performance depth through `windows_agent_performance_*` sections, using local
   pressure counters and bounded top process context.
+- FactoryTalk Windows-native runtime metrics through
+  `windows_agent_factorytalk_runtime_*` sections. Optional FactoryTalk
+  Diagnostics Counter Monitor snapshots add allowlisted Linx connection,
+  backplane, transaction, and Live Data client counters. Snapshot execution is
+  localhost-only, signed-executable-only, independently throttled, raw-XML-free,
+  and disabled by default.
 - The LibreNMS application page uses an action-first overview: role state,
   why the role matters, evidence, next check, health scope, and then secondary
   inventory/detail tables.
@@ -75,8 +81,9 @@ noise by itself.
    coverage is designed.
 2. Add more precise Horizon Connection Server local event/performance evidence
    while staying credential-free and API-free.
-3. Expand the FactoryTalk role matrix with more Rockwell product/service/port
-   indicators, still avoiding FactoryTalk APIs and project files by default.
+3. Evaluate additional FactoryTalk diagnostics only after field experience with
+   the bounded runtime and Counter Monitor sections; continue avoiding project
+   files, controller subscriptions, and raw diagnostics by default.
 4. Hyper-V: VM state, integration service state, replication health.
 5. Deeper SQL Server: optional local integrated queries for database/job/backup
    state after credential and permission handling is explicitly designed.

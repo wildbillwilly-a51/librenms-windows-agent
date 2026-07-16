@@ -233,7 +233,12 @@
       "includeProducts": true,
       "includeServices": true,
       "includeProcesses": true,
+      "includeRuntimeMetrics": true,
       "includePorts": true,
+      "nativeCountersMode": "disabled",
+      "nativeCounterIntervalSeconds": 900,
+      "nativeCounterTimeoutSeconds": 30,
+      "nativeCounterExecutablePath": "",
       "ports": [
         27000,
         27001,

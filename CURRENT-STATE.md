@@ -3,11 +3,9 @@
 This is the read-first handoff for the universal LibreNMS Windows Agent
 project.
 
-The canonical GitHub repository is `librenms-windows-agent`. This checkout
-still uses the prior `librenms-windows-agent-installer` directory name only
-because the active Codex workspace holds that directory open. The prior A51
-development repository is retained locally as `librenms-windows-agent-legacy`
-only until consolidation is fully verified.
+The canonical GitHub repository and local checkout are both named
+`librenms-windows-agent`. The prior development repository is retained locally
+as `librenms-windows-agent-legacy` only for historical recovery.
 
 ## Project Boundary
 
@@ -27,16 +25,18 @@ and private exports do not belong here.
 
 ## Current Release
 
-- Version: `0.6.11`
-- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.11.tar.gz`
-- Windows MSI: `artifacts/librenms-windows-agent-0.6.11.msi`
+- Version: `0.6.12`
+- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.12.tar.gz`
+- Windows MSI: `artifacts/librenms-windows-agent-0.6.12.msi`
 - Checksums: `SHA256SUMS`
+- Overlay SHA256: `1e65f17d76750e0690afef82a806d33670ae60423648dec27209c2a11f899b8d`
+- Windows MSI SHA256: `925456f75a8d56c0eeb73af3fc610de4f4379f50a80cb3443e0933c8d8f40582`
 - Public overlay installer: `install.sh`
 - Public Windows installer: `install-agent.ps1`
 
-The source migration preserves the current `0.6.11` public artifacts and their
-checksums. The next functional release should be built natively from this
-repository with a new version.
+Release `0.6.12` adds FactoryTalk Windows-native runtime metrics and an opt-in,
+localhost-only Diagnostics Counter Monitor snapshot collector. Counter Monitor
+execution remains disabled by default.
 
 ## Product Contract
 
@@ -74,20 +74,15 @@ available, run PHP lint and both overlay fixture runners.
 
 ## Current Validation Limitation
 
-The source migration workstation currently has a .NET runtime but no .NET SDK,
-so C# compilation, console tests, and WiX MSI rebuilding require an SDK-enabled
-environment. Overlay packaging, shell syntax, PowerShell parsing, tar listing,
-checksum validation, and source safety scans remain locally available.
-
-The GitHub repository-name swap is complete, the canonical `origin` points to
-`wildbillwilly-a51/librenms-windows-agent`, and the verified local commits are
-published. The remaining local directory rename requires releasing the active
-Codex workspace's Windows file handle.
+The workstation has the required .NET SDK and successfully builds the service,
+portable tests, WiX MSI, and overlay package. The test executable uses supported
+major-version runtime roll-forward because .NET 8 is not installed locally.
+PHP is not installed in Windows or WSL, so overlay PHP lint and fixture runners
+must be run on a PHP-capable environment before or during overlay deployment.
 
 ## Next Recommended Action
 
-Close or switch away from the active Codex workspace, rename the local
-`librenms-windows-agent-installer` directory to `librenms-windows-agent`, and
-reopen the project from that path. Then install or use an approved .NET SDK
-environment, run the migrated agent tests and native MSI build, and begin the
-next universal collector or overlay work directly in this repository.
+Install the 0.6.12 overlay on the LibreNMS management node and every applicable
+poller, then upgrade a non-production FactoryTalk host to the 0.6.12 MSI. Verify
+Windows-native runtime sections first. Enable `nativeCountersMode=local` only
+for the approved pilot and observe at least two fifteen-minute snapshot cycles.

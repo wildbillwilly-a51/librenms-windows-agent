@@ -71,7 +71,7 @@ iwr -UseBasicParsing https://raw.githubusercontent.com/wildbillwilly-a51/librenm
 Direct MSI link:
 
 ```text
-https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/artifacts/librenms-windows-agent-0.6.11.msi
+https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/artifacts/librenms-windows-agent-0.6.12.msi
 ```
 
 The default Windows install is normally enough. It installs the
@@ -202,7 +202,7 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Install a specific overlay version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.11
+curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.12
 ```
 
 Preview without changing the node:
@@ -216,19 +216,19 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Interactive install after downloading the MSI:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.11.msi
+msiexec /i librenms-windows-agent-0.6.12.msi
 ```
 
 Silent install after downloading the MSI:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.11.msi /qn
+msiexec /i librenms-windows-agent-0.6.12.msi /qn
 ```
 
 Silent install with explicit MSI properties:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.11.msi /qn LISTEN_ADDRESS=0.0.0.0 LISTEN_PORT=6556 ADD_FIREWALL_RULE=1 START_SERVICE=1
+msiexec /i librenms-windows-agent-0.6.12.msi /qn LISTEN_ADDRESS=0.0.0.0 LISTEN_PORT=6556 ADD_FIREWALL_RULE=1 START_SERVICE=1
 ```
 
 Supported MSI properties:
@@ -243,7 +243,7 @@ Supported MSI properties:
 Silent uninstall:
 
 ```powershell
-msiexec /x librenms-windows-agent-0.6.11.msi /qn
+msiexec /x librenms-windows-agent-0.6.12.msi /qn
 ```
 
 ### Collector Expectations
@@ -259,6 +259,31 @@ Backup health is expectation-driven:
 - `agentless_vcenter`: backup is expected through vCenter or the backup
   platform; the Windows guest does not claim job success or failure.
 - `none`: no local backup expectation.
+
+FactoryTalk runtime visibility uses bounded local Windows process performance
+counters and is enabled by default when FactoryTalk is detected. Native
+FactoryTalk Diagnostics Counter Monitor snapshots are implemented as an
+explicit local opt-in and remain disabled on new and upgraded agents unless the
+configuration sets:
+
+```json
+"factoryTalk": {
+  "mode": "auto",
+  "includeRuntimeMetrics": true,
+  "nativeCountersMode": "local",
+  "nativeCounterIntervalSeconds": 900,
+  "nativeCounterTimeoutSeconds": 30,
+  "nativeCounterExecutablePath": ""
+}
+```
+
+The native snapshot collector runs only against `localhost`, accepts only a
+trusted Rockwell-signed `FTCounterMonitor.exe`, does not interrupt an existing
+Counter Monitor instance, and never returns or retains raw snapshot XML. It
+emits only allowlisted aggregate Linx connection, backplane, transaction, and
+Live Data client counters. These metrics are informational and non-alerting by
+default. The interval is clamped to at least 300 seconds and the timeout to
+5-60 seconds.
 
 Change collector expectations in:
 

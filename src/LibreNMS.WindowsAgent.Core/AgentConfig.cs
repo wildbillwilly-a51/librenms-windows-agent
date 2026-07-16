@@ -184,7 +184,12 @@ namespace LibreNMS.WindowsAgent.Core
         public bool IncludeProducts { get; set; } = true;
         public bool IncludeServices { get; set; } = true;
         public bool IncludeProcesses { get; set; } = true;
+        public bool IncludeRuntimeMetrics { get; set; } = true;
         public bool IncludePorts { get; set; } = true;
+        public string NativeCountersMode { get; set; } = "disabled";
+        public int NativeCounterIntervalSeconds { get; set; } = 900;
+        public int NativeCounterTimeoutSeconds { get; set; } = 30;
+        public string NativeCounterExecutablePath { get; set; } = string.Empty;
         public List<int> Ports { get; set; } = new List<int> { 27000, 27001, 27002, 27003, 27004, 27005, 27006, 27007, 27008, 27009, 22350, 4244, 4245, 9111, 44818 };
     }
 

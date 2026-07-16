@@ -1,5 +1,28 @@
 # Work Log
 
+## 2026-07-16
+
+- Implemented FactoryTalk Windows-native runtime metrics and a safe opt-in
+  FactoryTalk Diagnostics Counter Monitor snapshot path. The snapshot runner is
+  localhost-only, verifies Rockwell Authenticode trust, skips concurrent/manual
+  instances, bounds runtime and XML size, parses an explicit counter allowlist,
+  caches sanitized last-good results, and removes temporary XML.
+- Extended the overlay with additive FactoryTalk runtime/native protocol
+  parsing, five new RRD families, conditional graphs, and runtime/native detail
+  views. The established FactoryTalk health RRD and alert behavior are
+  unchanged.
+- Added portable parser security/allowlist tests and a fabricated overlay
+  fixture. .NET tests and the .NET Framework service build passed using the
+  installed SDK with supported runtime roll-forward; PHP fixture/lint execution
+  was unavailable on this workstation and remains a release-validation item.
+- Authenticode interop was validated against a trusted embedded-signature
+  control, and the Rockwell signer allowlist correctly rejected the trusted
+  non-Rockwell control.
+- Built release 0.6.12. Overlay SHA256:
+  `1e65f17d76750e0690afef82a806d33670ae60423648dec27209c2a11f899b8d`.
+  MSI SHA256:
+  `925456f75a8d56c0eeb73af3fc610de4f4379f50a80cb3443e0933c8d8f40582`.
+
 ## 2026-07-15
 
 - Audited the canonical and legacy repositories before consolidation. All 55

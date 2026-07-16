@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-16
+
+- Added bounded FactoryTalk Windows-native process runtime metrics and new
+  LibreNMS runtime graphs without changing the existing FactoryTalk health RRD.
+- Added opt-in, localhost-only FactoryTalk Diagnostics Counter Monitor
+  snapshots with Rockwell signature validation, concurrency protection,
+  independent throttling, secure allowlist parsing, last-good caching, and raw
+  XML cleanup. Native snapshots remain disabled and non-alerting by default.
+- Added new FactoryTalk Linx connection, backplane, transaction, and Live Data
+  protocol sections, RRD families, application details, and sanitized fixtures.
+- Promoted generic overlay and Windows MSI release 0.6.12 with updated public
+  installers and checksums.
+
 ## 2026-07-15
 
 - Renamed the canonical product repository from

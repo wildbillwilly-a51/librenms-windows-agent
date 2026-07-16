@@ -13,9 +13,19 @@ using Microsoft.Win32;
 
 namespace LibreNMS.WindowsAgent.Service.Collectors
 {
-    internal sealed class FactoryTalkCollector : CollectorBase
+    internal sealed class FactoryTalkCollector : CollectorBase, ICollectorTimeoutOverride
     {
         public override string Name => "factorytalk";
+
+        public TimeSpan GetTimeout(AgentContext context, TimeSpan defaultTimeout)
+        {
+            var config = context.Config.Collectors.FactoryTalk ?? new FactoryTalkConfig();
+            if (!string.Equals(config.NativeCountersMode, "local", StringComparison.OrdinalIgnoreCase))
+            {
+                return defaultTimeout;
+            }
+            return TimeSpan.FromSeconds(Math.Max(defaultTimeout.TotalSeconds, Math.Min(60, Math.Max(5, config.NativeCounterTimeoutSeconds)) + 5));
+        }
 
         public override Task<IReadOnlyList<AgentSection>> CollectAsync(AgentContext context, CancellationToken cancellationToken)
         {
@@ -29,15 +39,25 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
             var services = config.IncludeServices
                 ? ServiceInventoryReader.Read(cancellationToken).Where(IsFactoryTalkService).OrderBy(service => service.Name, StringComparer.OrdinalIgnoreCase).ToList()
                 : new List<ServiceInventoryRecord>();
-            var processes = config.IncludeProcesses ? ReadProcesses(cancellationToken) : new List<ProcessRow>();
-            var detected = products.Count > 0 || services.Count > 0 || processes.Count > 0;
+            var discoveredProcesses = config.IncludeProcesses || config.IncludeRuntimeMetrics ? ReadProcesses(cancellationToken) : new List<ProcessRow>();
+            var processes = config.IncludeProcesses ? discoveredProcesses : new List<ProcessRow>();
+            var detected = products.Count > 0 || services.Count > 0 || discoveredProcesses.Count > 0;
 
             if (!detected && IsAuto(config.Mode))
             {
-                return Task.FromResult(NotDetectedSections());
+                return Task.FromResult(NotDetectedSections(config.NativeCountersMode));
             }
 
             var ports = config.IncludePorts ? ReadPorts(config.Ports) : new List<PortRow>();
+            var runtime = config.IncludeRuntimeMetrics
+                ? FactoryTalkProcessMetricsReader.Read(discoveredProcesses.Select(process => new FactoryTalkProcessIdentity
+                {
+                    Name = process.Name,
+                    ProcessId = process.ProcessId,
+                    Role = process.Role,
+                }), cancellationToken)
+                : new FactoryTalkRuntimeMetrics { State = "disabled" };
+            var native = FactoryTalkCounterSnapshotRunner.Collect(config, context.NowUtc, cancellationToken);
             var servicesNotRunning = services.Count(IsServiceNotRunning);
             var coreServicesNotRunning = services.Count(IsCoreServiceIssue);
             var portsListening = ports.Count(port => port.Listening);
@@ -63,7 +83,14 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
                 new AgentSection("windows_agent_factorytalk_products", products.Select(ProductLine)),
                 new AgentSection("windows_agent_factorytalk_services", services.Select(ServiceLine)),
                 new AgentSection("windows_agent_factorytalk_processes", processes.Select(ProcessLine)),
-                new AgentSection("windows_agent_factorytalk_ports", ports.Select(PortLine)));
+                new AgentSection("windows_agent_factorytalk_ports", ports.Select(PortLine)),
+                RuntimeSummarySection(runtime),
+                new AgentSection("windows_agent_factorytalk_runtime_processes", runtime.Processes.Select(RuntimeProcessLine)),
+                NativeSummarySection(native),
+                NativeConnectionsSection(native),
+                NativeBackplaneSection(native),
+                NativeTransactionsSection(native),
+                NativeLiveDataSection(native));
         }
 
         private static IReadOnlyList<AgentSection> DisabledSections()
@@ -74,11 +101,18 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
                 Empty("windows_agent_factorytalk_products"),
                 Empty("windows_agent_factorytalk_services"),
                 Empty("windows_agent_factorytalk_processes"),
-                Empty("windows_agent_factorytalk_ports")
+                Empty("windows_agent_factorytalk_ports"),
+                RuntimeStateSection("disabled"),
+                Empty("windows_agent_factorytalk_runtime_processes"),
+                NativeStateSection("disabled", "disabled"),
+                Empty("windows_agent_factorytalk_linx_connections"),
+                Empty("windows_agent_factorytalk_linx_backplane"),
+                Empty("windows_agent_factorytalk_linx_transactions"),
+                Empty("windows_agent_factorytalk_livedata")
             };
         }
 
-        private static IReadOnlyList<AgentSection> NotDetectedSections()
+        private static IReadOnlyList<AgentSection> NotDetectedSections(string nativeCountersMode)
         {
             return new[]
             {
@@ -86,13 +120,166 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
                 Empty("windows_agent_factorytalk_products"),
                 Empty("windows_agent_factorytalk_services"),
                 Empty("windows_agent_factorytalk_processes"),
-                Empty("windows_agent_factorytalk_ports")
+                Empty("windows_agent_factorytalk_ports"),
+                RuntimeStateSection("not_detected"),
+                Empty("windows_agent_factorytalk_runtime_processes"),
+                NativeStateSection(nativeCountersMode, "not_detected"),
+                Empty("windows_agent_factorytalk_linx_connections"),
+                Empty("windows_agent_factorytalk_linx_backplane"),
+                Empty("windows_agent_factorytalk_linx_transactions"),
+                Empty("windows_agent_factorytalk_livedata")
             };
         }
 
         private static AgentSection Empty(string name)
         {
             return new AgentSection(name, Array.Empty<string>());
+        }
+
+        private static AgentSection RuntimeStateSection(string state)
+        {
+            return new AgentSection("windows_agent_factorytalk_runtime_summary", new[]
+            {
+                string.Join(" ",
+                    "state=" + state,
+                    "processes_total=0",
+                    "cpu_percent=0",
+                    "working_set_bytes=0",
+                    "private_bytes=0",
+                    "handle_count=0",
+                    "thread_count=0",
+                    "io_read_bytes_per_sec=0",
+                    "io_write_bytes_per_sec=0",
+                    "oldest_uptime_seconds=0",
+                    "reason=none")
+            });
+        }
+
+        private static AgentSection RuntimeSummarySection(FactoryTalkRuntimeMetrics runtime)
+        {
+            return new AgentSection("windows_agent_factorytalk_runtime_summary", new[]
+            {
+                string.Join(" ",
+                    "state=" + Kv(runtime.State),
+                    "processes_total=" + runtime.Processes.Count.ToString(CultureInfo.InvariantCulture),
+                    "cpu_percent=" + Math.Round(runtime.CpuPercent, 3).ToString(CultureInfo.InvariantCulture),
+                    "working_set_bytes=" + runtime.WorkingSetBytes.ToString(CultureInfo.InvariantCulture),
+                    "private_bytes=" + runtime.PrivateBytes.ToString(CultureInfo.InvariantCulture),
+                    "handle_count=" + runtime.HandleCount.ToString(CultureInfo.InvariantCulture),
+                    "thread_count=" + runtime.ThreadCount.ToString(CultureInfo.InvariantCulture),
+                    "io_read_bytes_per_sec=" + Math.Round(runtime.IoReadBytesPerSec, 3).ToString(CultureInfo.InvariantCulture),
+                    "io_write_bytes_per_sec=" + Math.Round(runtime.IoWriteBytesPerSec, 3).ToString(CultureInfo.InvariantCulture),
+                    "oldest_uptime_seconds=" + runtime.OldestUptimeSeconds.ToString(CultureInfo.InvariantCulture),
+                    "reason=" + Kv(runtime.Reason))
+            });
+        }
+
+        private static string RuntimeProcessLine(FactoryTalkRuntimeProcessMetric process)
+        {
+            return string.Join(" ",
+                "name=" + Kv(process.Name),
+                "pid=" + process.ProcessId.ToString(CultureInfo.InvariantCulture),
+                "role=" + Kv(process.Role),
+                "cpu_percent=" + Math.Round(process.CpuPercent, 3).ToString(CultureInfo.InvariantCulture),
+                "working_set_bytes=" + process.WorkingSetBytes.ToString(CultureInfo.InvariantCulture),
+                "private_bytes=" + process.PrivateBytes.ToString(CultureInfo.InvariantCulture),
+                "handle_count=" + process.HandleCount.ToString(CultureInfo.InvariantCulture),
+                "thread_count=" + process.ThreadCount.ToString(CultureInfo.InvariantCulture),
+                "io_read_bytes_per_sec=" + Math.Round(process.IoReadBytesPerSec, 3).ToString(CultureInfo.InvariantCulture),
+                "io_write_bytes_per_sec=" + Math.Round(process.IoWriteBytesPerSec, 3).ToString(CultureInfo.InvariantCulture),
+                "uptime_seconds=" + process.UptimeSeconds.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static AgentSection NativeStateSection(string mode, string state)
+        {
+            var enabled = string.Equals(mode, "local", StringComparison.OrdinalIgnoreCase) ? "1" : "0";
+            return new AgentSection("windows_agent_factorytalk_native_summary", new[]
+            {
+                string.Join(" ",
+                    "mode=" + mode,
+                    "state=" + state,
+                    "enabled=" + enabled,
+                    "available=0",
+                    "signature_valid=0",
+                    "version=\"\"",
+                    "snapshot_age_seconds=-1",
+                    "snapshot_duration_ms=0",
+                    "last_error=none")
+            });
+        }
+
+        private static AgentSection NativeSummarySection(FactoryTalkNativeCounterResult native)
+        {
+            return new AgentSection("windows_agent_factorytalk_native_summary", new[]
+            {
+                string.Join(" ",
+                    "mode=" + Kv(native.Mode),
+                    "state=" + Kv(native.State),
+                    "enabled=" + (string.Equals(native.Mode, "local", StringComparison.OrdinalIgnoreCase) ? "1" : "0"),
+                    "available=" + (native.Available ? "1" : "0"),
+                    "signature_valid=" + (native.SignatureValid ? "1" : "0"),
+                    "version=" + Kv(native.Version),
+                    "snapshot_age_seconds=" + native.SnapshotAgeSeconds.ToString(CultureInfo.InvariantCulture),
+                    "snapshot_duration_ms=" + native.SnapshotDurationMs.ToString(CultureInfo.InvariantCulture),
+                    "last_error=" + Kv(native.LastError))
+            });
+        }
+
+        private static AgentSection NativeConnectionsSection(FactoryTalkNativeCounterResult native)
+        {
+            var rows = native.Snapshot?.Connections ?? Array.Empty<FactoryTalkLinxConnectionCounter>();
+            return new AgentSection("windows_agent_factorytalk_linx_connections", rows
+                .OrderBy(row => row.Instance)
+                .ThenBy(row => row.Driver, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(row => row.Direction, StringComparer.OrdinalIgnoreCase)
+                .Select(row => string.Join(" ",
+                    "instance=" + row.Instance.ToString(CultureInfo.InvariantCulture),
+                    "driver=" + Kv(row.Driver),
+                    "direction=" + Kv(row.Direction),
+                    "active=" + row.Active.ToString(CultureInfo.InvariantCulture),
+                    "accepted=" + row.Accepted.ToString(CultureInfo.InvariantCulture),
+                    "attempted=" + row.Attempted.ToString(CultureInfo.InvariantCulture),
+                    "closed=" + row.Closed.ToString(CultureInfo.InvariantCulture))));
+        }
+
+        private static AgentSection NativeBackplaneSection(FactoryTalkNativeCounterResult native)
+        {
+            var rows = native.Snapshot?.BackplaneSlots ?? Array.Empty<FactoryTalkLinxBackplaneCounter>();
+            return new AgentSection("windows_agent_factorytalk_linx_backplane", rows
+                .Where(row => row.PacketsReceived > 0 || row.PacketsSent > 0 || row.SendFailures > 0)
+                .OrderBy(row => row.Instance)
+                .ThenBy(row => row.Slot)
+                .Select(row => string.Join(" ",
+                    "instance=" + row.Instance.ToString(CultureInfo.InvariantCulture),
+                    "slot=" + row.Slot.ToString(CultureInfo.InvariantCulture),
+                    "packets_received=" + row.PacketsReceived.ToString(CultureInfo.InvariantCulture),
+                    "packets_sent=" + row.PacketsSent.ToString(CultureInfo.InvariantCulture),
+                    "send_failures=" + row.SendFailures.ToString(CultureInfo.InvariantCulture))));
+        }
+
+        private static AgentSection NativeTransactionsSection(FactoryTalkNativeCounterResult native)
+        {
+            var rows = native.Snapshot?.Transactions ?? Array.Empty<FactoryTalkLinxTransactionCounter>();
+            return new AgentSection("windows_agent_factorytalk_linx_transactions", rows
+                .OrderBy(row => row.Instance)
+                .Select(row => string.Join(" ",
+                    "instance=" + row.Instance.ToString(CultureInfo.InvariantCulture),
+                    "in_use=" + row.InUse.ToString(CultureInfo.InvariantCulture),
+                    "pool_size=" + row.PoolSize.ToString(CultureInfo.InvariantCulture))));
+        }
+
+        private static AgentSection NativeLiveDataSection(FactoryTalkNativeCounterResult native)
+        {
+            if (native.Snapshot == null)
+            {
+                return Empty("windows_agent_factorytalk_livedata");
+            }
+            return new AgentSection("windows_agent_factorytalk_livedata", new[]
+            {
+                string.Join(" ",
+                    "clients=" + native.Snapshot.LiveDataClients.ToString(CultureInfo.InvariantCulture),
+                    "sources=" + native.Snapshot.LiveDataSources.ToString(CultureInfo.InvariantCulture))
+            });
         }
 
         private static AgentSection SummarySection(
