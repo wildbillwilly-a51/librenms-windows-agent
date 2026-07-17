@@ -2,6 +2,10 @@
 
 ## 2026-07-16
 
+- Replaced the 0.6.13 agent PowerShell custom-action pipeline with native MSI
+  configuration installation, service start, and WiX firewall tables. Existing
+  configuration is preserved, the complete FactoryTalk defaults are installed
+  directly, and listener binding failures now surface during service startup.
 - Corrected the repaired 0.6.13 MSI configuration command so quoted directory
   properties cannot consume later PowerShell arguments. The installed script
   now derives its own install path and reads the MSI data path from the registry.
@@ -11,7 +15,8 @@
   authoritative installation success check.
 - Promoted generic overlay and Windows MSI release 0.6.13. Normal MSI installs
   and upgrades now enable the complete bounded FactoryTalk collection set,
-  including localhost Counter Monitor snapshots, with an explicit MSI opt-out.
+  including localhost Counter Monitor snapshots, with an installer-wrapper and
+  configuration-file opt-out.
 - Migrated the project-maintenance workflow from version 2 to version 6 with
   adaptive execution, proportional durable memory, and audited Git history.
 - Added bounded FactoryTalk Windows-native process runtime metrics and new

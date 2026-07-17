@@ -82,9 +82,9 @@ feature set, including localhost Counter Monitor snapshots every 15 minutes.
 The repaired 0.6.13 package can replace an earlier 0.6.13 build in place. Major
 upgrades remove the prior package inside the MSI rollback boundary, and setup
 reports success only after the installed Windows service reaches `Running`.
-The configuration action derives its install and data directories internally,
-avoiding Windows command-line corruption from quoted MSI directory properties
-that end in a backslash.
+The MSI has no agent PowerShell custom actions. Windows Installer installs the
+default configuration, preserves an existing `agent.json`, starts the service,
+and creates program-scoped domain/private firewall rules for TCP 6556.
 
 `0.0.0.0` is the local bind address on the Windows host. It is not the LibreNMS
 server or poller IP.
@@ -219,7 +219,7 @@ Preview without changing the node:
 curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --dry-run
 ```
 
-### Windows Agent MSI Options
+### Windows Agent Installation
 
 Interactive install after downloading the MSI:
 
@@ -233,23 +233,18 @@ Silent install after downloading the MSI:
 msiexec /i librenms-windows-agent-0.6.13.msi /qn
 ```
 
-Silent install with explicit MSI properties:
+The direct MSI intentionally uses one reliable default path:
 
-```powershell
-msiexec /i librenms-windows-agent-0.6.13.msi /qn LISTEN_ADDRESS=0.0.0.0 LISTEN_PORT=6556 ADD_FIREWALL_RULE=1 START_SERVICE=1 ENABLE_FACTORYTALK_NATIVE_COUNTERS=1
-```
+- listener `0.0.0.0:6556`
+- existing `agent.json` preserved
+- complete FactoryTalk collection enabled, including local Counter Monitor
+- service installed as automatic and started during installation
+- domain/private inbound TCP 6556 firewall rules installed natively
 
-Supported MSI properties:
-
-- `LISTEN_ADDRESS`, default `0.0.0.0`
-- `LISTEN_PORT`, default `6556`
-- `ADD_FIREWALL_RULE`, default `1`
-- `START_SERVICE`, default `1`
-- `CONFIG_PATH`, optional explicit config path
-- `PRESERVE_CONFIG`, default `1`
-- `ENABLE_FACTORYTALK_NATIVE_COUNTERS`, default `1`; use `0` to disable native
-  Counter Monitor snapshots while retaining Windows-native FactoryTalk runtime
-  metrics
+The one-command `install-agent.ps1` wrapper retains its optional listener,
+configuration, service, firewall, and native-counter parameters. Non-default
+choices are applied after the native MSI succeeds; they are not MSI custom
+actions.
 
 Silent uninstall:
 

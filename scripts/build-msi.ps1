@@ -43,7 +43,6 @@ function Assert-MsiMetadata {
     if ((Get-MsiProperty $MsiPath 'ProductName') -ne 'LibreNMS Windows Agent') { throw 'Unexpected MSI product name.' }
     if ((Get-MsiProperty $MsiPath 'ProductVersion') -ne $ExpectedVersion) { throw 'Unexpected MSI product version.' }
     if ((Get-MsiProperty $MsiPath 'UpgradeCode') -ne $expectedUpgradeCode) { throw 'Unexpected MSI upgrade code.' }
-    if ((Get-MsiProperty $MsiPath 'ENABLE_FACTORYTALK_NATIVE_COUNTERS') -ne '1') { throw 'FactoryTalk native counters are not enabled by default in the MSI.' }
     $productCode = Get-MsiProperty $MsiPath 'ProductCode'
     if (-not $productCode -or $productCode -eq $legacyFixedProductCode) { throw 'MSI ProductCode was not regenerated.' }
 }
@@ -52,7 +51,11 @@ function Get-MsiTableValue {
     param([string]$MsiPath, [string]$Query, [int]$Column = 1)
     $installer = New-Object -ComObject WindowsInstaller.Installer
     $database = $installer.GetType().InvokeMember('OpenDatabase', 'InvokeMethod', $null, $installer, @($MsiPath, 0))
-    $view = $database.GetType().InvokeMember('OpenView', 'InvokeMethod', $null, $database, @($Query))
+    try {
+        $view = $database.GetType().InvokeMember('OpenView', 'InvokeMethod', $null, $database, @($Query))
+    } catch {
+        throw "MSI query failed: $Query. $($_.Exception.Message)"
+    }
     try {
         $view.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $view, $null) | Out-Null
         $record = $view.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $view, $null)
@@ -63,7 +66,7 @@ function Get-MsiTableValue {
     }
 }
 
-function Assert-MsiUpgradeSafety {
+function Assert-MsiInstallBehavior {
     param([string]$MsiPath)
     $sequence = Get-MsiTableValue $MsiPath "SELECT ``Sequence`` FROM ``InstallExecuteSequence`` WHERE ``Action``='RemoveExistingProducts'"
     $initializeSequence = Get-MsiTableValue $MsiPath "SELECT ``Sequence`` FROM ``InstallExecuteSequence`` WHERE ``Action``='InstallInitialize'"
@@ -74,12 +77,26 @@ function Assert-MsiUpgradeSafety {
     if (-not $upgradeAttributes -or (([int]$upgradeAttributes -band 512) -eq 0)) {
         throw 'The repaired package must allow an existing package with the same three-field version to upgrade.'
     }
-    $target = Get-MsiTableValue $MsiPath "SELECT ``Target`` FROM ``CustomAction`` WHERE ``Action``='ConfigureAgent'"
-    if ($target -notmatch 'ENABLE_FACTORYTALK_NATIVE_COUNTERS') { throw 'ConfigureAgent does not receive the FactoryTalk feature property.' }
-    if ($target -match '(?i)(?:^|\s)-(?:i|d)(?:\s|$)') {
-        throw 'ConfigureAgent must derive installer directories instead of receiving quoted directory values that end in a backslash.'
+    $customActionTable = Get-MsiTableValue $MsiPath "SELECT ``Name`` FROM ``_Tables`` WHERE ``Name``='CustomAction'"
+    if ($customActionTable) {
+        $configureAction = Get-MsiTableValue $MsiPath "SELECT ``Action`` FROM ``CustomAction`` WHERE ``Action``='ConfigureAgent'"
+        if ($configureAction) { throw 'The MSI must not use the legacy PowerShell ConfigureAgent custom action.' }
     }
-    if ($target.Length -gt 255) { throw 'ConfigureAgent command exceeds the Windows Installer CustomAction Target limit.' }
+    $configureScript = Get-MsiTableValue $MsiPath "SELECT ``File`` FROM ``File`` WHERE ``File``='ConfigureAgentScript'"
+    if ($configureScript) { throw 'The MSI must not package the legacy PowerShell configuration script.' }
+    $serviceEvents = Get-MsiTableValue $MsiPath "SELECT ``Event`` FROM ``ServiceControl`` WHERE ``Name``='LibreNMSWindowsAgent'"
+    if (-not $serviceEvents -or (([int]$serviceEvents -band 1) -eq 0)) { throw 'Windows Installer is not configured to start the agent service.' }
+    $configAttributes = Get-MsiTableValue $MsiPath "SELECT ``Attributes`` FROM ``Component`` WHERE ``Component``='AgentConfig'"
+    if (-not $configAttributes -or (([int]$configAttributes -band 16) -eq 0) -or (([int]$configAttributes -band 128) -eq 0)) {
+        throw 'The MSI-owned default config must be permanent and never overwrite an existing config.'
+    }
+    $configFile = Get-MsiTableValue $MsiPath "SELECT ``FileName`` FROM ``File`` WHERE ``File``='AgentConfigFile'"
+    if ($configFile -notmatch 'agent\.json$') { throw 'The MSI does not contain the default agent.json file.' }
+    $domainFirewallPort = Get-MsiTableValue $MsiPath "SELECT ``Port`` FROM ``Wix5FirewallException`` WHERE ``Wix5FirewallException``='AgentFirewallDomain'"
+    $privateFirewallPort = Get-MsiTableValue $MsiPath "SELECT ``Port`` FROM ``Wix5FirewallException`` WHERE ``Wix5FirewallException``='AgentFirewallPrivate'"
+    if ($domainFirewallPort -ne '6556' -or $privateFirewallPort -ne '6556') {
+        throw 'The MSI does not contain both native TCP 6556 firewall rules.'
+    }
 }
 
 New-Item -ItemType Directory -Force -Path $workRoot, $payloadDir, $assetsDir, $msiOutputDir, $ArtifactsDir | Out-Null
@@ -96,9 +113,8 @@ try {
     $config = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'samples\agent.json') | ConvertFrom-Json
     $config.listener.allowedClients = @()
     $config.logging.path = '%ProgramData%\LibreNMS\Windows Agent\agent.log'
+    $config.collectors.factoryTalk.nativeCountersMode = 'local'
     [IO.File]::WriteAllText((Join-Path $assetsDir 'agent.template.json'), ($config | ConvertTo-Json -Depth 30), $utf8NoBom)
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'installer\windows\Configure-Agent.ps1') -Destination $assetsDir -Force
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'installer\windows\Remove-FirewallRule.ps1') -Destination $assetsDir -Force
 
     $legacyLabel = ('a' + '51')
     $privateDomainLabel = ('ama' + 'son')
@@ -131,7 +147,7 @@ try {
     $builtMsi = Get-ChildItem -LiteralPath $msiOutputDir -Filter "librenms-windows-agent-$Version.msi" -Recurse -File | Select-Object -First 1
     if (-not $builtMsi) { throw 'Built MSI was not found.' }
     Assert-MsiMetadata -MsiPath $builtMsi.FullName -ExpectedVersion $Version
-    Assert-MsiUpgradeSafety -MsiPath $builtMsi.FullName
+    Assert-MsiInstallBehavior -MsiPath $builtMsi.FullName
     Copy-Item -LiteralPath $builtMsi.FullName -Destination $targetMsi -Force
     Write-Output $targetMsi
 } finally {

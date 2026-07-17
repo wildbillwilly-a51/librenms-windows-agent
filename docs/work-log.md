@@ -2,6 +2,19 @@
 
 ## 2026-07-16
 
+- Removed both agent PowerShell custom actions and their packaged scripts from
+  0.6.13. The MSI now installs a permanent never-overwrite `agent.json`, starts
+  the automatic service through the standard `ServiceControl` table, and uses
+  WiX Firewall extension tables for program-scoped domain/private TCP 6556
+  rules. Listener binding is checked synchronously during service startup.
+- Rebuilt release 0.6.13 in place. Overlay SHA256:
+  `5ce97913b75bc579c6f9f70b0e4f98650d55381b80d4b3e8e0279a68a16a1b65`.
+  MSI SHA256:
+  `f80710d424b963da856396eb1e6643a98563e657b666b08ab88e7f571655bda6`.
+  All portable tests, .NET Framework/WiX builds, native MSI table assertions,
+  decompiled payload/config inspection, extracted collector execution, and a
+  real TCP listener response passed. PHP remained unavailable, so unchanged
+  overlay PHP lint was skipped. No endpoint deployment was performed.
 - Diagnosed the follow-up 0.6.13 failure as Windows native command-line parsing:
   quoted MSI directory values ended in a backslash, which consumed the closing
   quote and corrupted later PowerShell arguments. Private endpoint evidence

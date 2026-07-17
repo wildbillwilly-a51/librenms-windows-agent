@@ -28,7 +28,11 @@ namespace LibreNMS.WindowsAgent.Service
             _logger = new FileAgentLogger(_config.Logging);
             _cts = new CancellationTokenSource();
             var host = AgentHost.Create(_config, _configPath, _logger);
-            _serverTask = Task.Run(() => host.RunAsync(_cts.Token));
+            _serverTask = host.RunAsync(_cts.Token);
+            if (_serverTask.IsCompleted)
+            {
+                _serverTask.GetAwaiter().GetResult();
+            }
             _logger.Info("Service started.");
         }
 

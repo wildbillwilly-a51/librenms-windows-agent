@@ -4,9 +4,9 @@
   release while keeping manual MSI installation straightforward and safe.
 - Current state: The repaired in-place release 0.6.13 enables the complete
   bounded FactoryTalk feature set, supports same-version upgrades, keeps failed
-  upgrades rollback-safe, derives installer paths without unsafe trailing-slash
-  command arguments, and requires the installed service to reach `Running`.
-  `ENABLE_FACTORYTALK_NATIVE_COUNTERS=0` remains the explicit opt-out.
+  upgrades rollback-safe, and no longer uses agent PowerShell custom actions.
+  Windows Installer owns default configuration, service startup, and firewall
+  registration. The installer wrapper retains the native-counter opt-out.
 - Next action: Install the repaired 0.6.13 MSI on an authorized FactoryTalk
   pilot and observe service, listener, polling, and native snapshot state.
 - Blockers: None for local development. No deployment to a Windows endpoint or
@@ -17,9 +17,9 @@
   before endpoint deployment.
 - Branch/commit/sync: `main`; this handoff's containing repair commit is the
   public 0.6.13 synchronization reference.
-- Validation complete: Exact preserved-config normalization under Windows
-  PowerShell 5.1, release build/tests, warning-free MSI build, MSI upgrade-table
-  and custom-action command assertions, package inspection, script parsing, and
+- Validation complete: Release tests/build, MSI upgrade/native-service/config/
+  firewall table assertions, decompiled payload inspection, extracted config
+  validation, collector execution, listener bind/response, script parsing, and
   checksum verification.
 - Validation remaining after containing-commit sync: authorized pilot endpoint
   reinstall and normal post-install observation only.

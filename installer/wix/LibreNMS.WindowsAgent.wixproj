@@ -10,4 +10,7 @@
     <!-- Intentional for in-place republishing of a repaired three-field MSI version. -->
     <SuppressIces>ICE61</SuppressIces>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Firewall.wixext" Version="5.0.2" />
+  </ItemGroup>
 </Project>

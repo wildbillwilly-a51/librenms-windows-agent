@@ -405,7 +405,7 @@ namespace LibreNMS.WindowsAgent.Tests
             AssertTrue(config.Collectors.FactoryTalk.IncludeProcesses, "FactoryTalk process visibility should be included by default");
             AssertTrue(config.Collectors.FactoryTalk.IncludeRuntimeMetrics, "FactoryTalk runtime visibility should be included by default");
             AssertTrue(config.Collectors.FactoryTalk.IncludePorts, "FactoryTalk port visibility should be included by default");
-            AssertEqual("disabled", config.Collectors.FactoryTalk.NativeCountersMode);
+            AssertEqual("local", config.Collectors.FactoryTalk.NativeCountersMode);
             AssertEqual(900, config.Collectors.FactoryTalk.NativeCounterIntervalSeconds);
             AssertEqual(30, config.Collectors.FactoryTalk.NativeCounterTimeoutSeconds);
             AssertTrue(config.Collectors.FactoryTalk.Ports.Contains(27000), "FactoryTalk Activation default port should be watched by default");

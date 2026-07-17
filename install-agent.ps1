@@ -85,7 +85,8 @@ function Get-ServiceExecutablePath {
 function Assert-AgentInstalled {
     param(
         [Parameter(Mandatory = $true)][string]$ExpectedVersion,
-        [Parameter(Mandatory = $true)][string]$ExpectedFactoryTalkNativeCountersMode
+        [Parameter(Mandatory = $true)][string]$ExpectedFactoryTalkNativeCountersMode,
+        [Parameter(Mandatory = $true)][bool]$ExpectedServiceRunning
     )
 
     $expectedExe = Join-Path $env:ProgramFiles 'LibreNMS\Windows Agent\LibreNMS.WindowsAgent.Service.exe'
@@ -115,12 +116,84 @@ function Assert-AgentInstalled {
     if (-not $service) {
         throw 'LibreNMSWindowsAgent service was not found after installation.'
     }
+    $expectedStatus = if ($ExpectedServiceRunning) { 'Running' } else { 'Stopped' }
+    $service.WaitForStatus($expectedStatus, [TimeSpan]::FromSeconds(30))
+    $service.Refresh()
+    if ($ExpectedServiceRunning -and $service.Status -ne 'Running') {
+        throw "LibreNMSWindowsAgent service is $($service.Status), expected Running."
+    }
+    if (-not $ExpectedServiceRunning -and $service.Status -ne 'Stopped') {
+        throw "LibreNMSWindowsAgent service is $($service.Status), expected Stopped."
+    }
 
     [pscustomobject]@{
         ExePath = $candidateExe
         FileVersion = $actualVersion
         ConfigPath = $configPath
         ServiceStatus = $service.Status
+    }
+}
+
+function Set-AgentConfiguration {
+    $target = Join-Path $env:ProgramData 'LibreNMS\Windows Agent\agent.json'
+    $template = Join-Path $env:ProgramFiles 'LibreNMS\Windows Agent\t.json'
+
+    if ($ConfigPath) {
+        if (-not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) {
+            throw "ConfigPath was not found: $ConfigPath"
+        }
+        Copy-Item -LiteralPath $ConfigPath -Destination $target -Force
+    } elseif ($PreserveConfig -eq 0) {
+        Copy-Item -LiteralPath $template -Destination $target -Force
+    }
+
+    $config = Get-Content -LiteralPath $target -Raw | ConvertFrom-Json
+    $config.listener.address = $ListenAddress
+    $config.listener.port = $ListenPort
+    $config.listener.allowedClients = @()
+    $config.logging.path = Join-Path $env:ProgramData 'LibreNMS\Windows Agent\agent.log'
+    if (-not $config.collectors.factoryTalk) {
+        $config.collectors | Add-Member -NotePropertyName factoryTalk -NotePropertyValue ([pscustomobject]@{}) -Force
+    }
+    $nativeMode = if ($EnableFactoryTalkNativeCounters -eq 1) { 'local' } else { 'disabled' }
+    $factoryTalkValues = [ordered]@{
+        mode = 'auto'
+        includeProducts = $true
+        includeServices = $true
+        includeProcesses = $true
+        includeRuntimeMetrics = $true
+        includePorts = $true
+        nativeCountersMode = $nativeMode
+        nativeCounterIntervalSeconds = 900
+        nativeCounterTimeoutSeconds = 30
+    }
+    foreach ($entry in $factoryTalkValues.GetEnumerator()) {
+        $config.collectors.factoryTalk | Add-Member -NotePropertyName $entry.Key -NotePropertyValue $entry.Value -Force
+    }
+    if ($null -eq $config.collectors.factoryTalk.nativeCounterExecutablePath) {
+        $config.collectors.factoryTalk | Add-Member -NotePropertyName nativeCounterExecutablePath -NotePropertyValue '' -Force
+    }
+    $json = $config | ConvertTo-Json -Depth 30
+    $encoding = New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false
+    [IO.File]::WriteAllText($target, $json + [Environment]::NewLine, $encoding)
+}
+
+function Set-AgentFirewall {
+    param([Parameter(Mandatory = $true)][string]$AgentExe)
+
+    $rules = @(
+        @{ Name = 'LibreNMS Windows Agent TCP 6556 (Domain)'; Profile = 'domain' },
+        @{ Name = 'LibreNMS Windows Agent TCP 6556 (Private)'; Profile = 'private' }
+    )
+    foreach ($rule in $rules) {
+        & netsh.exe advfirewall firewall delete rule "name=$($rule.Name)" | Out-Null
+        if ($LASTEXITCODE -notin @(0, 1)) { throw "Failed to remove firewall rule $($rule.Name)." }
+    }
+    if ($AddFirewallRule -eq 1) {
+        foreach ($rule in $rules) {
+            & netsh.exe advfirewall firewall add rule "name=$($rule.Name)" dir=in action=allow protocol=TCP "localport=$ListenPort" "profile=$($rule.Profile)" "program=$AgentExe" enable=yes | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Failed to create firewall rule $($rule.Name)." }
+        }
     }
 }
 
@@ -157,18 +230,8 @@ Uninstall-ExistingAgentPackages
 
 $arguments = @(
     '/i',
-    "`"$msiPath`"",
-    "LISTEN_ADDRESS=$ListenAddress",
-    "LISTEN_PORT=$ListenPort",
-    "ADD_FIREWALL_RULE=$AddFirewallRule",
-    "START_SERVICE=$StartService",
-    "PRESERVE_CONFIG=$PreserveConfig",
-    "ENABLE_FACTORYTALK_NATIVE_COUNTERS=$EnableFactoryTalkNativeCounters"
+    "`"$msiPath`""
 )
-
-if ($ConfigPath) {
-    $arguments += "CONFIG_PATH=$ConfigPath"
-}
 
 if ($Silent) {
     $arguments += '/qn'
@@ -179,8 +242,20 @@ if ($process.ExitCode -ne 0 -and $process.ExitCode -ne 3010) {
     throw "msiexec failed with exit code $($process.ExitCode)."
 }
 
+$expectedExe = Join-Path $env:ProgramFiles 'LibreNMS\Windows Agent\LibreNMS.WindowsAgent.Service.exe'
+Set-AgentConfiguration
+if ($AddFirewallRule -eq 0 -or $ListenPort -ne 6556) {
+    Set-AgentFirewall -AgentExe $expectedExe
+}
+if ($StartService -eq 1) {
+    Restart-Service -Name LibreNMSWindowsAgent -Force -ErrorAction Stop
+}
+if ($StartService -eq 0) {
+    Stop-Service -Name LibreNMSWindowsAgent -Force -ErrorAction Stop
+}
+
 $expectedNativeCountersMode = if ($EnableFactoryTalkNativeCounters -eq 1) { 'local' } else { 'disabled' }
-$installed = Assert-AgentInstalled -ExpectedVersion $Version -ExpectedFactoryTalkNativeCountersMode $expectedNativeCountersMode
+$installed = Assert-AgentInstalled -ExpectedVersion $Version -ExpectedFactoryTalkNativeCountersMode $expectedNativeCountersMode -ExpectedServiceRunning ($StartService -eq 1)
 Write-Output "Installed LibreNMS Windows Agent $Version"
 Write-Output "Executable: $($installed.ExePath)"
 Write-Output "Config: $($installed.ConfigPath)"

@@ -186,7 +186,7 @@ namespace LibreNMS.WindowsAgent.Core
         public bool IncludeProcesses { get; set; } = true;
         public bool IncludeRuntimeMetrics { get; set; } = true;
         public bool IncludePorts { get; set; } = true;
-        public string NativeCountersMode { get; set; } = "disabled";
+        public string NativeCountersMode { get; set; } = "local";
         public int NativeCounterIntervalSeconds { get; set; } = 900;
         public int NativeCounterTimeoutSeconds { get; set; } = 30;
         public string NativeCounterExecutablePath { get; set; } = string.Empty;

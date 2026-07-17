@@ -235,7 +235,7 @@
       "includeProcesses": true,
       "includeRuntimeMetrics": true,
       "includePorts": true,
-      "nativeCountersMode": "disabled",
+      "nativeCountersMode": "local",
       "nativeCounterIntervalSeconds": 900,
       "nativeCounterTimeoutSeconds": 30,
       "nativeCounterExecutablePath": "",

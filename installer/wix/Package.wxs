@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix
+  xmlns="http://wixtoolset.org/schemas/v4/wxs"
+  xmlns:firewall="http://wixtoolset.org/schemas/v4/wxs/firewall">
   <Package
     Name="LibreNMS Windows Agent"
     Manufacturer="LibreNMS Windows Agent"
@@ -13,14 +15,6 @@
       DowngradeErrorMessage="A newer version of LibreNMS Windows Agent is already installed."
       Schedule="afterInstallInitialize" />
     <MediaTemplate EmbedCab="yes" />
-
-    <Property Id="LISTEN_ADDRESS" Value="0.0.0.0" />
-    <Property Id="LISTEN_PORT" Value="6556" />
-    <Property Id="ADD_FIREWALL_RULE" Value="1" />
-    <Property Id="START_SERVICE" Value="1" />
-    <Property Id="PRESERVE_CONFIG" Value="1" />
-    <Property Id="ENABLE_FACTORYTALK_NATIVE_COUNTERS" Value="1" Secure="yes" />
-    <Property Id="CONFIG_PATH" Value="__DEFAULT__" Secure="yes" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLVENDORFOLDER" Name="LibreNMS">
@@ -40,7 +34,24 @@
 
     <ComponentGroup Id="AgentComponents">
       <Component Id="ServiceExecutable" Directory="INSTALLFOLDER" Guid="{2E9EB844-932D-4868-A4BC-4B1F6B731262}">
-        <File Id="ServiceExe" Source="$(var.PayloadDir)\LibreNMS.WindowsAgent.Service.exe" KeyPath="yes" />
+        <File Id="ServiceExe" Source="$(var.PayloadDir)\LibreNMS.WindowsAgent.Service.exe" KeyPath="yes">
+          <firewall:FirewallException
+            Id="AgentFirewallDomain"
+            Name="LibreNMS Windows Agent TCP 6556 (Domain)"
+            Description="Allow LibreNMS pollers to reach the LibreNMS Windows Agent."
+            Port="6556"
+            Protocol="tcp"
+            Profile="domain"
+            Scope="any" />
+          <firewall:FirewallException
+            Id="AgentFirewallPrivate"
+            Name="LibreNMS Windows Agent TCP 6556 (Private)"
+            Description="Allow LibreNMS pollers to reach the LibreNMS Windows Agent."
+            Port="6556"
+            Protocol="tcp"
+            Profile="private"
+            Scope="any" />
+        </File>
         <ServiceInstall
           Id="ServiceInstall"
           Type="ownProcess"
@@ -53,6 +64,7 @@
         <ServiceControl
           Id="ServiceControl"
           Name="LibreNMSWindowsAgent"
+          Start="install"
           Stop="both"
           Remove="uninstall"
           Wait="yes" />
@@ -66,10 +78,17 @@
         <File Id="ServiceExeConfig" Source="$(var.PayloadDir)\LibreNMS.WindowsAgent.Service.exe.config" KeyPath="yes" />
       </Component>
 
-      <Component Id="MsiTools" Directory="INSTALLFOLDER" Guid="{634FBB59-474D-4E24-9141-5E391B90751E}">
-        <File Id="ConfigureAgentScript" Source="$(var.AssetsDir)\Configure-Agent.ps1" Name="c.ps1" />
-        <File Id="RemoveFirewallScript" Source="$(var.AssetsDir)\Remove-FirewallRule.ps1" Name="r.ps1" />
+      <Component Id="MsiTemplate" Directory="INSTALLFOLDER" Guid="{634FBB59-474D-4E24-9141-5E391B90751E}">
         <File Id="AgentConfigTemplate" Source="$(var.AssetsDir)\agent.template.json" Name="t.json" KeyPath="yes" />
+      </Component>
+
+      <Component
+        Id="AgentConfig"
+        Directory="DATADIR"
+        Guid="{74F7C8B5-47AD-4D43-B05F-46B663D4F875}"
+        NeverOverwrite="yes"
+        Permanent="yes">
+        <File Id="AgentConfigFile" Source="$(var.AssetsDir)\agent.template.json" Name="agent.json" KeyPath="yes" />
       </Component>
 
       <Component Id="DataDirectory" Directory="DATADIR" Guid="{3437C77F-960A-49F0-BC57-B5C6B5285978}">
@@ -84,25 +103,5 @@
       </Component>
     </ComponentGroup>
 
-    <CustomAction
-      Id="ConfigureAgent"
-      Directory="INSTALLFOLDER"
-      Execute="deferred"
-      Impersonate="no"
-      Return="check"
-      ExeCommand='powershell.exe -NoP -EP Bypass -F "[INSTALLFOLDER]c.ps1" -a "[LISTEN_ADDRESS]" -p [LISTEN_PORT] -f [ADD_FIREWALL_RULE] -s [START_SERVICE] -c "[CONFIG_PATH]" -k [PRESERVE_CONFIG] -n [ENABLE_FACTORYTALK_NATIVE_COUNTERS]' />
-
-    <CustomAction
-      Id="RemoveFirewallRule"
-      Directory="INSTALLFOLDER"
-      Execute="deferred"
-      Impersonate="no"
-      Return="ignore"
-      ExeCommand='powershell.exe -NoP -EP Bypass -File "[INSTALLFOLDER]r.ps1"' />
-
-    <InstallExecuteSequence>
-      <Custom Action="ConfigureAgent" After="InstallServices" Condition="NOT REMOVE" />
-      <Custom Action="RemoveFirewallRule" Before="RemoveFiles" Condition="REMOVE~=&quot;ALL&quot;" />
-    </InstallExecuteSequence>
   </Package>
 </Wix>
