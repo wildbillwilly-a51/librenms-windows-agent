@@ -47,6 +47,20 @@ $horizon_services = $data['horizon_services'] ?? [];
 $horizon_processes = $data['horizon_processes'] ?? [];
 $horizon_ports = $data['horizon_ports'] ?? [];
 $horizon_certificates = $data['horizon_certificates'] ?? [];
+$horizon_runtime_summary = $data['horizon_runtime_summary'] ?? [];
+$horizon_runtime_processes = $data['horizon_runtime_processes'] ?? [];
+$horizon_api_summary = $data['horizon_api_summary'] ?? [];
+$horizon_api_session_protocols = $data['horizon_api_session_protocols'] ?? [];
+$horizon_pod_summary = $data['horizon_pod_summary'] ?? [];
+$horizon_pod_members = $data['horizon_pod_members'] ?? [];
+$horizon_configuration_replications = $data['horizon_configuration_replications'] ?? [];
+$horizon_directory_summary = $data['horizon_directory_summary'] ?? [];
+$horizon_directory_domains = $data['horizon_directory_domains'] ?? [];
+$horizon_directory_member_status = $data['horizon_directory_member_status'] ?? [];
+$horizon_gateways = $data['horizon_gateways'] ?? [];
+$horizon_pools_summary = $data['horizon_pools_summary'] ?? [];
+$horizon_pools = $data['horizon_pools'] ?? [];
+$horizon_pool_machine_states = $data['horizon_pool_machine_states'] ?? [];
 $factorytalk_summary = $data['factorytalk_summary'] ?? [];
 $factorytalk_products = $data['factorytalk_products'] ?? [];
 $factorytalk_services = $data['factorytalk_services'] ?? [];
@@ -396,6 +410,17 @@ $horizon_detected = (int) ($horizon_summary['detected'] ?? 0) === 1;
 $horizon_client_only = ! $horizon_detected && ((int) ($horizon_summary['client_detected'] ?? 0) === 1 || strtolower((string) ($horizon_summary['state'] ?? '')) === 'client_only');
 $horizon_health_issue_count = (int) ($horizon_summary['health_issues'] ?? 0);
 $horizon_reported_next_action = trim((string) ($horizon_summary['next_action'] ?? ''));
+$horizon_runtime_state = strtolower((string) ($horizon_runtime_summary['state'] ?? 'disabled'));
+$horizon_runtime_available = $horizon_runtime_state === 'ok';
+$horizon_api_state = strtolower((string) ($horizon_api_summary['state'] ?? 'disabled'));
+$horizon_api_enabled = ! in_array($horizon_api_state, ['', 'disabled'], true);
+$horizon_api_available = in_array($horizon_api_state, ['ok', 'partial'], true);
+$horizon_api_health_state = strtolower((string) ($horizon_api_summary['health_state'] ?? $horizon_api_state));
+$horizon_api_issue_count = (int) ($horizon_api_summary['connection_servers_unhealthy'] ?? 0)
+    + (int) ($horizon_api_summary['horizon_domain_links_unhealthy'] ?? 0)
+    + (int) ($horizon_api_summary['gateways_unhealthy'] ?? 0)
+    + (int) ($horizon_pools_summary['pools_warning'] ?? 0)
+    + (int) ($horizon_pools_summary['pools_critical'] ?? 0);
 $horizon_attention = [];
 
 if ($horizon_detected && $horizon_health_issue_count > 0) {
@@ -448,8 +473,15 @@ if ($horizon_detected && $horizon_health_issue_count > 0) {
 }
 
 $horizon_section_state = $section_state($horizon_summary['state'] ?? 'not_detected', $horizon_health_issue_count);
+$horizon_api_is_critical = $horizon_api_available && $horizon_api_health_state === 'critical';
+$horizon_api_is_warning = $horizon_api_available && in_array($horizon_api_health_state, ['warning', 'partial', 'incomplete'], true);
+if ($horizon_api_is_critical) {
+    $horizon_section_state = ['class' => 'danger', 'text' => 'Critical'];
+} elseif ($horizon_api_is_warning && ($horizon_section_state['class'] ?? '') !== 'danger') {
+    $horizon_section_state = ['class' => 'warning', 'text' => 'Warning'];
+}
 $horizon_section_summary = $horizon_detected
-    ? $metric('Health issues', $horizon_health_issue_count) . ' ' . $metric('Services down', $horizon_summary['services_not_running'] ?? '0') . ' ' . $metric('HTTPS', ((int) ($horizon_summary['ports_missing'] ?? 0) === 0 ? 'Listening' : 'Missing')) . ' ' . $metric('Certs expiring', $horizon_summary['certificates_expiring'] ?? '0')
+    ? $metric('Local issues', $horizon_health_issue_count) . ' ' . $metric('Pod', $horizon_api_available ? ucwords((string) ($horizon_pod_summary['state'] ?? 'unknown')) : 'N/A') . ' ' . $metric('Pool issues', $horizon_api_available ? ((int) ($horizon_pools_summary['pools_warning'] ?? 0) + (int) ($horizon_pools_summary['pools_critical'] ?? 0)) : 'N/A') . ' ' . $metric('Ready spares', $horizon_api_available ? ($horizon_pools_summary['spare_ready'] ?? '0') : 'N/A')
     : ($horizon_client_only
         ? $metric('Mode', 'Client only') . ' ' . $metric('Services', $horizon_summary['services_total'] ?? '0') . ' ' . $metric('Processes', $horizon_summary['processes_total'] ?? '0')
         : $metric('Detected', '0'));
@@ -711,7 +743,7 @@ if (! empty($iis_rows)) {
 }
 
 $horizon_details = '';
-if ($horizon_detected || $horizon_client_only) {
+if ($horizon_detected || $horizon_client_only || $horizon_api_enabled) {
     $horizon_status_class = [
         'success' => 'success',
         'warning' => 'warning',
@@ -719,9 +751,9 @@ if ($horizon_detected || $horizon_client_only) {
     ][$horizon_section_state['class'] ?? ''] ?? 'info';
     $horizon_status_text = $horizon_client_only
         ? 'Horizon Client evidence was detected; server health is not evaluated.'
-        : ($horizon_health_issue_count === 0
-            ? 'No Horizon health issues were reported.'
-            : $horizon_health_issue_count . ' Horizon health issue(s) were reported.');
+        : (($horizon_health_issue_count + $horizon_api_issue_count) === 0
+            ? 'No Horizon host, pod, directory, gateway, or clone-pool issues were reported.'
+            : ($horizon_health_issue_count + $horizon_api_issue_count) . ' Horizon issue(s) need review.');
     $horizon_next_action = $horizon_health_issue_count > 0
         ? ($horizon_reported_next_action !== '' ? $horizon_reported_next_action : (string) ($horizon_attention[0]['action'] ?? 'Review Horizon service, listener, and certificate evidence.'))
         : '';
@@ -736,6 +768,10 @@ if ($horizon_detected || $horizon_client_only) {
         ? (string) ($horizon_summary['certificates_expired'] ?? '0') . ' expired'
         : 'Server not detected';
     $horizon_certificate_expiring = $horizon_detected ? (string) ($horizon_summary['certificates_expiring'] ?? '0') : 'N/A';
+    $horizon_api_display = $horizon_api_available ? ($horizon_api_state === 'partial' ? 'Partial' : 'Connected') : ($horizon_api_enabled ? 'Unavailable' : 'Disabled');
+    $horizon_api_detail = $horizon_api_available
+        ? (string) ($horizon_api_summary['sessions_connected'] ?? '0') . ' connected of ' . (string) ($horizon_api_summary['sessions_total'] ?? '0')
+        : ($horizon_api_enabled ? (string) ($horizon_api_summary['reason'] ?? 'unknown') : 'Opt-in integration');
 
     $horizon_details .= '<div class="windows-agent-role-dashboard">';
     $horizon_details .= '<div class="windows-agent-role-status windows-agent-role-status-' . $esc($horizon_status_class) . '">';
@@ -747,12 +783,12 @@ if ($horizon_detected || $horizon_client_only) {
     $horizon_details .= '<span class="text-muted windows-agent-role-collected">Collected ' . $esc($data['last_agent_utc'] ?? 'unknown') . '</span></div>';
 
     $horizon_stats = [
-        ['Services down', $horizon_detected ? (string) ($horizon_summary['services_not_running'] ?? '0') : 'N/A', (string) ($horizon_summary['services_total'] ?? '0') . ' discovered'],
-        ['Processes', $horizon_summary['processes_total'] ?? '0', $horizon_client_only ? 'Client inventory' : 'Server inventory'],
-        ['Required HTTPS', $horizon_required_https, 'TCP 443'],
-        ['Listeners', $horizon_detected ? (string) ($horizon_summary['ports_listening'] ?? '0') : 'N/A', $horizon_listener_detail],
-        ['Certificates', $horizon_certificate_total, $horizon_certificate_detail],
-        ['Expiring', $horizon_certificate_expiring, 'Configured warning window'],
+        ['Local services', $horizon_detected ? (string) ($horizon_summary['services_not_running'] ?? '0') . ' down' : 'N/A', (string) ($horizon_summary['services_total'] ?? '0') . ' discovered'],
+        ['Horizon API', $horizon_api_display, $horizon_api_detail],
+        ['Pod members', $horizon_api_available ? (string) ($horizon_pod_summary['members_total'] ?? '0') : 'N/A', $horizon_api_available ? (string) ($horizon_pod_summary['members_unhealthy'] ?? '0') . ' unhealthy' : 'No API data'],
+        ['Domain access', $horizon_api_available ? (string) ($horizon_directory_summary['member_links_unhealthy'] ?? '0') . ' bad' : 'N/A', 'Horizon broker-to-AD access'],
+        ['Clone pools', $horizon_api_available ? (string) ($horizon_pools_summary['pools_total'] ?? '0') : 'N/A', $horizon_api_available ? (string) ($horizon_pools_summary['pools_warning'] ?? '0') . ' warning; ' . (string) ($horizon_pools_summary['pools_critical'] ?? '0') . ' critical' : 'No API data'],
+        ['Ready spares', $horizon_api_available ? (string) ($horizon_pools_summary['spare_ready'] ?? '0') : 'N/A', $horizon_api_available ? (string) ($horizon_pools_summary['spare_unready'] ?? '0') . ' unused but not ready' : 'No API data'],
     ];
     $horizon_details .= '<div class="row windows-agent-role-stats">';
     foreach ($horizon_stats as [$label, $value, $detail]) {
@@ -770,6 +806,57 @@ if ($horizon_detected || $horizon_client_only) {
         $horizon_details .= '</ul></div>';
     }
 
+    if ($horizon_api_available) {
+        $horizon_api_health = [
+            'ok' => 'success',
+            'warning' => 'warning',
+            'critical' => 'danger',
+        ][$horizon_api_health_state] ?? 'info';
+        $horizon_details .= '<div class="windows-agent-role-status windows-agent-role-status-' . $esc($horizon_api_health) . '">';
+        $horizon_details .= '<span class="label label-' . $esc($horizon_api_health) . '">Read-only API</span> ';
+        $horizon_details .= '<strong>Pod ' . $esc($horizon_pod_summary['pod_name'] ?? $horizon_pod_summary['cluster_name'] ?? 'unknown') . ': ' . $esc($horizon_pod_summary['members_total'] ?? '0') . ' member(s).</strong> ';
+        $horizon_details .= '<span class="text-muted">Horizon configuration replication issues: ' . $esc($horizon_pod_summary['configuration_replications_unhealthy'] ?? '0') . '; Horizon domain-access issues: ' . $esc($horizon_directory_summary['member_links_unhealthy'] ?? '0') . '; clone pools warning/critical: ' . $esc($horizon_pools_summary['pools_warning'] ?? '0') . '/' . $esc($horizon_pools_summary['pools_critical'] ?? '0') . '.</span>';
+        if ((int) ($horizon_api_summary['sessions_truncated'] ?? 0) === 1 || (int) ($horizon_api_summary['machines_truncated'] ?? 0) === 1) {
+            $horizon_details .= ' <span class="label label-warning">Inventory incomplete</span>';
+        }
+        $horizon_details .= '</div>';
+
+        $horizon_pool_details = $table(['Pool', 'Clone type', 'Health', 'Machines', 'In session', 'Ready spares', 'Unready spares', 'Unready %', 'Maintenance', 'Reason'], $issue_first($horizon_pools, static function (array $row): int {
+            return ['critical' => 30, 'warning' => 20, 'incomplete' => 10, 'disabled' => 1, 'ok' => 0][strtolower((string) ($row['health_state'] ?? 'incomplete'))] ?? 10;
+        }, 'name'), static function ($row) use ($esc, $state_label): string {
+            return '<td>' . $esc($row['display_name'] ?? $row['name'] ?? '') . '</td><td>' . $esc($row['source'] ?? '') . '</td><td>' . $state_label($row['health_state'] ?? 'incomplete', ['ok']) . '</td><td>' . $esc($row['machines_total'] ?? '0') . '</td><td>' . $esc($row['machines_with_sessions'] ?? '0') . '</td><td>' . $esc($row['spare_ready'] ?? '0') . '</td><td>' . $esc($row['spare_unready'] ?? '0') . '</td><td>' . $esc($row['spare_unready_percent'] ?? '0') . '%</td><td>' . $esc($row['spare_maintenance'] ?? '0') . '</td><td>' . $esc(str_replace('_', ' ', (string) ($row['health_reason'] ?? ''))) . '</td>';
+        });
+        $horizon_details .= $render_disclosure('windows-agent-horizon-pools', 'Clone pool health', $horizon_pool_details, (string) ($horizon_pools_summary['pools_warning'] ?? '0') . ' warning, ' . (string) ($horizon_pools_summary['pools_critical'] ?? '0') . ' critical; thresholds ' . (string) ($horizon_pools_summary['warning_percent'] ?? '50') . '%/' . (string) ($horizon_pools_summary['critical_percent'] ?? '90') . '%');
+
+        $horizon_pod_details = '<p class="text-muted"><strong>Directory scopes are separate:</strong> configuration replication is Horizon AD LDS between Connection Servers; domain access is each Horizon member\'s connectivity to Microsoft AD. Neither is added to the Windows AD collector.</p>';
+        if (! empty($horizon_pod_members)) {
+            $horizon_pod_details .= '<h4>Pod Members</h4>' . $table(['Member', 'Status', 'Server type', 'API target', 'Enabled', 'Gateway mode', 'Version', 'Connections', 'Replication issues'], $issue_first($horizon_pod_members, static fn (array $row): int => ((int) ($row['configuration_replications_unhealthy'] ?? 0) * 10) + (strtolower((string) ($row['status'] ?? '')) === 'ok' ? 0 : 1), 'name'), static function ($row) use ($esc, $state_label): string {
+                return '<td>' . $esc($row['name'] ?? '') . '</td><td>' . $state_label($row['status'] ?? 'unknown', ['ok', 'up', 'running']) . '</td><td>' . $esc(str_replace('_', ' ', (string) ($row['server_type'] ?? ''))) . '</td><td>' . $esc(((int) ($row['local_api_target'] ?? 0) === 1) ? 'Local' : 'Peer') . '</td><td>' . $esc(((int) ($row['enabled'] ?? 0) === 1) ? 'Yes' : 'No') . '</td><td>' . $esc($row['gateway_mode'] ?? 'none') . '</td><td>' . $esc($row['version'] ?? '') . '</td><td>' . $esc($row['connections'] ?? '0') . '</td><td>' . $esc($row['configuration_replications_unhealthy'] ?? '0') . '</td>';
+            });
+        }
+        if (! empty($horizon_directory_domains)) {
+            $horizon_pod_details .= '<h4>Horizon Domain Access</h4>' . $table(['Domain', 'Type', 'Member links', 'Unhealthy links', 'Active service accounts', 'Service-account issues'], $issue_first($horizon_directory_domains, static fn (array $row): int => (int) ($row['member_links_unhealthy'] ?? 0), 'dns_name'), static function ($row) use ($esc): string {
+                return '<td>' . $esc($row['dns_name'] ?? $row['netbios_name'] ?? '') . '</td><td>' . $esc($row['domain_type'] ?? '') . '</td><td>' . $esc($row['member_links_total'] ?? '0') . '</td><td>' . $esc($row['member_links_unhealthy'] ?? '0') . '</td><td>' . $esc($row['service_accounts_active'] ?? '0') . '</td><td>' . $esc($row['service_accounts_unhealthy'] ?? '0') . '</td>';
+            });
+        }
+        if (! empty($horizon_directory_member_status)) {
+            $horizon_pod_details .= '<h4>Horizon Domain Access by Pod Member</h4>' . $table(['Domain', 'Pod member', 'Access', 'Trust'], $issue_first($horizon_directory_member_status, static fn (array $row): int => strtolower((string) ($row['status'] ?? '')) === 'fully_accessible' ? 0 : 1, 'member'), static function ($row) use ($esc, $state_label): string {
+                return '<td>' . $esc($row['domain'] ?? '') . '</td><td>' . $esc($row['member'] ?? '') . '</td><td>' . $state_label($row['status'] ?? 'unknown', ['fully_accessible', 'accessible', 'ok']) . '</td><td>' . $esc($row['trust_relationship'] ?? '') . '</td>';
+            });
+        }
+        if (! empty($horizon_configuration_replications)) {
+            $horizon_pod_details .= '<h4>Horizon Configuration Replication (AD LDS)</h4>' . $table(['Source', 'Target', 'Status'], $issue_first($horizon_configuration_replications, static fn (array $row): int => strtolower((string) ($row['status'] ?? '')) === 'ok' ? 0 : 1), static function ($row) use ($esc, $state_label): string {
+                return '<td>' . $esc($row['source'] ?? '') . '</td><td>' . $esc($row['target'] ?? '') . '</td><td>' . $state_label($row['status'] ?? 'unknown', ['ok']) . '</td>';
+            });
+        }
+        if (! empty($horizon_gateways)) {
+            $horizon_pod_details .= '<h4>Gateways</h4>' . $table(['Gateway', 'Type', 'Status', 'Version', 'Active connections'], $issue_first($horizon_gateways, static fn (array $row): int => strtolower((string) ($row['status'] ?? '')) === 'ok' ? 0 : 1, 'name'), static function ($row) use ($esc, $state_label): string {
+                return '<td>' . $esc($row['name'] ?? '') . '</td><td>' . $esc($row['type'] ?? '') . '</td><td>' . $state_label($row['status'] ?? 'unknown', ['ok']) . '</td><td>' . $esc($row['version'] ?? '') . '</td><td>' . $esc($row['active_connections'] ?? '0') . '</td>';
+            });
+        }
+        $horizon_details .= $render_disclosure('windows-agent-horizon-pod', 'Pod, directory, and gateway details', $horizon_pod_details, (string) count($horizon_pod_members) . ' members, ' . count($horizon_directory_domains) . ' domains, ' . count($horizon_gateways) . ' gateways');
+    }
+
     $horizon_raw_details = '';
     if ($has_role_details($horizon_summary, $horizon_services)) {
         $horizon_raw_details .= '<h4>Service Inventory</h4>' . $table(['Service', 'Display', 'Role', 'State', 'Start mode', 'Path'], $issue_first($horizon_services, static fn (array $row): int => strtolower((string) ($row['state'] ?? '')) === 'running' ? 0 : 1), static function ($row) use ($esc, $state_label): string {
@@ -777,8 +864,23 @@ if ($horizon_detected || $horizon_client_only) {
         });
     }
     if ($has_role_details($horizon_summary, $horizon_processes)) {
-        $horizon_raw_details .= '<h4>Process Inventory</h4>' . $table(['Process', 'PID', 'Path'], $horizon_processes, static function ($row) use ($esc): string {
-            return '<td>' . $esc($row['name'] ?? '') . '</td><td>' . $esc($row['pid'] ?? '') . '</td><td>' . $esc($row['path'] ?? '') . '</td>';
+        $horizon_raw_details .= '<h4>Process Inventory</h4>' . $table(['Process', 'PID', 'Role', 'Path'], $horizon_processes, static function ($row) use ($esc): string {
+            return '<td>' . $esc($row['name'] ?? '') . '</td><td>' . $esc($row['pid'] ?? '') . '</td><td>' . $esc($row['role'] ?? '') . '</td><td>' . $esc($row['path'] ?? '') . '</td>';
+        });
+    }
+    if (! empty($horizon_runtime_processes)) {
+        $horizon_raw_details .= '<h4>Process Runtime</h4>' . $table(['Process', 'Role', 'CPU', 'Working set', 'Private bytes', 'Handles', 'Threads', 'Read/s', 'Write/s', 'Uptime (s)'], $horizon_runtime_processes, static function ($row) use ($esc, $format_bytes, $format_percent): string {
+            return '<td>' . $esc($row['name'] ?? '') . '</td><td>' . $esc($row['role'] ?? '') . '</td><td>' . $esc($format_percent($row['cpu_percent'] ?? 0)) . '</td><td>' . $esc($format_bytes($row['working_set_bytes'] ?? 0)) . '</td><td>' . $esc($format_bytes($row['private_bytes'] ?? 0)) . '</td><td>' . $esc($row['handle_count'] ?? '0') . '</td><td>' . $esc($row['thread_count'] ?? '0') . '</td><td>' . $esc($format_bytes($row['io_read_bytes_per_sec'] ?? 0)) . '</td><td>' . $esc($format_bytes($row['io_write_bytes_per_sec'] ?? 0)) . '</td><td>' . $esc($row['uptime_seconds'] ?? '0') . '</td>';
+        });
+    }
+    if (! empty($horizon_api_session_protocols)) {
+        $horizon_raw_details .= '<h4>API Session Protocol Aggregates</h4>' . $table(['Protocol', 'Sessions'], $horizon_api_session_protocols, static function ($row) use ($esc): string {
+            return '<td>' . $esc(strtoupper((string) ($row['protocol'] ?? ''))) . '</td><td>' . $esc($row['sessions'] ?? '0') . '</td>';
+        });
+    }
+    if (! empty($horizon_pool_machine_states)) {
+        $horizon_raw_details .= '<h4>Clone Pool Machine-State Aggregates</h4>' . $table(['Pool', 'Clone type', 'Machine state', 'Count'], $horizon_pool_machine_states, static function ($row) use ($esc): string {
+            return '<td>' . $esc($row['pool'] ?? '') . '</td><td>' . $esc($row['source'] ?? '') . '</td><td>' . $esc($row['state'] ?? '') . '</td><td>' . $esc($row['machines'] ?? '0') . '</td>';
         });
     }
     if ($has_role_details($horizon_summary, $horizon_ports)) {
@@ -791,7 +893,7 @@ if ($horizon_detected || $horizon_client_only) {
             return '<td>' . $esc($row['store'] ?? '') . '</td><td>' . $esc($row['subject'] ?? '') . '</td><td>' . $esc($row['issuer'] ?? '') . '</td><td>' . $esc($row['not_after_utc'] ?? '') . '</td><td>' . $esc($row['days_remaining'] ?? '') . '</td><td>' . $state_label($row['expired'] ?? '0', ['0']) . '</td><td>' . $esc($row['has_private_key'] ?? '0') . '</td><td>' . $esc($row['thumbprint'] ?? '') . '</td>';
         });
     }
-    $horizon_details .= $render_disclosure('windows-agent-horizon-raw', 'Inventory and raw diagnostics', $horizon_raw_details, (string) count($horizon_services) . ' services, ' . count($horizon_processes) . ' processes');
+    $horizon_details .= $render_disclosure('windows-agent-horizon-raw', 'Inventory and raw diagnostics', $horizon_raw_details, (string) count($horizon_services) . ' services, ' . count($horizon_processes) . ' processes, ' . count($horizon_runtime_processes) . ' runtime rows, ' . count($horizon_pool_machine_states) . ' pool-state rows');
     $horizon_details .= '</div>';
 }
 
@@ -1130,10 +1232,23 @@ $performance_tab .= $render_section_summary('performance-depth', 'Windows Perfor
 $roles_tab = '';
 $roles_tab .= $render_section_summary('sql', 'SQL Server', $sections['sql']['state'], $sections['sql']['summary'], $sql_details);
 $roles_tab .= $render_section_summary('iis', 'IIS', $sections['iis']['state'], $sections['iis']['summary'], $iis_details);
-$roles_tab .= $render_section_summary('horizon', 'VMware Horizon', $sections['horizon']['state'], $sections['horizon']['summary'], $horizon_details, [
+$horizon_graphs = [
     ['label' => 'Horizon State and Issues', 'key' => 'windows-agent_horizon_state_health'],
     ['label' => 'Horizon Listeners and Certificates', 'key' => 'windows-agent_horizon_edges'],
-], 'Operational view', 'Trends');
+];
+if ($horizon_runtime_available) {
+    $horizon_graphs[] = ['label' => 'Horizon Runtime CPU', 'key' => 'windows-agent_horizon_runtime_cpu'];
+    $horizon_graphs[] = ['label' => 'Horizon Runtime Memory', 'key' => 'windows-agent_horizon_runtime_memory'];
+    $horizon_graphs[] = ['label' => 'Horizon Runtime Processes', 'key' => 'windows-agent_horizon_runtime_processes', 'secondary' => true];
+    $horizon_graphs[] = ['label' => 'Horizon Runtime I/O', 'key' => 'windows-agent_horizon_runtime_io', 'secondary' => true];
+}
+if ($horizon_api_available) {
+    $horizon_graphs[] = ['label' => 'Horizon API Health', 'key' => 'windows-agent_horizon_api_health'];
+    $horizon_graphs[] = ['label' => 'Horizon API Sessions', 'key' => 'windows-agent_horizon_api_sessions'];
+    $horizon_graphs[] = ['label' => 'Horizon Pod Health', 'key' => 'windows-agent_horizon_pod_health'];
+    $horizon_graphs[] = ['label' => 'Horizon Clone Pool Health', 'key' => 'windows-agent_horizon_pool_health'];
+}
+$roles_tab .= $render_section_summary('horizon', 'VMware Horizon', $sections['horizon']['state'], $sections['horizon']['summary'], $horizon_details, $horizon_graphs, 'Operational view', 'Trends');
 $factorytalk_graphs = [
     ['label' => 'FactoryTalk State and Issues', 'key' => 'windows-agent_factorytalk_state_health'],
 ];

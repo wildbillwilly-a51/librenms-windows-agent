@@ -7,14 +7,14 @@ using LibreNMS.WindowsAgent.Core;
 
 namespace LibreNMS.WindowsAgent.Service.Collectors
 {
-    internal sealed class FactoryTalkProcessIdentity
+    internal sealed class RoleProcessIdentity
     {
         public string Name { get; set; } = string.Empty;
         public long ProcessId { get; set; }
         public string Role { get; set; } = string.Empty;
     }
 
-    internal sealed class FactoryTalkRuntimeProcessMetric
+    internal sealed class RoleRuntimeProcessMetric
     {
         public string Name { get; set; } = string.Empty;
         public long ProcessId { get; set; }
@@ -29,11 +29,11 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
         public long UptimeSeconds { get; set; }
     }
 
-    internal sealed class FactoryTalkRuntimeMetrics
+    internal sealed class RoleRuntimeMetrics
     {
         public string State { get; set; } = "unavailable";
         public string Reason { get; set; } = "none";
-        public IList<FactoryTalkRuntimeProcessMetric> Processes { get; } = new List<FactoryTalkRuntimeProcessMetric>();
+        public IList<RoleRuntimeProcessMetric> Processes { get; } = new List<RoleRuntimeProcessMetric>();
         public double CpuPercent => Math.Min(100, Processes.Sum(row => row.CpuPercent));
         public long WorkingSetBytes => Processes.Sum(row => row.WorkingSetBytes);
         public long PrivateBytes => Processes.Sum(row => row.PrivateBytes);
@@ -44,15 +44,15 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
         public long OldestUptimeSeconds => Processes.Count == 0 ? 0 : Processes.Max(row => row.UptimeSeconds);
     }
 
-    internal static class FactoryTalkProcessMetricsReader
+    internal static class RoleProcessMetricsReader
     {
-        public static FactoryTalkRuntimeMetrics Read(IEnumerable<FactoryTalkProcessIdentity> processIdentities, CancellationToken cancellationToken)
+        public static RoleRuntimeMetrics Read(IEnumerable<RoleProcessIdentity> processIdentities, CancellationToken cancellationToken)
         {
-            var identities = (processIdentities ?? Enumerable.Empty<FactoryTalkProcessIdentity>())
+            var identities = (processIdentities ?? Enumerable.Empty<RoleProcessIdentity>())
                 .Where(process => process.ProcessId > 0)
                 .GroupBy(process => process.ProcessId)
                 .ToDictionary(group => group.Key, group => group.First());
-            var result = new FactoryTalkRuntimeMetrics();
+            var result = new RoleRuntimeMetrics();
             if (identities.Count == 0)
             {
                 result.State = "not_detected";
@@ -67,13 +67,14 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
                     using (item)
                     {
                         var processId = (long)Wmi.UInt64Value(item, "IDProcess");
-                        if (!identities.TryGetValue(processId, out var identity))
+                        RoleProcessIdentity identity;
+                        if (!identities.TryGetValue(processId, out identity))
                         {
                             continue;
                         }
 
                         var rawCpu = Wmi.DoubleValue(item, "PercentProcessorTime");
-                        result.Processes.Add(new FactoryTalkRuntimeProcessMetric
+                        result.Processes.Add(new RoleRuntimeProcessMetric
                         {
                             Name = identity.Name,
                             ProcessId = processId,
@@ -85,7 +86,7 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
                             ThreadCount = NonNegative(Wmi.UInt64Value(item, "ThreadCount")),
                             IoReadBytesPerSec = Math.Max(0, Wmi.DoubleValue(item, "IOReadBytesPersec")),
                             IoWriteBytesPerSec = Math.Max(0, Wmi.DoubleValue(item, "IOWriteBytesPersec")),
-                            UptimeSeconds = NonNegative(Wmi.UInt64Value(item, "ElapsedTime")),
+                            UptimeSeconds = NonNegative(Wmi.UInt64Value(item, "ElapsedTime"))
                         });
                     }
                 }

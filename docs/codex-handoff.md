@@ -1,32 +1,34 @@
 # Codex Handoff
 
-- Current objective: Standardize Horizon and FactoryTalk operational
-  presentation and define the next safe Horizon monitoring phases.
-- Current state: The 0.6.13 overlay presents both FactoryTalk and Horizon with
-  the same compact status, metric, issue, raw-diagnostics, and trend hierarchy.
-  Horizon issues are limited to the collector's automatic-service, required TCP
-  443, expired-certificate, and critical-expiry health rules. A public Horizon
-  monitoring design records credential-free runtime telemetry as the next
-  addition and authenticated API/Event Database collection as a separate
-  pod-level phase.
-- Next action: Reapply the updated overlay to the LibreNMS web/poller nodes,
-  observe the Horizon view after a poll, and then implement the additive local
-  Horizon runtime sections and graphs if field data confirms the inventory
-  classification.
-- Blockers: None for local development or publication. No deployment is
-  authorized yet.
-- Important decisions: Keep the repository generic and public-safe; preserve
-  existing RRD schemas; share bounded local process sampling rather than copy
-  product-specific implementations; keep runtime metrics informational; and
-  require a separate least-privilege credential design for Horizon pod APIs.
-  No endpoint or LibreNMS deployment is authorized by local implementation.
-- Branch/commit/sync: `main`; this handoff's containing Horizon usability commit
-  is the public 0.6.13 overlay synchronization reference.
-- Validation complete: full source and packaged PHP lint, nine parser fixtures,
-  nine app-page fixtures, package build/listing, checksum verification, and
-  healthy/critical desktop plus healthy mobile headless rendering pass. Visual
-  inspection confirms six compact metrics, collapsed raw inventory, no yellow
-  alert panels, and no desktop or mobile overflow. FactoryTalk fixtures still
-  pass after the shared style refactor.
-- Validation remaining after containing-commit sync: authorized overlay
-  installation and post-poll browser observation on a Horizon device only.
+- Current objective: Publish release 0.6.14 with Horizon process telemetry and
+  bounded read-only pod, directory, gateway, and clone-pool health.
+- Current state: Release 0.6.14 adds shared process telemetry, an independent
+  `horizon_api` collector, additive Horizon runtime/API/platform sections and
+  RRDs, and compact pod/pool disclosures. The API collects Connection Server
+  health/configuration, Horizon AD LDS replication, Horizon domain access,
+  gateways, sessions, pools, and machines. API credentials use a one-time DPAPI
+  LocalMachine-protected file restricted to System and Administrators. The
+  versioned MSI and overlay are present under `artifacts/` with `SHA256SUMS`.
+- Next action: Test against a non-production
+  Horizon Connection Server only after the user supplies the target API URL,
+  provisions a least-privilege read identity, and explicitly authorizes that
+  live read-only check.
+- Blockers: Live API contract/response validation requires a non-production
+  Horizon endpoint and a dedicated read-only credential. Local work is not
+  blocked. No deployment is authorized.
+- Important decisions: Windows/Microsoft AD, Horizon configuration replication
+  (AD LDS), and Horizon domain access are distinct data models. Connection
+  Servers are reported as peers/local API target rather than invented
+  primary/secondary roles. Only instant/linked-clone pools are scored;
+  `AVAILABLE` is ready, current-session machines are not spares, and truncated
+  inventory cannot be healthy. No endpoint or LibreNMS deployment is authorized.
+- Branch/commit/sync: `main`; the containing commit is the scoped 0.6.14 release
+  commit and should be published through the audited GitHub sync workflow.
+- Validation complete: service builds cleanly; all 59 core tests pass with
+  supported runtime roll-forward; sample configuration validates; Horizon
+  fixture JSON parses; and the pool evaluator covers 50% warning, 90% critical,
+  no-ready-spare critical, and incomplete inventory. Release MSI/overlay builds,
+  installer syntax, checksums, package contents, and public-safety scans pass.
+- Validation remaining: PHP is unavailable locally, so PHP lint, parser/app-page
+  fixture execution, and rendered UI review remain. Live API validation remains
+  a separately authorized follow-up.

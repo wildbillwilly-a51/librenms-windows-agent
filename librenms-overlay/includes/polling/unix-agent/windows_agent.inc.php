@@ -68,6 +68,20 @@ $horizon_services_raw = $agent_data['windows_agent_horizon_services'] ?? '';
 $horizon_processes_raw = $agent_data['windows_agent_horizon_processes'] ?? '';
 $horizon_ports_raw = $agent_data['windows_agent_horizon_ports'] ?? '';
 $horizon_certificates_raw = $agent_data['windows_agent_horizon_certificates'] ?? '';
+$horizon_runtime_summary_raw = $agent_data['windows_agent_horizon_runtime_summary'] ?? '';
+$horizon_runtime_processes_raw = $agent_data['windows_agent_horizon_runtime_processes'] ?? '';
+$horizon_api_summary_raw = $agent_data['windows_agent_horizon_api_summary'] ?? '';
+$horizon_api_session_protocols_raw = $agent_data['windows_agent_horizon_api_session_protocols'] ?? '';
+$horizon_pod_summary_raw = $agent_data['windows_agent_horizon_pod_summary'] ?? '';
+$horizon_pod_members_raw = $agent_data['windows_agent_horizon_pod_members'] ?? '';
+$horizon_configuration_replications_raw = $agent_data['windows_agent_horizon_configuration_replications'] ?? '';
+$horizon_directory_summary_raw = $agent_data['windows_agent_horizon_directory_summary'] ?? '';
+$horizon_directory_domains_raw = $agent_data['windows_agent_horizon_directory_domains'] ?? '';
+$horizon_directory_member_status_raw = $agent_data['windows_agent_horizon_directory_member_status'] ?? '';
+$horizon_gateways_raw = $agent_data['windows_agent_horizon_gateways'] ?? '';
+$horizon_pools_summary_raw = $agent_data['windows_agent_horizon_pools_summary'] ?? '';
+$horizon_pools_raw = $agent_data['windows_agent_horizon_pools'] ?? '';
+$horizon_pool_machine_states_raw = $agent_data['windows_agent_horizon_pool_machine_states'] ?? '';
 $factorytalk_summary_raw = $agent_data['windows_agent_factorytalk_summary'] ?? '';
 $factorytalk_products_raw = $agent_data['windows_agent_factorytalk_products'] ?? '';
 $factorytalk_services_raw = $agent_data['windows_agent_factorytalk_services'] ?? '';
@@ -398,6 +412,20 @@ $horizon_services = $parse_rows($horizon_services_raw, 'name');
 $horizon_processes = $parse_rows($horizon_processes_raw, 'name');
 $horizon_ports = $parse_rows($horizon_ports_raw, 'port');
 $horizon_certificates = $parse_rows($horizon_certificates_raw, 'thumbprint');
+$horizon_runtime_summary = $parse_windows_agent_kv($horizon_runtime_summary_raw);
+$horizon_runtime_processes = $parse_rows($horizon_runtime_processes_raw, 'name');
+$horizon_api_summary = $parse_windows_agent_kv($horizon_api_summary_raw);
+$horizon_api_session_protocols = $parse_rows($horizon_api_session_protocols_raw, 'protocol');
+$horizon_pod_summary = $parse_windows_agent_kv($horizon_pod_summary_raw);
+$horizon_pod_members = $parse_rows($horizon_pod_members_raw, 'name');
+$horizon_configuration_replications = $parse_rows($horizon_configuration_replications_raw, 'source');
+$horizon_directory_summary = $parse_windows_agent_kv($horizon_directory_summary_raw);
+$horizon_directory_domains = $parse_rows($horizon_directory_domains_raw, 'dns_name');
+$horizon_directory_member_status = $parse_rows($horizon_directory_member_status_raw, 'member');
+$horizon_gateways = $parse_rows($horizon_gateways_raw, 'name');
+$horizon_pools_summary = $parse_windows_agent_kv($horizon_pools_summary_raw);
+$horizon_pools = $parse_rows($horizon_pools_raw, 'name');
+$horizon_pool_machine_states = $parse_rows($horizon_pool_machine_states_raw, 'pool');
 $factorytalk_summary = $parse_windows_agent_kv($factorytalk_summary_raw);
 $factorytalk_products = $parse_rows($factorytalk_products_raw, 'name');
 $factorytalk_services = $parse_rows($factorytalk_services_raw, 'name');
@@ -573,6 +601,40 @@ $fields = [
     'horizon_certificates_expired' => (int) ($horizon_summary['certificates_expired'] ?? 0),
     'horizon_certificates_expiring' => (int) ($horizon_summary['certificates_expiring'] ?? 0),
     'horizon_health_issues' => (int) ($horizon_summary['health_issues'] ?? 0),
+    'horizon_runtime_processes_total' => (int) ($horizon_runtime_summary['processes_total'] ?? 0),
+    'horizon_runtime_cpu_percent' => (float) ($horizon_runtime_summary['cpu_percent'] ?? 0),
+    'horizon_runtime_working_set_bytes' => (int) ($horizon_runtime_summary['working_set_bytes'] ?? 0),
+    'horizon_runtime_private_bytes' => (int) ($horizon_runtime_summary['private_bytes'] ?? 0),
+    'horizon_runtime_handle_count' => (int) ($horizon_runtime_summary['handle_count'] ?? 0),
+    'horizon_runtime_thread_count' => (int) ($horizon_runtime_summary['thread_count'] ?? 0),
+    'horizon_runtime_io_read_bytes_per_sec' => (float) ($horizon_runtime_summary['io_read_bytes_per_sec'] ?? 0),
+    'horizon_runtime_io_write_bytes_per_sec' => (float) ($horizon_runtime_summary['io_write_bytes_per_sec'] ?? 0),
+    'horizon_api_available' => in_array(strtolower((string) ($horizon_api_summary['state'] ?? 'disabled')), ['ok', 'partial'], true) ? 1 : 0,
+    'horizon_api_connection_servers_total' => (int) ($horizon_api_summary['connection_servers_total'] ?? 0),
+    'horizon_api_connection_servers_unhealthy' => (int) ($horizon_api_summary['connection_servers_unhealthy'] ?? 0),
+    'horizon_api_services_unhealthy' => (int) ($horizon_api_summary['services_unhealthy'] ?? 0),
+    'horizon_api_replications_unhealthy' => (int) ($horizon_api_summary['replications_unhealthy'] ?? 0),
+    'horizon_api_certificates_invalid' => (int) ($horizon_api_summary['certificates_invalid'] ?? 0),
+    'horizon_api_sessions_total' => (int) ($horizon_api_summary['sessions_total'] ?? 0),
+    'horizon_api_sessions_connected' => (int) ($horizon_api_summary['sessions_connected'] ?? 0),
+    'horizon_api_sessions_disconnected' => (int) ($horizon_api_summary['sessions_disconnected'] ?? 0),
+    'horizon_api_sessions_other' => (int) ($horizon_api_summary['sessions_other'] ?? 0),
+    'horizon_api_sessions_truncated' => (int) ($horizon_api_summary['sessions_truncated'] ?? 0),
+    'horizon_pod_members_total' => (int) ($horizon_pod_summary['members_total'] ?? 0),
+    'horizon_pod_members_unhealthy' => (int) ($horizon_pod_summary['members_unhealthy'] ?? 0),
+    'horizon_pod_replications_total' => (int) ($horizon_pod_summary['configuration_replications_total'] ?? 0),
+    'horizon_pod_replications_unhealthy' => (int) ($horizon_pod_summary['configuration_replications_unhealthy'] ?? 0),
+    'horizon_directory_links_total' => (int) ($horizon_directory_summary['member_links_total'] ?? 0),
+    'horizon_directory_links_unhealthy' => (int) ($horizon_directory_summary['member_links_unhealthy'] ?? 0),
+    'horizon_gateways_total' => (int) ($horizon_pod_summary['gateways_total'] ?? 0),
+    'horizon_gateways_unhealthy' => (int) ($horizon_pod_summary['gateways_unhealthy'] ?? 0),
+    'horizon_pools_total' => (int) ($horizon_pools_summary['pools_total'] ?? 0),
+    'horizon_pools_warning' => (int) ($horizon_pools_summary['pools_warning'] ?? 0),
+    'horizon_pools_critical' => (int) ($horizon_pools_summary['pools_critical'] ?? 0),
+    'horizon_pools_incomplete' => (int) ($horizon_pools_summary['pools_incomplete'] ?? 0),
+    'horizon_spare_total' => (int) ($horizon_pools_summary['spare_total'] ?? 0),
+    'horizon_spare_ready' => (int) ($horizon_pools_summary['spare_ready'] ?? 0),
+    'horizon_spare_unready' => (int) ($horizon_pools_summary['spare_unready'] ?? 0),
     'factorytalk_detected' => (int) ($factorytalk_summary['detected'] ?? 0),
     'factorytalk_products_total' => (int) ($factorytalk_summary['products_total'] ?? 0),
     'factorytalk_services_total' => (int) ($factorytalk_summary['services_total'] ?? 0),
@@ -769,6 +831,20 @@ $windows_agent_app->data = [
     'horizon_processes' => $horizon_processes,
     'horizon_ports' => $horizon_ports,
     'horizon_certificates' => $horizon_certificates,
+    'horizon_runtime_summary' => $horizon_runtime_summary,
+    'horizon_runtime_processes' => $horizon_runtime_processes,
+    'horizon_api_summary' => $horizon_api_summary,
+    'horizon_api_session_protocols' => $horizon_api_session_protocols,
+    'horizon_pod_summary' => $horizon_pod_summary,
+    'horizon_pod_members' => $horizon_pod_members,
+    'horizon_configuration_replications' => $horizon_configuration_replications,
+    'horizon_directory_summary' => $horizon_directory_summary,
+    'horizon_directory_domains' => $horizon_directory_domains,
+    'horizon_directory_member_status' => $horizon_directory_member_status,
+    'horizon_gateways' => $horizon_gateways,
+    'horizon_pools_summary' => $horizon_pools_summary,
+    'horizon_pools' => $horizon_pools,
+    'horizon_pool_machine_states' => $horizon_pool_machine_states,
     'factorytalk_summary' => $factorytalk_summary,
     'factorytalk_products' => $factorytalk_products,
     'factorytalk_services' => $factorytalk_services,
@@ -1025,6 +1101,98 @@ app('Datastore')->put($device, 'app', [
     'cert_expired' => $fields['horizon_certificates_expired'],
     'cert_expiring' => $fields['horizon_certificates_expiring'],
     'health_issues' => $fields['horizon_health_issues'],
+]);
+
+$horizon_runtime_rrd_def = RrdDefinition::make()
+    ->addDataset('processes', 'GAUGE', 0)
+    ->addDataset('cpu_pct', 'GAUGE', 0, 100)
+    ->addDataset('working_set', 'GAUGE', 0)
+    ->addDataset('private_bytes', 'GAUGE', 0)
+    ->addDataset('handles', 'GAUGE', 0)
+    ->addDataset('threads', 'GAUGE', 0)
+    ->addDataset('io_read_bps', 'GAUGE', 0)
+    ->addDataset('io_write_bps', 'GAUGE', 0);
+
+app('Datastore')->put($device, 'app', [
+    'name' => 'windows-agent-horizon-runtime',
+    'app_id' => $windows_agent_app->app_id,
+    'rrd_name' => ['app', 'windows-agent-horizon-runtime', $windows_agent_app->app_id],
+    'rrd_def' => $horizon_runtime_rrd_def,
+], [
+    'processes' => $fields['horizon_runtime_processes_total'],
+    'cpu_pct' => $fields['horizon_runtime_cpu_percent'],
+    'working_set' => $fields['horizon_runtime_working_set_bytes'],
+    'private_bytes' => $fields['horizon_runtime_private_bytes'],
+    'handles' => $fields['horizon_runtime_handle_count'],
+    'threads' => $fields['horizon_runtime_thread_count'],
+    'io_read_bps' => $fields['horizon_runtime_io_read_bytes_per_sec'],
+    'io_write_bps' => $fields['horizon_runtime_io_write_bytes_per_sec'],
+]);
+
+$horizon_api_rrd_def = RrdDefinition::make()
+    ->addDataset('available', 'GAUGE', 0, 1)
+    ->addDataset('cs_total', 'GAUGE', 0)
+    ->addDataset('cs_unhealthy', 'GAUGE', 0)
+    ->addDataset('services_bad', 'GAUGE', 0)
+    ->addDataset('repl_bad', 'GAUGE', 0)
+    ->addDataset('cert_invalid', 'GAUGE', 0)
+    ->addDataset('sessions', 'GAUGE', 0)
+    ->addDataset('connected', 'GAUGE', 0)
+    ->addDataset('disconnected', 'GAUGE', 0)
+    ->addDataset('other', 'GAUGE', 0)
+    ->addDataset('truncated', 'GAUGE', 0, 1);
+
+app('Datastore')->put($device, 'app', [
+    'name' => 'windows-agent-horizon-api',
+    'app_id' => $windows_agent_app->app_id,
+    'rrd_name' => ['app', 'windows-agent-horizon-api', $windows_agent_app->app_id],
+    'rrd_def' => $horizon_api_rrd_def,
+], [
+    'available' => $fields['horizon_api_available'],
+    'cs_total' => $fields['horizon_api_connection_servers_total'],
+    'cs_unhealthy' => $fields['horizon_api_connection_servers_unhealthy'],
+    'services_bad' => $fields['horizon_api_services_unhealthy'],
+    'repl_bad' => $fields['horizon_api_replications_unhealthy'],
+    'cert_invalid' => $fields['horizon_api_certificates_invalid'],
+    'sessions' => $fields['horizon_api_sessions_total'],
+    'connected' => $fields['horizon_api_sessions_connected'],
+    'disconnected' => $fields['horizon_api_sessions_disconnected'],
+    'other' => $fields['horizon_api_sessions_other'],
+    'truncated' => $fields['horizon_api_sessions_truncated'],
+]);
+
+$horizon_platform_rrd_def = RrdDefinition::make()
+    ->addDataset('members', 'GAUGE', 0)
+    ->addDataset('members_bad', 'GAUGE', 0)
+    ->addDataset('repl_bad', 'GAUGE', 0)
+    ->addDataset('domain_bad', 'GAUGE', 0)
+    ->addDataset('gateways_bad', 'GAUGE', 0)
+    ->addDataset('pools', 'GAUGE', 0)
+    ->addDataset('pools_warn', 'GAUGE', 0)
+    ->addDataset('pools_crit', 'GAUGE', 0)
+    ->addDataset('incomplete', 'GAUGE', 0)
+    ->addDataset('spare_total', 'GAUGE', 0)
+    ->addDataset('spare_ready', 'GAUGE', 0)
+    ->addDataset('spare_unready', 'GAUGE', 0);
+
+app('Datastore')->put($device, 'app', [
+    'name' => 'windows-agent-horizon-platform',
+    'app_id' => $windows_agent_app->app_id,
+    'rrd_name' => ['app', 'windows-agent-horizon-platform', $windows_agent_app->app_id],
+    'rrd_def' => $horizon_platform_rrd_def,
+], [
+    'members' => $fields['horizon_pod_members_total'],
+    'members_bad' => $fields['horizon_pod_members_unhealthy'],
+    'repl_bad' => $fields['horizon_pod_replications_unhealthy'],
+    'domain_bad' => $fields['horizon_directory_links_unhealthy'],
+    'gateways_bad' => $fields['horizon_gateways_unhealthy'],
+    'pools' => $fields['horizon_pools_total'],
+    'pools_warn' => $fields['horizon_pools_warning'],
+    'pools_crit' => $fields['horizon_pools_critical'],
+    'incomplete' => $fields['horizon_pools_incomplete'],
+    'spare_total' => $fields['horizon_spare_total'],
+    'spare_ready' => $fields['horizon_spare_ready'],
+    'spare_unready' => $fields['horizon_spare_unready'],
 ]);
 
 $factorytalk_rrd_def = RrdDefinition::make()

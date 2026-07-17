@@ -1,5 +1,29 @@
 # Work Log
 
+## 2026-07-17
+
+- Split authenticated Horizon REST collection from local Horizon collection so
+  an unavailable API cannot suppress local service/process evidence. Added
+  bounded read-only collection for Connection Server monitor/config data,
+  environment identity, Horizon domain access, gateways, sessions, clone
+  pools, and machines.
+- Kept three directory scopes explicit: Windows/Microsoft AD remains in the
+  Windows AD collector; Connection Server `cs_replications` is labeled Horizon
+  configuration replication (AD LDS); and AD-domain monitor data is labeled
+  Horizon domain access by pod member.
+- Added instant/linked-clone spare-capacity scoring with 50% warning and 90%
+  critical defaults, an unconditional critical state when zero spares are
+  ready, warning for zero unused capacity, and incomplete state when machine or
+  session pagination is unavailable/truncated. Added five focused unit tests.
+- Added compact pool/pod/directory/gateway disclosures and an additive Horizon
+  platform RRD family. Local service build and 59 core tests pass; fixture JSON
+  and sample config validate. PHP lint and rendered UI validation remain
+  unavailable locally. No live deployment was performed.
+- Promoted release 0.6.14, updated both one-command installer defaults and all
+  current-version documentation, and built the native MSI and overlay. Overlay
+  SHA256: `151b8389fada2f833d2374e844af83497c75cb44dd7aeefbe15f70b632af08c8`.
+  MSI SHA256: `e2dc68edd5b0aaa1f21828e8292d37b7412dcb0353dcf11db0f458859d759b89`.
+
 ## 2026-07-16
 
 - Reworked the Horizon app-page presentation without changing the agent
@@ -329,3 +353,15 @@
 ## 2026-07-09
 
 - Promoted overlay package 0.6.11 and Windows MSI from development commit 751f167 with checksums d6d5045ec8c4b717261a11f63abd821a4fd9b54741e2f3bbd6265520c297d50f and 9c70201e5ba89cc84c7c827f8ae44de67c18d783c6d447334df6855cf53192f8. Validation: generated package tar listing, MSI build, checksum update, public agent --once check, and legacy-branding scans passed; PHP lint depends on local PHP availability.
+
+## 2026-07-16
+
+- Began uncommitted Horizon process telemetry and read-only API work. Added a
+  shared bounded process sampler, local Horizon runtime sections, an opt-in
+  HTTPS REST client limited to login plus Connection Server/session GETs,
+  machine-protected credential provisioning, additive LibreNMS RRDs and graphs,
+  and sanitized UI/fixtures. No release artifact, deployment, commit, or push
+  was performed. Service/test builds, 54 core tests, configuration and local
+  section checks, fixture JSON parsing, diff checks, public-safety scan, and
+  temporary overlay/MSI package builds passed. PHP was unavailable, so PHP
+  lint, parser/app-page fixtures, and rendered UI review remain.

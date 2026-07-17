@@ -46,6 +46,11 @@ namespace LibreNMS.WindowsAgent.Tests
                 ("horizon health service critical", HorizonHealthServiceCritical),
                 ("horizon health certificate warning", HorizonHealthCertificateWarning),
                 ("horizon health client only", HorizonHealthClientOnly),
+                ("horizon pool health warning threshold", HorizonPoolHealthWarningThreshold),
+                ("horizon pool health critical threshold", HorizonPoolHealthCriticalThreshold),
+                ("horizon pool health no ready spares", HorizonPoolHealthNoReadySpares),
+                ("horizon pool health no unused capacity", HorizonPoolHealthNoUnusedCapacity),
+                ("horizon pool health incomplete inventory", HorizonPoolHealthIncompleteInventory),
                 ("factorytalk health not detected", FactoryTalkHealthNotDetected),
                 ("factorytalk health ok", FactoryTalkHealthOk),
                 ("factorytalk health core service warning", FactoryTalkHealthCoreServiceWarning),
@@ -375,6 +380,7 @@ namespace LibreNMS.WindowsAgent.Tests
             AssertTrue(config.Collectors.Enabled.Contains("sql_server"), "sql_server should be enabled by default in auto mode");
             AssertTrue(config.Collectors.Enabled.Contains("iis"), "iis should be enabled by default in auto mode");
             AssertTrue(config.Collectors.Enabled.Contains("horizon"), "horizon should be enabled by default in auto mode");
+            AssertTrue(config.Collectors.Enabled.Contains("horizon_api"), "horizon_api should be available as an independent collector");
             AssertTrue(config.Collectors.Enabled.Contains("factorytalk"), "factorytalk should be enabled by default in auto mode");
             AssertTrue(config.Collectors.Enabled.Contains("tls_certificates"), "tls_certificates should be enabled by default in auto mode");
             AssertTrue(config.Collectors.Enabled.Contains("backup_storage"), "backup_storage should be enabled by default in auto mode");
@@ -394,11 +400,23 @@ namespace LibreNMS.WindowsAgent.Tests
             AssertEqual("auto", config.Collectors.Horizon.Mode);
             AssertTrue(config.Collectors.Horizon.IncludeServices, "Horizon service visibility should be included by default");
             AssertTrue(config.Collectors.Horizon.IncludeProcesses, "Horizon process visibility should be included by default");
+            AssertTrue(config.Collectors.Horizon.IncludeRuntimeMetrics, "Horizon runtime metrics should be included by default");
             AssertTrue(config.Collectors.Horizon.IncludePorts, "Horizon port visibility should be included by default");
             AssertTrue(config.Collectors.Horizon.IncludeCertificates, "Horizon certificate visibility should be included by default");
             AssertTrue(config.Collectors.Horizon.Ports.Contains(443), "Horizon HTTPS should be watched by default");
             AssertEqual(30, config.Collectors.Horizon.CertificateWarningDays);
             AssertEqual(7, config.Collectors.Horizon.CertificateCriticalDays);
+            AssertEqual("disabled", config.Collectors.Horizon.Api.Mode);
+            AssertEqual(15, config.Collectors.Horizon.Api.TimeoutSeconds);
+            AssertEqual(500, config.Collectors.Horizon.Api.PageSize);
+            AssertEqual(20, config.Collectors.Horizon.Api.MaxPages);
+            AssertTrue(config.Collectors.Horizon.Api.IncludeConnectionServers, "Horizon API connection server health should be included when API collection is enabled");
+            AssertTrue(config.Collectors.Horizon.Api.IncludeHorizonDomains, "Horizon domain access should be separate and included when API collection is enabled");
+            AssertTrue(config.Collectors.Horizon.Api.IncludeGateways, "Horizon gateways should be included when API collection is enabled");
+            AssertTrue(config.Collectors.Horizon.Api.IncludeSessions, "Horizon API session aggregates should be included when API collection is enabled");
+            AssertTrue(config.Collectors.Horizon.Api.IncludeClonePools, "Horizon clone pool health should be included when API collection is enabled");
+            AssertEqual(50, config.Collectors.Horizon.Api.PoolWarningUnreadyPercent);
+            AssertEqual(90, config.Collectors.Horizon.Api.PoolCriticalUnreadyPercent);
             AssertEqual("auto", config.Collectors.FactoryTalk.Mode);
             AssertTrue(config.Collectors.FactoryTalk.IncludeProducts, "FactoryTalk product visibility should be included by default");
             AssertTrue(config.Collectors.FactoryTalk.IncludeServices, "FactoryTalk service visibility should be included by default");
@@ -504,6 +522,71 @@ namespace LibreNMS.WindowsAgent.Tests
 
             AssertEqual("client_only", result.State);
             AssertEqual(0, result.HealthIssues);
+        }
+
+        private static void HorizonPoolHealthWarningThreshold()
+        {
+            var result = HorizonPoolHealth.Evaluate(new HorizonPoolHealthInput
+            {
+                MachinesTotal = 20,
+                SpareTotal = 10,
+                SpareReady = 5,
+                SpareUnready = 5
+            });
+            AssertEqual("warning", result.State);
+            AssertTrue(result.UnreadyPercent == 50m, "Expected 50 percent unready spares");
+        }
+
+        private static void HorizonPoolHealthCriticalThreshold()
+        {
+            var result = HorizonPoolHealth.Evaluate(new HorizonPoolHealthInput
+            {
+                MachinesTotal = 20,
+                SpareTotal = 10,
+                SpareReady = 1,
+                SpareUnready = 9
+            });
+            AssertEqual("critical", result.State);
+            AssertTrue(result.UnreadyPercent == 90m, "Expected 90 percent unready spares");
+        }
+
+        private static void HorizonPoolHealthNoReadySpares()
+        {
+            var result = HorizonPoolHealth.Evaluate(new HorizonPoolHealthInput
+            {
+                MachinesTotal = 8,
+                SpareTotal = 1,
+                SpareReady = 0,
+                SpareUnready = 1,
+                MinimumSpareSample = 2
+            });
+            AssertEqual("critical", result.State);
+            AssertEqual("no_ready_spares", result.Reason);
+        }
+
+        private static void HorizonPoolHealthIncompleteInventory()
+        {
+            var result = HorizonPoolHealth.Evaluate(new HorizonPoolHealthInput
+            {
+                InventoryComplete = false,
+                MachinesTotal = 100,
+                SpareTotal = 10,
+                SpareReady = 10
+            });
+            AssertEqual("incomplete", result.State);
+        }
+
+        private static void HorizonPoolHealthNoUnusedCapacity()
+        {
+            var result = HorizonPoolHealth.Evaluate(new HorizonPoolHealthInput
+            {
+                MachinesTotal = 40,
+                SpareTotal = 0,
+                SpareReady = 0,
+                SpareUnready = 0
+            });
+            AssertEqual("warning", result.State);
+            AssertEqual("no_unused_capacity", result.Reason);
         }
 
         private static void FactoryTalkHealthNotDetected()

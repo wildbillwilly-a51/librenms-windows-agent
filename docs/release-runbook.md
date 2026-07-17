@@ -44,7 +44,7 @@ This builds:
 - `artifacts/librenms-windows-agent-<version>.msi`
 - `artifacts/librenms-windows-agent-overlay-<version>.tar.gz`
 
-The MSI build validates generic service output, the 22 default collectors,
+The MSI build validates generic service output, the 23 default collectors,
 major-upgrade metadata, and the stable UpgradeCode. The overlay builder creates
 the manifest from native `librenms-overlay/` source, runs PHP lint when
 available, and rejects private or legacy identifiers.

@@ -50,13 +50,13 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
 
             var ports = config.IncludePorts ? ReadPorts(config.Ports) : new List<PortRow>();
             var runtime = config.IncludeRuntimeMetrics
-                ? FactoryTalkProcessMetricsReader.Read(discoveredProcesses.Select(process => new FactoryTalkProcessIdentity
+                ? RoleProcessMetricsReader.Read(discoveredProcesses.Select(process => new RoleProcessIdentity
                 {
                     Name = process.Name,
                     ProcessId = process.ProcessId,
                     Role = process.Role,
                 }), cancellationToken)
-                : new FactoryTalkRuntimeMetrics { State = "disabled" };
+                : new RoleRuntimeMetrics { State = "disabled" };
             var native = FactoryTalkCounterSnapshotRunner.Collect(config, context.NowUtc, cancellationToken);
             var servicesNotRunning = services.Count(IsServiceNotRunning);
             var coreServicesNotRunning = services.Count(IsCoreServiceIssue);
@@ -155,7 +155,7 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
             });
         }
 
-        private static AgentSection RuntimeSummarySection(FactoryTalkRuntimeMetrics runtime)
+        private static AgentSection RuntimeSummarySection(RoleRuntimeMetrics runtime)
         {
             return new AgentSection("windows_agent_factorytalk_runtime_summary", new[]
             {
@@ -174,7 +174,7 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
             });
         }
 
-        private static string RuntimeProcessLine(FactoryTalkRuntimeProcessMetric process)
+        private static string RuntimeProcessLine(RoleRuntimeProcessMetric process)
         {
             return string.Join(" ",
                 "name=" + Kv(process.Name),

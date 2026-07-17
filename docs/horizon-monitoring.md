@@ -14,6 +14,8 @@ evidence and reports:
 - process inventory and executable path;
 - configured local TCP listeners;
 - matching local-machine host certificates and expiration state;
+- bounded per-process CPU, working set, private bytes, handles, threads,
+  read/write throughput, and uptime through the shared role-process sampler;
 - collector-scored health for automatic services, required TCP 443, expired
   certificates, and certificates inside the critical expiration window.
 
@@ -28,9 +30,9 @@ they are not active on a particular server.
 | Source | Realistic data | Authentication | Recommendation |
 | --- | --- | --- | --- |
 | Local Windows inventory | Services, processes, listeners, certificates | None beyond the agent service | Implemented |
-| Local Windows process performance | CPU, memory, handles, threads, I/O, uptime, restart evidence | None beyond the agent service | Next additive collector |
+| Local Windows process performance | CPU, memory, handles, threads, I/O, uptime, restart evidence | None beyond the agent service | Implemented |
 | Local Horizon logs | Bounded warning/error counts, component, last occurrence | Local file read | Add only as sanitized aggregates; do not ship raw logs by default |
-| Horizon Server REST/View API | Connection Servers, sessions, machines, pools, farms, gateways, vCenter, domains, events, and component health | Dedicated Horizon read-only identity/token | Best pod-level integration after credential storage is designed |
+| Horizon Server REST/View API | Connection Servers, sessions, machines, clone pools, gateways, domains, and component health | Dedicated Horizon read-only identity/token | Initial bounded integration implemented; live contract validation pending |
 | Horizon Event Database or Syslog | Failures, user/session lifecycle, administrative changes, and statistical events | Database read identity or configured Syslog | Prefer centralized ingestion rather than querying from every Connection Server |
 | Horizon Cloud/Intelligence | Cloud-connected pod, session, and user-experience metrics | Cloud API/OAuth and subscription | Separate optional integration |
 
@@ -41,25 +43,127 @@ datastores, vCenter instances, domains, machines, and sessions. The event
 database can record system failures, end-user actions, administrator actions,
 and statistical samples, and Horizon can also emit those events as Syslog.
 
-## Recommended Next Collection Phase
+## Development Status
 
-Add credential-free runtime telemetry before adding API authentication:
+Release 0.6.14 implements the first two additive phases without changing the
+existing Horizon RRD schema:
 
-1. Add `windows_agent_horizon_runtime_summary` with state, process count, CPU,
+1. `windows_agent_horizon_runtime_summary` reports state, process count, CPU,
    working set, private bytes, handles, threads, read/write bytes per second,
    oldest uptime, and a bounded reason code.
-2. Add `windows_agent_horizon_runtime_processes` with the same per-process
+2. `windows_agent_horizon_runtime_processes` reports the same per-process
    fields plus PID and classified role.
-3. Add an additive `windows-agent-horizon-runtime` RRD family and CPU, memory,
+3. An additive `windows-agent-horizon-runtime` RRD family supplies CPU, memory,
    process/handle/thread, and I/O graphs. Do not change the existing Horizon
    RRD schema.
-4. Present CPU, memory, and the busiest Horizon processes in the operational
-   view. Keep runtime availability and utilization informational by default.
+4. The operational view presents CPU and memory while complete runtime rows
+   remain collapsed and informational.
+5. A separate, disabled-by-default `horizon_api` collector authenticates at
+   `/rest/login`; local Horizon data is no longer delayed or lost when the API
+   target is unavailable.
+6. Read-only GET requests collect the local pod identity, Connection Server
+   monitor/config data, Horizon domain-access data, gateways, sessions,
+   instant/linked-clone pools, and machine inventory.
+7. Horizon configuration replication (AD LDS) and Horizon broker-to-Microsoft
+   AD access use separate `windows_agent_horizon_*` sections. They never feed
+   the Windows `windows_agent_ad_*` collector or its health score.
+8. Pool health removes machines with a current session from the spare set.
+   Every remaining machine that is not `AVAILABLE` is an unready spare;
+   maintenance machines remain visible and count as unavailable capacity.
+9. Default pool health is warning at 50% unready spares and critical at 90%.
+   Zero ready spares is always critical, and zero unused capacity is warning.
+   Truncated machine/session inventory is `incomplete`, never healthy.
+10. Additive `windows-agent-horizon-api` and
+    `windows-agent-horizon-platform` RRD families supply API/session, pod, and
+    aggregate clone-pool graphs.
 
-The existing FactoryTalk runtime sampler already demonstrates the bounded WMI
-query and additive graph pattern. It should be generalized into a shared role
-process sampler instead of copied into a second product-specific
-implementation.
+The existing FactoryTalk runtime sampler was generalized into a shared role
+process sampler rather than duplicated.
+
+## API Safety and Credential Provisioning
+
+API collection remains `disabled` by default. It requires HTTPS, uses a 5-60
+second total request budget, limits page size to 1,000 and page count to 20,
+and marks session/machine inventory as truncated when the configured bound is
+reached. It is a separate collector with its own timeout, so API unavailability
+does not change or suppress local Horizon host collection.
+
+The password is not stored in `agent.json`. An administrator provisions it
+once on the Windows host with:
+
+```powershell
+& 'C:\Program Files\LibreNMS Windows Agent\LibreNMS.WindowsAgent.Service.exe' --store-horizon-credential
+```
+
+The command writes a Windows DPAPI LocalMachine-protected file whose ACL grants
+access only to Local System and local Administrators. The API can then be
+enabled in `collectors.horizon.api`:
+
+```json
+{
+  "mode": "enabled",
+  "baseUrl": "https://horizon-connection-server.example.test",
+  "credentialFile": "%ProgramData%\\LibreNMS\\Windows Agent\\horizon-api-credential.bin",
+  "timeoutSeconds": 15,
+  "pageSize": 500,
+  "maxPages": 20,
+  "includeConnectionServers": true,
+  "includeHorizonDomains": true,
+  "includeGateways": true,
+  "includeSessions": true,
+  "includeClonePools": true,
+  "poolWarningUnreadyPercent": 50,
+  "poolCriticalUnreadyPercent": 90,
+  "poolMinimumSpareSample": 2
+}
+```
+
+Use a dedicated Horizon identity with the view privileges required for
+Connection Server configuration/monitoring, pool and machine inventory,
+sessions, domains, and gateways. Authentication is the sole POST request. All
+telemetry requests are GET requests; no configuration, session, machine,
+entitlement, or action endpoint is present in the client.
+
+## Directory and Server-Role Semantics
+
+Three directory concepts must remain distinct:
+
+- Windows/Microsoft AD health comes only from the local Windows AD collector.
+- Horizon configuration replication comes from Connection Server
+  `cs_replications` and represents the replicated Horizon configuration
+  directory (AD LDS).
+- Horizon domain access comes from the AD-domain monitor and represents each
+  Connection Server's access/trust relationship to Microsoft AD.
+
+Connection Servers are replicated peers; the supported REST model does not
+expose a durable primary/secondary leader role. The collector therefore emits
+the local API target, enabled state, version, health, and whether tunnel,
+PCoIP, or Blast embedded-gateway paths are configured. UAG/Security Gateway
+records are reported separately by the gateway monitor.
+
+## Clone-Pool Health Semantics
+
+Only `INSTANT_CLONE` and `LINKED_CLONE` pools are scored. The pool denominator
+is the set of machines with no current Horizon session. `AVAILABLE` is the
+only ready state; provisioning, customization, validation, agent-error,
+maintenance, unreachable, disabled, and other states remain visible as state
+counts and are treated as not ready. This intentionally answers whether the
+currently unused capacity can accept a connection now.
+
+Percentage scoring begins at `poolMinimumSpareSample`, but a non-empty spare
+set with zero ready machines is always critical. An enabled pool with no
+unused machines is warning for capacity exhaustion. Alert rules should require
+the state to persist for at least two polls so normal instant-clone replacement
+waves do not page the team from one sample.
+
+## Next Collection Phase
+
+Verify the exact endpoint availability, least-privilege role, pool state mix,
+and thresholds against a non-production pod. Then consider vCenter/event
+database health, image-push/provisioning-task state, expected spare targets,
+farm/RDS health, and bounded recent event counts without messages or identities.
+API-version fallback should be added only when evidence from the target Horizon
+version shows that a selected v3/v2 endpoint is unavailable.
 
 ## Authenticated Pod-Level Phase
 
@@ -97,6 +201,12 @@ configuration mutation endpoints.
 ## Official References
 
 - [Horizon Server API documentation](https://developer.omnissa.com/horizon-apis/horizon-server/)
+- [Connection Server monitor V3](https://developer.broadcom.com/xapis/vmware-horizon-server-api/latest/rest/monitor/v3/connection-servers/get/)
+- [Horizon AD-domain monitor V3](https://developer.broadcom.com/xapis/vmware-horizon-server-api/latest/rest/monitor/v3/ad-domains/get/)
+- [Connection Server configuration V2](https://developer.broadcom.com/xapis/vmware-horizon-server-api/latest/rest/config/v2/connection-servers/get/)
+- [Desktop-pool inventory](https://developer.broadcom.com/xapis/vmware-horizon-server-api/latest/rest/inventory/v1/desktop-pools/get/)
+- [Machine inventory and states](https://developer.broadcom.com/xapis/vmware-horizon-server-api/latest/rest/inventory/v1/machines/get/)
+- [Gateway monitor V3](https://developer.broadcom.com/xapis/vmware-horizon-server-api/latest/rest/monitor/v3/gateways/get/)
 - [Horizon 8 monitoring and event capabilities](https://techzone.omnissa.com/resource/horizon-8-frequently-asked-questions-faqs)
 - [Monitoring Horizon components](https://techzone.omnissa.com/resource/evaluation-guide-horizon-8)
 - [Horizon network ports](https://techzone.omnissa.com/resource/network-ports-horizon-8)

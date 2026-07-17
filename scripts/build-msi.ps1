@@ -139,7 +139,7 @@ try {
     if ($onceText -notmatch '<<<windows_agent>>>' -or $onceText -notmatch '<<<windows_agent_performance>>>') {
         throw 'Windows agent did not emit required generic sections.'
     }
-    if ($onceText -notmatch 'collectors_run=22') { throw 'Windows agent did not run all default collectors.' }
+    if ($onceText -notmatch 'collectors_run=23') { throw 'Windows agent did not run all default collectors.' }
 
     $wixProject = Join-Path $repoRoot 'installer\wix\LibreNMS.WindowsAgent.wixproj'
     & dotnet build $wixProject -c $Configuration -p:ProductVersion=$Version -p:PayloadDir="$payloadDir" -p:AssetsDir="$assetsDir" -p:OutputPath="$msiOutputDir\"

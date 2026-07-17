@@ -71,13 +71,18 @@ listeners, non-core services, runtime/native availability, and cumulative
 counter values remain informational.
 
 The Horizon application view uses the same compact operational pattern. It
-shows collector-confirmed health, the recommended next action, service and
-process counts, required HTTPS state, configured listener coverage, and host
-certificate status before the complete inventory. Only the Horizon collector's
-automatic-service, required TCP 443, expired-certificate, and critical-expiry
-checks are presented as health issues; optional listeners remain
-informational. See [Horizon monitoring design](docs/horizon-monitoring.md) for
-the credential-free runtime and authenticated pod-level collection roadmap.
+shows local host health plus optional read-only pod, directory, gateway,
+session, and instant/linked-clone pool health before the complete inventory.
+Horizon configuration replication (AD LDS) and per-member Horizon domain
+access are kept separate from the Windows/Microsoft AD collector. Clone-pool
+health defaults to warning when at least 50% of unused machines are not ready,
+critical at 90%, and critical whenever no unused machine is ready. Full pod,
+pool, and machine-state counts remain in compact disclosures. The API
+integration is disabled by default and uses a one-time machine-protected
+credential file rather than a password in configuration.
+Release 0.6.14 includes these Horizon additions in the Windows agent and
+LibreNMS overlay. See
+[Horizon monitoring design](docs/horizon-monitoring.md) for scope and setup.
 
 ### 4. Install Or Update The Windows Agent
 
@@ -91,7 +96,7 @@ iwr -UseBasicParsing https://raw.githubusercontent.com/wildbillwilly-a51/librenm
 Direct MSI link:
 
 ```text
-https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/artifacts/librenms-windows-agent-0.6.13.msi
+https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/artifacts/librenms-windows-agent-0.6.14.msi
 ```
 
 The default Windows install is normally enough. It installs the
@@ -99,8 +104,7 @@ The default Windows install is normally enough. It installs the
 firewall rule, starts the service, and preserves existing config on upgrade.
 On FactoryTalk hosts, the MSI also enables the complete bounded FactoryTalk
 feature set, including localhost Counter Monitor snapshots every 15 minutes.
-The repaired 0.6.13 package can replace an earlier 0.6.13 build in place. Major
-upgrades remove the prior package inside the MSI rollback boundary, and setup
+Release 0.6.14 upgrades prior packages inside the MSI rollback boundary, and setup
 reports success only after the installed Windows service reaches `Running`.
 The MSI has no agent PowerShell custom actions. Windows Installer installs the
 default configuration, preserves an existing `agent.json`, starts the service,
@@ -230,7 +234,7 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Install a specific overlay version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.13
+curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.14
 ```
 
 Preview without changing the node:
@@ -244,13 +248,13 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Interactive install after downloading the MSI:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.13.msi
+msiexec /i librenms-windows-agent-0.6.14.msi
 ```
 
 Silent install after downloading the MSI:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.13.msi /qn
+msiexec /i librenms-windows-agent-0.6.14.msi /qn
 ```
 
 The direct MSI intentionally uses one reliable default path:
@@ -269,7 +273,7 @@ actions.
 Silent uninstall:
 
 ```powershell
-msiexec /x librenms-windows-agent-0.6.13.msi /qn
+msiexec /x librenms-windows-agent-0.6.14.msi /qn
 ```
 
 ### Collector Expectations
@@ -287,7 +291,7 @@ Backup health is expectation-driven:
 - `none`: no local backup expectation.
 
 FactoryTalk runtime visibility uses bounded local Windows process performance
-counters and is enabled by default when FactoryTalk is detected. Release 0.6.13
+counters and is enabled by default when FactoryTalk is detected. Release 0.6.14
 MSI installs and upgrades enable the complete FactoryTalk feature set by
 setting native FactoryTalk Diagnostics Counter Monitor collection to `local`,
 including when the existing configuration is preserved. Non-MSI configurations
@@ -344,7 +348,7 @@ A useful local smoke test on a Windows host:
 & "C:\Program Files\LibreNMS\Windows Agent\LibreNMS.WindowsAgent.Service.exe" --once --config "C:\ProgramData\LibreNMS\Windows Agent\agent.json" | Select-String '^<<<windows_agent|collectors_run|collect_duration_ms'
 ```
 
-Expected output includes `<<<windows_agent>>>`, `collectors_run=22`, and
+Expected output includes `<<<windows_agent>>>`, `collectors_run=23`, and
 `collectors_failed=0`.
 
 ## Development

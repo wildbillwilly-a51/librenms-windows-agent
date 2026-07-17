@@ -43,6 +43,7 @@ namespace LibreNMS.WindowsAgent.Core
             "sql_server",
             "iis",
             "horizon",
+            "horizon_api",
             "factorytalk",
             "tls_certificates",
             "backup_storage"
@@ -171,11 +172,31 @@ namespace LibreNMS.WindowsAgent.Core
         public string Mode { get; set; } = "auto";
         public bool IncludeServices { get; set; } = true;
         public bool IncludeProcesses { get; set; } = true;
+        public bool IncludeRuntimeMetrics { get; set; } = true;
         public bool IncludePorts { get; set; } = true;
         public bool IncludeCertificates { get; set; } = true;
         public List<int> Ports { get; set; } = new List<int> { 443, 8443, 4172, 32111 };
         public int CertificateWarningDays { get; set; } = 30;
         public int CertificateCriticalDays { get; set; } = 7;
+        public HorizonApiConfig Api { get; set; } = new HorizonApiConfig();
+    }
+
+    public sealed class HorizonApiConfig
+    {
+        public string Mode { get; set; } = "disabled";
+        public string BaseUrl { get; set; } = string.Empty;
+        public string CredentialFile { get; set; } = @"%ProgramData%\LibreNMS\Windows Agent\horizon-api-credential.bin";
+        public int TimeoutSeconds { get; set; } = 15;
+        public int PageSize { get; set; } = 500;
+        public int MaxPages { get; set; } = 20;
+        public bool IncludeConnectionServers { get; set; } = true;
+        public bool IncludeHorizonDomains { get; set; } = true;
+        public bool IncludeGateways { get; set; } = true;
+        public bool IncludeSessions { get; set; } = true;
+        public bool IncludeClonePools { get; set; } = true;
+        public int PoolWarningUnreadyPercent { get; set; } = 50;
+        public int PoolCriticalUnreadyPercent { get; set; } = 90;
+        public int PoolMinimumSpareSample { get; set; } = 2;
     }
 
     public sealed class FactoryTalkConfig

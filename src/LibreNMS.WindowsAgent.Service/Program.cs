@@ -21,6 +21,12 @@ namespace LibreNMS.WindowsAgent.Service
                 var options = CommandLineOptions.Parse(args);
                 var configPath = options.ConfigPath ?? DefaultConfigPath();
                 var config = ConfigLoader.Load(configPath);
+
+                if (options.StoreHorizonCredential)
+                {
+                    return StoreHorizonCredential(config);
+                }
+
                 var logger = new FileAgentLogger(config.Logging);
                 var host = AgentHost.Create(config, configPath, logger);
 
@@ -74,6 +80,48 @@ namespace LibreNMS.WindowsAgent.Service
             }
         }
 
+        private static int StoreHorizonCredential(AgentConfig config)
+        {
+            if (!Environment.UserInteractive || Console.IsInputRedirected)
+            {
+                throw new InvalidOperationException("Horizon credential provisioning requires an interactive console.");
+            }
+
+            Console.Write("Horizon API username: ");
+            var username = (Console.ReadLine() ?? string.Empty).Trim();
+            Console.Write("Horizon API domain: ");
+            var domain = (Console.ReadLine() ?? string.Empty).Trim();
+            Console.Write("Horizon API password: ");
+            var inputValue = ReadPassword();
+            Console.WriteLine();
+
+            var path = HorizonApiCredentialStore.Write(
+                config.Collectors.Horizon.Api.CredentialFile,
+                HorizonApiCredential.Create(username, domain, inputValue));
+            Console.WriteLine("Machine-protected Horizon API credential written to " + path);
+            return 0;
+        }
+
+        private static string ReadPassword()
+        {
+            var characters = new List<char>();
+            while (true)
+            {
+                var key = Console.ReadKey(intercept: true);
+                if (key.Key == ConsoleKey.Enter)
+                {
+                    break;
+                }
+                if (key.Key == ConsoleKey.Backspace)
+                {
+                    if (characters.Count > 0) characters.RemoveAt(characters.Count - 1);
+                    continue;
+                }
+                if (!char.IsControl(key.KeyChar)) characters.Add(key.KeyChar);
+            }
+            return new string(characters.ToArray());
+        }
+
         public static string DefaultConfigPath()
         {
             return Path.Combine(
@@ -106,6 +154,7 @@ namespace LibreNMS.WindowsAgent.Service
                 new SqlServerCollector(),
                 new IisCollector(),
                 new HorizonCollector(),
+                new HorizonApiCollector(),
                 new FactoryTalkCollector(),
                 new TlsCertificateCollector(),
                 new BackupStorageCollector()
@@ -120,6 +169,7 @@ namespace LibreNMS.WindowsAgent.Service
         public bool Once { get; private set; }
         public bool ValidateConfig { get; private set; }
         public string SupportBundlePath { get; private set; }
+        public bool StoreHorizonCredential { get; private set; }
 
         public static CommandLineOptions Parse(string[] args)
         {
@@ -146,6 +196,9 @@ namespace LibreNMS.WindowsAgent.Service
                         break;
                     case "--support-bundle":
                         options.SupportBundlePath = RequireValue(arg, queue);
+                        break;
+                    case "--store-horizon-credential":
+                        options.StoreHorizonCredential = true;
                         break;
                     case "--help":
                     case "-h":
@@ -179,6 +232,7 @@ namespace LibreNMS.WindowsAgent.Service
             Console.WriteLine("  --once                    Print one Checkmk-compatible payload and exit.");
             Console.WriteLine("  --validate-config         Validate config and exit.");
             Console.WriteLine("  --support-bundle <path>   Write a diagnostic zip and exit.");
+            Console.WriteLine("  --store-horizon-credential  Store one machine-protected Horizon API credential.");
         }
     }
 }

@@ -1,7 +1,24 @@
 # Changelog
 
+## 2026-07-17
+
+- Released 0.6.14 with the read-only Horizon integration as an independent
+  `horizon_api` collector, local pod/member and gateway health, Horizon AD LDS
+  configuration replication, separately named broker-to-Microsoft-AD access,
+  and instant/linked-clone pool health.
+- Added configurable 50% warning and 90% critical unready-spare thresholds,
+  zero-ready-spare critical handling, incomplete-inventory safeguards,
+  aggregate pool state visibility, compact UI disclosures, and a new additive
+  Horizon platform RRD family. Alert rules remain opt-in and no live deployment
+  is performed by the release build.
+
 ## 2026-07-16
 
+- Began an uncommitted Horizon telemetry implementation: generalized the
+  FactoryTalk process sampler for shared local runtime metrics, added additive
+  Horizon runtime/API protocol sections and RRD families, and scaffolded a
+  disabled-by-default read-only REST integration for Connection Server health
+  and sanitized session aggregates using a machine-protected credential file.
 - Standardized the Horizon application page on the compact FactoryTalk
   operational pattern with collector-confirmed health, focused service,
   listener, and certificate metrics, concise issue actions, collapsed raw

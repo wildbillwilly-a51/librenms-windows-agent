@@ -17,32 +17,44 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
     {
         public string Name => "horizon";
 
-        public Task<IReadOnlyList<AgentSection>> CollectAsync(AgentContext context, CancellationToken cancellationToken)
+        public async Task<IReadOnlyList<AgentSection>> CollectAsync(AgentContext context, CancellationToken cancellationToken)
         {
+            await Task.CompletedTask.ConfigureAwait(false);
             var config = context.Config.Collectors.Horizon ?? new HorizonConfig();
             if (IsDisabled(config.Mode))
             {
-                return Task.FromResult<IReadOnlyList<AgentSection>>(DisabledSections());
+                return DisabledSections();
             }
 
             var services = config.IncludeServices
                 ? ServiceInventoryReader.Read(cancellationToken).Where(IsHorizonService).ToList()
                 : new List<ServiceInventoryRecord>();
-            var processes = config.IncludeProcesses ? ReadProcesses(cancellationToken) : new List<ProcessRow>();
+            var discoveredProcesses = config.IncludeProcesses || config.IncludeRuntimeMetrics
+                ? ReadProcesses(cancellationToken)
+                : new List<ProcessRow>();
+            var processes = config.IncludeProcesses ? discoveredProcesses : new List<ProcessRow>();
             var serverServices = services.Where(IsHorizonServerService).ToList();
-            var serverProcesses = processes.Where(IsHorizonServerProcess).ToList();
-            var clientDetected = services.Any(IsHorizonClientService) || processes.Any(IsHorizonClientProcess);
+            var serverProcesses = discoveredProcesses.Where(IsHorizonServerProcess).ToList();
+            var clientDetected = services.Any(IsHorizonClientService) || discoveredProcesses.Any(IsHorizonClientProcess);
             var detected = serverServices.Count > 0 || serverProcesses.Count > 0;
-
             if (!detected && clientDetected && IsAuto(config.Mode))
             {
-                return Task.FromResult<IReadOnlyList<AgentSection>>(ClientOnlySections(services, processes));
+                return ClientOnlySections(services, processes);
             }
 
             if (!detected && IsAuto(config.Mode))
             {
-                return Task.FromResult<IReadOnlyList<AgentSection>>(NotDetectedSections());
+                return NotDetectedSections();
             }
+
+            var runtime = config.IncludeRuntimeMetrics
+                ? RoleProcessMetricsReader.Read(serverProcesses.Select(process => new RoleProcessIdentity
+                {
+                    Name = process.Name,
+                    ProcessId = process.ProcessId,
+                    Role = ProcessRole(process)
+                }), cancellationToken)
+                : new RoleRuntimeMetrics { State = "disabled" };
 
             var ports = config.IncludePorts ? ReadPorts(config.Ports) : new List<PortRow>();
             var certificates = config.IncludeCertificates ? ReadCertificates(context.NowUtc, config) : new List<CertificateRow>();
@@ -79,10 +91,12 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
                 new AgentSection("windows_agent_horizon_services", services.Select(ServiceLine)),
                 new AgentSection("windows_agent_horizon_processes", processes.Select(ProcessLine)),
                 new AgentSection("windows_agent_horizon_ports", ports.Select(PortLine)),
-                new AgentSection("windows_agent_horizon_certificates", certificates.Select(CertificateLine))
+                new AgentSection("windows_agent_horizon_certificates", certificates.Select(CertificateLine)),
+                RuntimeSummarySection(runtime),
+                new AgentSection("windows_agent_horizon_runtime_processes", runtime.Processes.Select(RuntimeProcessLine))
             };
 
-            return Task.FromResult<IReadOnlyList<AgentSection>>(sections);
+            return sections;
         }
 
         private static bool IsAuto(string mode)
@@ -103,7 +117,9 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
                 Empty("windows_agent_horizon_services"),
                 Empty("windows_agent_horizon_processes"),
                 Empty("windows_agent_horizon_ports"),
-                Empty("windows_agent_horizon_certificates")
+                Empty("windows_agent_horizon_certificates"),
+                RuntimeStateSection("disabled"),
+                Empty("windows_agent_horizon_runtime_processes")
             };
         }
 
@@ -115,7 +131,9 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
                 Empty("windows_agent_horizon_services"),
                 Empty("windows_agent_horizon_processes"),
                 Empty("windows_agent_horizon_ports"),
-                Empty("windows_agent_horizon_certificates")
+                Empty("windows_agent_horizon_certificates"),
+                RuntimeStateSection("not_detected"),
+                Empty("windows_agent_horizon_runtime_processes")
             };
         }
 
@@ -203,7 +221,9 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
                 new AgentSection("windows_agent_horizon_services", services.Select(ServiceLine)),
                 new AgentSection("windows_agent_horizon_processes", processes.Select(ProcessLine)),
                 Empty("windows_agent_horizon_ports"),
-                Empty("windows_agent_horizon_certificates")
+                Empty("windows_agent_horizon_certificates"),
+                RuntimeStateSection("client_only"),
+                Empty("windows_agent_horizon_runtime_processes")
             };
         }
 
@@ -256,7 +276,16 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
 
         private static string Role(ServiceInventoryRecord service)
         {
-            var text = JoinText(service.Name, service.DisplayName, service.PathName);
+            return ComponentRole(JoinText(service.Name, service.DisplayName, service.PathName));
+        }
+
+        private static string ProcessRole(ProcessRow process)
+        {
+            return ComponentRole(JoinText(process?.Name, process?.Path));
+        }
+
+        private static string ComponentRole(string text)
+        {
             if (ContainsAny(text, "ldap", "vdm")) return "directory";
             if (ContainsAny(text, "blast", "gateway", "pcoip")) return "gateway";
             if (ContainsAny(text, "event", "log")) return "events";
@@ -476,10 +505,42 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
         {
             return string.Format(
                 CultureInfo.InvariantCulture,
-                "name={0} pid={1} path={2}",
+                "name={0} pid={1} role={2} path={3}",
                 Kv(process.Name),
                 process.ProcessId,
+                Kv(ProcessRole(process)),
                 Kv(process.Path));
+        }
+
+        private static AgentSection RuntimeStateSection(string state)
+        {
+            return new AgentSection("windows_agent_horizon_runtime_summary", new[]
+            {
+                "state=" + Kv(state) + " reason=none processes_total=0 cpu_percent=0 working_set_bytes=0 private_bytes=0 handle_count=0 thread_count=0 io_read_bytes_per_sec=0 io_write_bytes_per_sec=0 oldest_uptime_seconds=0"
+            });
+        }
+
+        private static AgentSection RuntimeSummarySection(RoleRuntimeMetrics runtime)
+        {
+            return new AgentSection("windows_agent_horizon_runtime_summary", new[]
+            {
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "state={0} reason={1} processes_total={2} cpu_percent={3:0.###} working_set_bytes={4} private_bytes={5} handle_count={6} thread_count={7} io_read_bytes_per_sec={8:0.###} io_write_bytes_per_sec={9:0.###} oldest_uptime_seconds={10}",
+                    Kv(runtime.State), Kv(runtime.Reason), runtime.Processes.Count, runtime.CpuPercent,
+                    runtime.WorkingSetBytes, runtime.PrivateBytes, runtime.HandleCount, runtime.ThreadCount,
+                    runtime.IoReadBytesPerSec, runtime.IoWriteBytesPerSec, runtime.OldestUptimeSeconds)
+            });
+        }
+
+        private static string RuntimeProcessLine(RoleRuntimeProcessMetric process)
+        {
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "name={0} pid={1} role={2} cpu_percent={3:0.###} working_set_bytes={4} private_bytes={5} handle_count={6} thread_count={7} io_read_bytes_per_sec={8:0.###} io_write_bytes_per_sec={9:0.###} uptime_seconds={10}",
+                Kv(process.Name), process.ProcessId, Kv(process.Role), process.CpuPercent,
+                process.WorkingSetBytes, process.PrivateBytes, process.HandleCount, process.ThreadCount,
+                process.IoReadBytesPerSec, process.IoWriteBytesPerSec, process.UptimeSeconds);
         }
 
         private static string PortLine(PortRow port)

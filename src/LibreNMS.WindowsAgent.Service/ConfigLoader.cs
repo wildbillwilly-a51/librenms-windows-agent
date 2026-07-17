@@ -133,6 +133,24 @@ namespace LibreNMS.WindowsAgent.Service
             }
             config.Collectors.Horizon = config.Collectors.Horizon ?? new HorizonConfig();
             config.Collectors.Horizon.Mode = string.IsNullOrWhiteSpace(config.Collectors.Horizon.Mode) ? "auto" : config.Collectors.Horizon.Mode.Trim();
+            config.Collectors.Horizon.Api = config.Collectors.Horizon.Api ?? new HorizonApiConfig();
+            config.Collectors.Horizon.Api.Mode = NormalizeHorizonApiMode(config.Collectors.Horizon.Api.Mode);
+            config.Collectors.Horizon.Api.BaseUrl = (config.Collectors.Horizon.Api.BaseUrl ?? string.Empty).Trim().TrimEnd('/');
+            config.Collectors.Horizon.Api.CredentialFile = string.IsNullOrWhiteSpace(config.Collectors.Horizon.Api.CredentialFile)
+                ? @"%ProgramData%\LibreNMS\Windows Agent\horizon-api-credential.bin"
+                : config.Collectors.Horizon.Api.CredentialFile.Trim();
+            config.Collectors.Horizon.Api.TimeoutSeconds = Math.Max(5, Math.Min(60, config.Collectors.Horizon.Api.TimeoutSeconds <= 0 ? 15 : config.Collectors.Horizon.Api.TimeoutSeconds));
+            config.Collectors.Horizon.Api.PageSize = Math.Max(25, Math.Min(1000, config.Collectors.Horizon.Api.PageSize <= 0 ? 500 : config.Collectors.Horizon.Api.PageSize));
+            config.Collectors.Horizon.Api.MaxPages = Math.Max(1, Math.Min(20, config.Collectors.Horizon.Api.MaxPages <= 0 ? 20 : config.Collectors.Horizon.Api.MaxPages));
+            config.Collectors.Horizon.Api.PoolWarningUnreadyPercent = Math.Max(1, Math.Min(99, config.Collectors.Horizon.Api.PoolWarningUnreadyPercent <= 0 ? 50 : config.Collectors.Horizon.Api.PoolWarningUnreadyPercent));
+            config.Collectors.Horizon.Api.PoolCriticalUnreadyPercent = Math.Max(config.Collectors.Horizon.Api.PoolWarningUnreadyPercent + 1, Math.Min(100, config.Collectors.Horizon.Api.PoolCriticalUnreadyPercent <= 0 ? 90 : config.Collectors.Horizon.Api.PoolCriticalUnreadyPercent));
+            config.Collectors.Horizon.Api.PoolMinimumSpareSample = Math.Max(1, Math.Min(100, config.Collectors.Horizon.Api.PoolMinimumSpareSample <= 0 ? 2 : config.Collectors.Horizon.Api.PoolMinimumSpareSample));
+            if (string.Equals(config.Collectors.Horizon.Api.Mode, "enabled", StringComparison.OrdinalIgnoreCase) &&
+                config.Collectors.Enabled.Exists(name => string.Equals(name, "horizon", StringComparison.OrdinalIgnoreCase)) &&
+                !config.Collectors.Enabled.Exists(name => string.Equals(name, "horizon_api", StringComparison.OrdinalIgnoreCase)))
+            {
+                config.Collectors.Enabled.Add("horizon_api");
+            }
             config.Collectors.Horizon.Ports = config.Collectors.Horizon.Ports ?? new List<int>();
             if (config.Collectors.Horizon.Ports.Count == 0)
             {
@@ -289,6 +307,24 @@ namespace LibreNMS.WindowsAgent.Service
 
             config.Logging.Level = string.IsNullOrWhiteSpace(config.Logging.Level) ? "info" : config.Logging.Level.Trim();
             config.Logging.Path = ExpandPath(config.Logging.Path);
+        }
+
+        private static string NormalizeHorizonApiMode(string mode)
+        {
+            var normalized = string.IsNullOrWhiteSpace(mode) ? "disabled" : mode.Trim().ToLowerInvariant();
+            if (normalized == "off")
+            {
+                normalized = "disabled";
+            }
+            if (normalized == "on")
+            {
+                normalized = "enabled";
+            }
+            if (normalized != "disabled" && normalized != "enabled")
+            {
+                throw new InvalidOperationException("collectors.horizon.api.mode must be disabled or enabled.");
+            }
+            return normalized;
         }
 
         private static string NormalizeFactoryTalkNativeCountersMode(string mode)

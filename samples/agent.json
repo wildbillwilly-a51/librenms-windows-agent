@@ -28,6 +28,7 @@
       "sql_server",
       "iis",
       "horizon",
+      "horizon_api",
       "factorytalk",
       "tls_certificates",
       "backup_storage"
@@ -217,6 +218,7 @@
       "mode": "auto",
       "includeServices": true,
       "includeProcesses": true,
+      "includeRuntimeMetrics": true,
       "includePorts": true,
       "includeCertificates": true,
       "ports": [
@@ -226,7 +228,23 @@
         32111
       ],
       "certificateWarningDays": 30,
-      "certificateCriticalDays": 7
+      "certificateCriticalDays": 7,
+      "api": {
+        "mode": "disabled",
+        "baseUrl": "",
+        "credentialFile": "%ProgramData%\\LibreNMS\\Windows Agent\\horizon-api-credential.bin",
+        "timeoutSeconds": 15,
+        "pageSize": 500,
+        "maxPages": 20,
+        "includeConnectionServers": true,
+        "includeHorizonDomains": true,
+        "includeGateways": true,
+        "includeSessions": true,
+        "includeClonePools": true,
+        "poolWarningUnreadyPercent": 50,
+        "poolCriticalUnreadyPercent": 90,
+        "poolMinimumSpareSample": 2
+      }
     },
     "factoryTalk": {
       "mode": "auto",
