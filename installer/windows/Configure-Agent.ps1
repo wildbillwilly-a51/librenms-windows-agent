@@ -61,6 +61,29 @@ function Write-JsonConfig {
     [System.IO.File]::WriteAllText($Path, $json + [Environment]::NewLine, $utf8NoBom)
 }
 
+function Set-JsonProperty {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$InputObject,
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+        [Parameter(Mandatory = $false)]
+        [AllowNull()]
+        [object]$Value
+    )
+
+    $InputObject | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
+}
+
+trap {
+    try {
+        Write-InstallLog "ERROR: $($_.Exception.Message)"
+    } catch {
+        # Preserve the original installer failure if diagnostic logging is unavailable.
+    }
+    throw
+}
+
 New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
 Write-InstallLog "Configuring $serviceName from installDir=$InstallDir dataDir=$DataDir listen=${ListenAddress}:$ListenPort firewall=$AddFirewallRule start=$StartService preserveConfig=$PreserveConfig factoryTalkNativeCounters=$EnableFactoryTalkNativeCounters configPath=$ConfigPath"
 
@@ -91,14 +114,33 @@ if (Test-Path -LiteralPath $configTarget) {
         $config.collectors | Add-Member -NotePropertyName factoryTalk -NotePropertyValue ([pscustomobject]@{}) -Force
     }
     $nativeCountersMode = if ($EnableFactoryTalkNativeCounters -eq 1) { 'local' } else { 'disabled' }
-    $config.collectors.factoryTalk | Add-Member -NotePropertyName nativeCountersMode -NotePropertyValue $nativeCountersMode -Force
+    if ($EnableFactoryTalkNativeCounters -eq 1) {
+        Set-JsonProperty $config.collectors.factoryTalk mode 'auto'
+        Set-JsonProperty $config.collectors.factoryTalk includeProducts $true
+        Set-JsonProperty $config.collectors.factoryTalk includeServices $true
+        Set-JsonProperty $config.collectors.factoryTalk includeProcesses $true
+        Set-JsonProperty $config.collectors.factoryTalk includeRuntimeMetrics $true
+        Set-JsonProperty $config.collectors.factoryTalk includePorts $true
+        if (-not $config.collectors.factoryTalk.nativeCounterIntervalSeconds) {
+            Set-JsonProperty $config.collectors.factoryTalk nativeCounterIntervalSeconds 900
+        }
+        if (-not $config.collectors.factoryTalk.nativeCounterTimeoutSeconds) {
+            Set-JsonProperty $config.collectors.factoryTalk nativeCounterTimeoutSeconds 30
+        }
+        if ($null -eq $config.collectors.factoryTalk.nativeCounterExecutablePath) {
+            Set-JsonProperty $config.collectors.factoryTalk nativeCounterExecutablePath ''
+        }
+    }
+    Set-JsonProperty $config.collectors.factoryTalk nativeCountersMode $nativeCountersMode
     Write-JsonConfig -Path $configTarget -Config $config
     Write-InstallLog "Config normalized: address=${ListenAddress} port=$ListenPort allowedClients=any factoryTalkNativeCountersMode=$nativeCountersMode"
 }
 
-if (-not (Test-Path -LiteralPath $exePath)) {
+if (-not (Test-Path -LiteralPath $exePath -PathType Leaf)) {
     throw "Agent executable not found after MSI file install: $exePath"
 }
+$installedFileVersion = (Get-Item -LiteralPath $exePath).VersionInfo.FileVersion
+Write-InstallLog "Agent executable present: version=$installedFileVersion"
 
 if ($AddFirewallRule -eq 1) {
     try {
@@ -121,9 +163,6 @@ if ($AddFirewallRule -eq 1) {
     }
 }
 
-& $exePath --validate-config --config $configTarget
-Write-InstallLog "Config validation passed: $configTarget"
-
 if ($StartService -eq 1) {
     try {
         $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
@@ -138,8 +177,11 @@ if ($StartService -eq 1) {
         $service = Get-Service -Name $serviceName -ErrorAction Stop
         $service.WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
     } catch {
-        Write-InstallLog "WARNING: Service start failed: $($_.Exception.Message)"
+        Write-InstallLog "ERROR: Service start failed: $($_.Exception.Message)"
+        throw
     }
+} else {
+    Write-InstallLog "Service start skipped by START_SERVICE=0."
 }
 
 Write-InstallLog "Configuration completed."

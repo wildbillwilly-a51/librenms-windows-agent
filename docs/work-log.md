@@ -2,11 +2,32 @@
 
 ## 2026-07-16
 
+- Diagnosed a generic 0.6.13 major-upgrade failure from private non-production
+  evidence. Windows Installer removed the prior package, then the deferred
+  configuration action failed while launching the installed agent executable;
+  the external deployment wrapper incorrectly reported success despite the MSI
+  recording error 1603. Private host evidence remains outside this repository.
+- Repaired 0.6.13 in place. The MSI no longer launches the agent executable as
+  a PowerShell child merely to revalidate an already parsed configuration;
+  instead it verifies the installed file and requires the service to reach
+  `Running`. Same-version upgrades are allowed, and `RemoveExistingProducts`
+  now runs after `InstallInitialize` so rollback can restore the prior package.
+- Preserved older configurations now receive every complete-set FactoryTalk
+  property when the MSI feature is enabled, including runtime metrics, native
+  interval/timeout defaults, and localhost native-counter mode.
+- Rebuilt release 0.6.13 in place. Overlay SHA256:
+  `761953ce7db1a376898a55b3184f2356c397d52c874dbbccc7d33bd4b50c162e`.
+  MSI SHA256:
+  `e5a861ccb0d86a635a6c589306ea1298b5eb62befc4e408ed0803ceff6c2dd87`.
+  Validation passed for the exact preserved pilot configuration under Windows
+  PowerShell 5.1, all portable .NET tests, warning-free .NET Framework/WiX
+  builds, same-version/rollback MSI table assertions, package contents, and
+  checksums. PHP remained unavailable; overlay source behavior is unchanged.
 - Added the `ENABLE_FACTORYTALK_NATIVE_COUNTERS` MSI property, defaulting to
   enabled. The installer applies `nativeCountersMode=local` to both fresh and
   preserved configurations; setting the property to `0` provides a direct
   rollback without disabling Windows-native FactoryTalk runtime metrics.
-- Built release 0.6.13 and refreshed the MSI, overlay, current installer
+- Initially built release 0.6.13 and refreshed the MSI, overlay, current installer
   defaults, documentation, and checksum manifest. Overlay SHA256:
   `e948079cd045fc08bd3d6b6bdef6434e93832bc1393218ca4d6150ca9e7768ab`.
   MSI SHA256:

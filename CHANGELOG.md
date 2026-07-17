@@ -2,6 +2,10 @@
 
 ## 2026-07-16
 
+- Repaired the 0.6.13 MSI in place: same-version upgrades are supported, prior
+  packages are removed inside the rollback boundary, preserved configurations
+  receive the complete FactoryTalk settings, and service startup is now the
+  authoritative installation success check.
 - Promoted generic overlay and Windows MSI release 0.6.13. Normal MSI installs
   and upgrades now enable the complete bounded FactoryTalk collection set,
   including localhost Counter Monitor snapshots, with an explicit MSI opt-out.

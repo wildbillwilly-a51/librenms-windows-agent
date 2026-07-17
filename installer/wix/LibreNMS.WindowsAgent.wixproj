@@ -7,5 +7,7 @@
     <PayloadDir Condition="'$(PayloadDir)' == ''">$(MSBuildProjectDirectory)\payload</PayloadDir>
     <AssetsDir Condition="'$(AssetsDir)' == ''">$(MSBuildProjectDirectory)\assets</AssetsDir>
     <DefineConstants>ProductVersion=$(ProductVersion);PayloadDir=$(PayloadDir);AssetsDir=$(AssetsDir)</DefineConstants>
+    <!-- Intentional for in-place republishing of a repaired three-field MSI version. -->
+    <SuppressIces>ICE61</SuppressIces>
   </PropertyGroup>
 </Project>

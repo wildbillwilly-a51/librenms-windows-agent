@@ -48,6 +48,36 @@ function Assert-MsiMetadata {
     if (-not $productCode -or $productCode -eq $legacyFixedProductCode) { throw 'MSI ProductCode was not regenerated.' }
 }
 
+function Get-MsiTableValue {
+    param([string]$MsiPath, [string]$Query, [int]$Column = 1)
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    $database = $installer.GetType().InvokeMember('OpenDatabase', 'InvokeMethod', $null, $installer, @($MsiPath, 0))
+    $view = $database.GetType().InvokeMember('OpenView', 'InvokeMethod', $null, $database, @($Query))
+    try {
+        $view.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $view, $null) | Out-Null
+        $record = $view.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $view, $null)
+        if (-not $record) { return '' }
+        return $record.GetType().InvokeMember('StringData', 'GetProperty', $null, $record, $Column)
+    } finally {
+        $view.GetType().InvokeMember('Close', 'InvokeMethod', $null, $view, $null) | Out-Null
+    }
+}
+
+function Assert-MsiUpgradeSafety {
+    param([string]$MsiPath)
+    $sequence = Get-MsiTableValue $MsiPath "SELECT ``Sequence`` FROM ``InstallExecuteSequence`` WHERE ``Action``='RemoveExistingProducts'"
+    $initializeSequence = Get-MsiTableValue $MsiPath "SELECT ``Sequence`` FROM ``InstallExecuteSequence`` WHERE ``Action``='InstallInitialize'"
+    if (-not $sequence -or -not $initializeSequence -or [int]$sequence -le [int]$initializeSequence) {
+        throw 'RemoveExistingProducts must run after InstallInitialize so failed upgrades can roll back safely.'
+    }
+    $upgradeAttributes = Get-MsiTableValue $MsiPath "SELECT ``Attributes`` FROM ``Upgrade`` WHERE ``ActionProperty``='WIX_UPGRADE_DETECTED'"
+    if (-not $upgradeAttributes -or (([int]$upgradeAttributes -band 512) -eq 0)) {
+        throw 'The repaired package must allow an existing package with the same three-field version to upgrade.'
+    }
+    $target = Get-MsiTableValue $MsiPath "SELECT ``Target`` FROM ``CustomAction`` WHERE ``Action``='ConfigureAgent'"
+    if ($target -notmatch 'ENABLE_FACTORYTALK_NATIVE_COUNTERS') { throw 'ConfigureAgent does not receive the FactoryTalk feature property.' }
+}
+
 New-Item -ItemType Directory -Force -Path $workRoot, $payloadDir, $assetsDir, $msiOutputDir, $ArtifactsDir | Out-Null
 try {
     $serviceProject = Join-Path $repoRoot 'src\LibreNMS.WindowsAgent.Service\LibreNMS.WindowsAgent.Service.csproj'
@@ -97,6 +127,7 @@ try {
     $builtMsi = Get-ChildItem -LiteralPath $msiOutputDir -Filter "librenms-windows-agent-$Version.msi" -Recurse -File | Select-Object -First 1
     if (-not $builtMsi) { throw 'Built MSI was not found.' }
     Assert-MsiMetadata -MsiPath $builtMsi.FullName -ExpectedVersion $Version
+    Assert-MsiUpgradeSafety -MsiPath $builtMsi.FullName
     Copy-Item -LiteralPath $builtMsi.FullName -Destination $targetMsi -Force
     Write-Output $targetMsi
 } finally {

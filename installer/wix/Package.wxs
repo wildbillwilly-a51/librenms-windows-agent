@@ -8,7 +8,10 @@
     UpgradeCode="{7AA78970-198D-4B26-B9FD-FF05F42298B8}"
     Scope="perMachine">
 
-    <MajorUpgrade DowngradeErrorMessage="A newer version of LibreNMS Windows Agent is already installed." />
+    <MajorUpgrade
+      AllowSameVersionUpgrades="yes"
+      DowngradeErrorMessage="A newer version of LibreNMS Windows Agent is already installed."
+      Schedule="afterInstallInitialize" />
     <MediaTemplate EmbedCab="yes" />
 
     <Property Id="LISTEN_ADDRESS" Value="0.0.0.0" />
@@ -87,7 +90,7 @@
       Execute="deferred"
       Impersonate="no"
       Return="check"
-      ExeCommand="powershell.exe -NoP -EP Bypass -Command &quot;&amp; '[INSTALLFOLDER]c.ps1' -i '[INSTALLFOLDER]' -d '[DATADIR]' -a '[LISTEN_ADDRESS]' -p [LISTEN_PORT] -f [ADD_FIREWALL_RULE] -s [START_SERVICE] -c '[CONFIG_PATH]' -k [PRESERVE_CONFIG] -n [ENABLE_FACTORYTALK_NATIVE_COUNTERS]&quot;" />
+      ExeCommand='powershell.exe -NoP -EP Bypass -F "[INSTALLFOLDER]c.ps1" -i "[INSTALLFOLDER]" -d "[DATADIR]" -a "[LISTEN_ADDRESS]" -p [LISTEN_PORT] -f [ADD_FIREWALL_RULE] -s [START_SERVICE] -c "[CONFIG_PATH]" -k [PRESERVE_CONFIG] -n [ENABLE_FACTORYTALK_NATIVE_COUNTERS]' />
 
     <CustomAction
       Id="RemoveFirewallRule"

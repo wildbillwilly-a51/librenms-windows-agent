@@ -79,6 +79,9 @@ The default Windows install is normally enough. It installs the
 firewall rule, starts the service, and preserves existing config on upgrade.
 On FactoryTalk hosts, the MSI also enables the complete bounded FactoryTalk
 feature set, including localhost Counter Monitor snapshots every 15 minutes.
+The repaired 0.6.13 package can replace an earlier 0.6.13 build in place. Major
+upgrades remove the prior package inside the MSI rollback boundary, and setup
+reports success only after the installed Windows service reaches `Running`.
 
 `0.0.0.0` is the local bind address on the Windows host. It is not the LibreNMS
 server or poller IP.

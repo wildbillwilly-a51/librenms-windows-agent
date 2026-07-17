@@ -29,15 +29,17 @@ and private exports do not belong here.
 - Overlay: `artifacts/librenms-windows-agent-overlay-0.6.13.tar.gz`
 - Windows MSI: `artifacts/librenms-windows-agent-0.6.13.msi`
 - Checksums: `SHA256SUMS`
-- Overlay SHA256: `e948079cd045fc08bd3d6b6bdef6434e93832bc1393218ca4d6150ca9e7768ab`
-- Windows MSI SHA256: `f762c5c137261a8b6d47a4bb5fc167379e8623f51be3514938ecd2c3e302c66e`
+- Overlay SHA256: `761953ce7db1a376898a55b3184f2356c397d52c874dbbccc7d33bd4b50c162e`
+- Windows MSI SHA256: `e5a861ccb0d86a635a6c589306ea1298b5eb62befc4e408ed0803ceff6c2dd87`
 - Public overlay installer: `install.sh`
 - Public Windows installer: `install-agent.ps1`
 
 Release `0.6.13` enables the complete bounded FactoryTalk collection set for
 normal MSI installs and upgrades, including localhost-only Diagnostics Counter
 Monitor snapshots. `ENABLE_FACTORYTALK_NATIVE_COUNTERS=0` provides an explicit
-MSI opt-out.
+MSI opt-out. The repaired in-place package supports same-version upgrades,
+keeps prior installations rollback-safe, and requires the service to reach
+`Running` before setup succeeds.
 
 ## Product Contract
 
