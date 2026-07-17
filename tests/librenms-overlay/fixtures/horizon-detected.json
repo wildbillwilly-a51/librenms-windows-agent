@@ -15,7 +15,7 @@
     "windows_agent_performance_summary": "state=ok cpu_queue_length=0 cpu_pressure=0 memory_available_mb=8192 memory_committed_percent=40 memory_pressure=0 pages_per_sec=0 paging_pressure=0 disk_read_ms_max=0 disk_write_ms_max=0 disk_queue_length_max=0 disk_pressure=0 network_bytes_per_sec_total=0 network_errors_total=0 network_issue=0 pressure_issues=0",
     "windows_agent_sql_server_summary": "state=not_detected instances_total=0 instances_running=0 instances_not_running=0 listener_ports_total=0",
     "windows_agent_iis_summary": "state=not_detected sites_total=0 sites_running=0 sites_stopped=0 app_pools_total=0 app_pools_running=0 app_pools_stopped=0 bindings_total=0",
-    "windows_agent_horizon_summary": "state=ok detected=1 services_total=2 services_not_running=0 processes_total=1 ports_total=4 ports_listening=2 ports_missing=0 certificates_total=1 certificates_expired=0 certificates_expiring=0 health_issues=0",
+    "windows_agent_horizon_summary": "state=ok detected=1 client_detected=0 services_total=2 services_not_running=0 processes_total=1 ports_total=4 ports_listening=2 ports_missing=0 certificates_total=1 certificates_expired=0 certificates_expiring=0 health_issues=0 evidence=\"services=2;ports=4;certificates=1;client=0\" health_scope=scored next_action=\"No action; Horizon server evidence is healthy.\"",
     "windows_agent_horizon_services": "name=VMwareViewConnectionServer display=\"VMware Horizon View Connection Server\" state=Running start_mode=Auto role=connection_server path=\"C:\\\\Program Files\\\\VMware\\\\VMware View\\\\Server\\\\bin\\\\ws_tomcatservice.exe\"\nname=VMwareViewFramework display=\"VMware Horizon Framework Component\" state=Running start_mode=Auto role=horizon path=\"C:\\\\Program Files\\\\VMware\\\\VMware View\\\\Server\\\\bin\\\\ws_framework.exe\"",
     "windows_agent_horizon_processes": "name=ws_tomcatservice.exe pid=2400 path=\"C:\\\\Program Files\\\\VMware\\\\VMware View\\\\Server\\\\bin\\\\ws_tomcatservice.exe\"",
     "windows_agent_horizon_ports": "port=443 listening=1 addresses=0.0.0.0\nport=8443 listening=1 addresses=0.0.0.0\nport=4172 listening=0 addresses=\"\"\nport=32111 listening=0 addresses=\"\"",
@@ -70,6 +70,13 @@
         "windows-agent-details-horizon",
         "windows-agent-graphs-horizon",
         "VMwareViewConnectionServer",
+        "Operational view",
+        "No Horizon health issues were reported.",
+        "Required HTTPS",
+        "Inventory and raw diagnostics",
+        "Service Inventory",
+        "Listener Inventory",
+        "Host Certificates",
         "Horizon State and Issues",
         "Horizon Listeners and Certificates",
         "data-type=\"application_windows-agent_horizon_state_health\"",
@@ -78,7 +85,8 @@
       "not_contains": [
         "<h3 class=\"panel-title\">VMware Horizon visibility</h3>",
         "data-type=\"application_windows-agent_horizon\"",
-        "No watched TCP ports configured."
+        "No watched TCP ports configured.",
+        "Reported Health Issues"
       ]
     }
   }

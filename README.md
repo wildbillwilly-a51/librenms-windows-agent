@@ -70,6 +70,15 @@ health result and stopped core services are presented as issues. Optional
 listeners, non-core services, runtime/native availability, and cumulative
 counter values remain informational.
 
+The Horizon application view uses the same compact operational pattern. It
+shows collector-confirmed health, the recommended next action, service and
+process counts, required HTTPS state, configured listener coverage, and host
+certificate status before the complete inventory. Only the Horizon collector's
+automatic-service, required TCP 443, expired-certificate, and critical-expiry
+checks are presented as health issues; optional listeners remain
+informational. See [Horizon monitoring design](docs/horizon-monitoring.md) for
+the credential-free runtime and authenticated pod-level collection roadmap.
+
 ### 4. Install Or Update The Windows Agent
 
 Run PowerShell as Administrator on each Windows host:

@@ -2,6 +2,11 @@
 
 ## 2026-07-16
 
+- Standardized the Horizon application page on the compact FactoryTalk
+  operational pattern with collector-confirmed health, focused service,
+  listener, and certificate metrics, concise issue actions, collapsed raw
+  inventory, and trend disclosure. Added a documented roadmap for local
+  Horizon runtime metrics and an opt-in authenticated pod-level integration.
 - Corrected the FactoryTalk operational view so only collector-scored health
   issues and stopped core services affect issue state. Removed speculative
   issue promotion for optional services/listeners, supplemental-data

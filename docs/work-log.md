@@ -2,6 +2,27 @@
 
 ## 2026-07-16
 
+- Reworked the Horizon app-page presentation without changing the agent
+  protocol, RRD schema, or alert configuration. The operational view now leads
+  with collector-confirmed health and next action, six compact
+  service/process/listener/certificate metrics, issue-specific actions, and a
+  nested inventory/raw-diagnostics disclosure. FactoryTalk and Horizon now use
+  the same generic role-dashboard styles.
+- Added healthy and three-condition Horizon fixtures and validated the
+  presentation at 1440-pixel desktop and 390-pixel mobile widths. Both renders
+  had six metrics, no horizontal overflow, no yellow alert blocks, and raw
+  inventory collapsed by default. Nine parser fixtures and nine app-page
+  fixtures passed.
+- Researched official Omnissa monitoring interfaces and documented the next
+  collection phases in `docs/horizon-monitoring.md`. Credential-free Horizon
+  process runtime telemetry is the recommended next addition. Pod component,
+  session, machine, pool, farm, gateway, and event visibility should use a
+  separately configured read-only Horizon API identity or centralized Event
+  Database/Syslog path.
+- Rebuilt the in-place 0.6.13 overlay package with SHA256
+  `4637ce0531b9294856fb811ca35c66e94bca19ca20318350999ae9329c46d1ea`.
+  The Windows MSI remains unchanged at SHA256
+  `f80710d424b963da856396eb1e6643a98563e657b666b08ab88e7f571655bda6`.
 - Corrected the FactoryTalk page after field feedback showed speculative UI
   heuristics producing a large false-positive issue count. Only the collector's
   `health_issues` result and stopped core services now affect health. Non-core

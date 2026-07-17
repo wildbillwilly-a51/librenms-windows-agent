@@ -392,6 +392,68 @@ foreach ($logged_on_users as $row) {
     $logged_on_user_sessions[] = $row;
 }
 
+$horizon_detected = (int) ($horizon_summary['detected'] ?? 0) === 1;
+$horizon_client_only = ! $horizon_detected && ((int) ($horizon_summary['client_detected'] ?? 0) === 1 || strtolower((string) ($horizon_summary['state'] ?? '')) === 'client_only');
+$horizon_health_issue_count = (int) ($horizon_summary['health_issues'] ?? 0);
+$horizon_reported_next_action = trim((string) ($horizon_summary['next_action'] ?? ''));
+$horizon_attention = [];
+
+if ($horizon_detected && $horizon_health_issue_count > 0) {
+    foreach ($horizon_services as $service) {
+        $start_mode = strtolower((string) ($service['start_mode'] ?? ''));
+        if (in_array($start_mode, ['disabled', 'manual'], true) || strtolower((string) ($service['state'] ?? '')) === 'running') {
+            continue;
+        }
+
+        $horizon_attention[] = [
+            'title' => 'Required service is not running: ' . (string) ($service['display'] ?? $service['name'] ?? 'unknown'),
+            'detail' => 'Current state: ' . (string) ($service['state'] ?? 'unknown') . '; startup: ' . (string) ($service['start_mode'] ?? 'unknown'),
+            'action' => 'Check the service and related Horizon components.',
+        ];
+    }
+
+    foreach ($horizon_ports as $port) {
+        if ((int) ($port['port'] ?? 0) !== 443 || (int) ($port['listening'] ?? 0) === 1) {
+            continue;
+        }
+
+        $horizon_attention[] = [
+            'title' => 'Required HTTPS listener is unavailable',
+            'detail' => 'TCP 443 is not listening on this Connection Server.',
+            'action' => $horizon_reported_next_action !== '' ? $horizon_reported_next_action : 'Check the Connection Server listener and Windows firewall.',
+        ];
+    }
+
+    foreach ($horizon_certificates as $certificate) {
+        $expired = (int) ($certificate['expired'] ?? 0) === 1;
+        $critical = (int) ($certificate['expiring_critical'] ?? 0) === 1;
+        if (! $expired && ! $critical) {
+            continue;
+        }
+
+        $horizon_attention[] = [
+            'title' => $expired ? 'Horizon server certificate is expired' : 'Horizon server certificate expires soon',
+            'detail' => (string) ($certificate['subject'] ?? 'Unknown certificate') . '; ' . (string) ($certificate['days_remaining'] ?? 'unknown') . ' day(s) remaining',
+            'action' => 'Review the Horizon server certificate and its binding.',
+        ];
+    }
+
+    if (empty($horizon_attention)) {
+        $horizon_attention[] = [
+            'title' => 'Horizon health issues were reported',
+            'detail' => $horizon_health_issue_count . ' issue(s) were reported by the Horizon health collector.',
+            'action' => $horizon_reported_next_action !== '' ? $horizon_reported_next_action : 'Review Horizon service, listener, and certificate evidence.',
+        ];
+    }
+}
+
+$horizon_section_state = $section_state($horizon_summary['state'] ?? 'not_detected', $horizon_health_issue_count);
+$horizon_section_summary = $horizon_detected
+    ? $metric('Health issues', $horizon_health_issue_count) . ' ' . $metric('Services down', $horizon_summary['services_not_running'] ?? '0') . ' ' . $metric('HTTPS', ((int) ($horizon_summary['ports_missing'] ?? 0) === 0 ? 'Listening' : 'Missing')) . ' ' . $metric('Certs expiring', $horizon_summary['certificates_expiring'] ?? '0')
+    : ($horizon_client_only
+        ? $metric('Mode', 'Client only') . ' ' . $metric('Services', $horizon_summary['services_total'] ?? '0') . ' ' . $metric('Processes', $horizon_summary['processes_total'] ?? '0')
+        : $metric('Detected', '0'));
+
 $factorytalk_detected = (int) ($factorytalk_summary['detected'] ?? 0) === 1;
 $factorytalk_active_connections = $sum_field($factorytalk_linx_connections, 'active');
 $factorytalk_transactions_in_use = $sum_field($factorytalk_linx_transactions, 'in_use');
@@ -468,8 +530,8 @@ $sections = [
     ],
     'horizon' => [
         'title' => 'Horizon',
-        'state' => $section_state($horizon_summary['state'] ?? 'not_detected', (int) ($horizon_summary['health_issues'] ?? 0)),
-        'summary' => $metric('Detected', $horizon_summary['detected'] ?? '0') . ' ' . $metric('Services down', $horizon_summary['services_not_running'] ?? '0') . ' ' . $metric('Issues', $horizon_summary['health_issues'] ?? '0'),
+        'state' => $horizon_section_state,
+        'summary' => $horizon_section_summary,
     ],
     'factorytalk' => [
         'title' => 'FactoryTalk',
@@ -649,25 +711,88 @@ if (! empty($iis_rows)) {
 }
 
 $horizon_details = '';
-if ($has_role_details($horizon_summary, $horizon_services)) {
-    $horizon_details .= $table(['Service', 'Display', 'Role', 'State', 'Start mode', 'Path'], $issue_first($horizon_services, static fn (array $row): int => strtolower((string) ($row['state'] ?? '')) === 'running' ? 0 : 1), static function ($row) use ($esc, $state_label): string {
-        return '<td>' . $esc($row['name'] ?? '') . '</td><td>' . $esc($row['display'] ?? '') . '</td><td>' . $esc($row['role'] ?? '') . '</td><td>' . $state_label($row['state'] ?? 'unknown') . '</td><td>' . $esc($row['start_mode'] ?? '') . '</td><td>' . $esc($row['path'] ?? '') . '</td>';
-    });
-}
-if ($has_role_details($horizon_summary, $horizon_processes)) {
-    $horizon_details .= $table(['Process', 'PID', 'Path'], $horizon_processes, static function ($row) use ($esc): string {
-        return '<td>' . $esc($row['name'] ?? '') . '</td><td>' . $esc($row['pid'] ?? '') . '</td><td>' . $esc($row['path'] ?? '') . '</td>';
-    });
-}
-if ($has_role_details($horizon_summary, $horizon_ports)) {
-    $horizon_details .= $table(['Port', 'Listening', 'Addresses'], $issue_first($horizon_ports, static fn (array $row): int => (int) ($row['listening'] ?? 0) === 1 ? 0 : 1, 'port'), static function ($row) use ($esc, $state_label): string {
-        return '<td>' . $esc($row['port'] ?? '') . '</td><td>' . $state_label($row['listening'] ?? '0') . '</td><td>' . $esc($row['addresses'] ?? '') . '</td>';
-    });
-}
-if ($has_role_details($horizon_summary, $horizon_certificates)) {
-    $horizon_details .= $table(['Store', 'Subject', 'Issuer', 'Expires UTC', 'Days', 'Expired', 'Private key', 'Thumbprint'], $issue_first($horizon_certificates, static fn (array $row): int => ((int) ($row['expired'] ?? 0) * 10000) + max(0, 3650 - (int) ($row['days_remaining'] ?? 3650)), 'subject'), static function ($row) use ($esc, $state_label): string {
-        return '<td>' . $esc($row['store'] ?? '') . '</td><td>' . $esc($row['subject'] ?? '') . '</td><td>' . $esc($row['issuer'] ?? '') . '</td><td>' . $esc($row['not_after_utc'] ?? '') . '</td><td>' . $esc($row['days_remaining'] ?? '') . '</td><td>' . $state_label($row['expired'] ?? '0', ['0']) . '</td><td>' . $esc($row['has_private_key'] ?? '0') . '</td><td>' . $esc($row['thumbprint'] ?? '') . '</td>';
-    });
+if ($horizon_detected || $horizon_client_only) {
+    $horizon_status_class = [
+        'success' => 'success',
+        'warning' => 'warning',
+        'danger' => 'danger',
+    ][$horizon_section_state['class'] ?? ''] ?? 'info';
+    $horizon_status_text = $horizon_client_only
+        ? 'Horizon Client evidence was detected; server health is not evaluated.'
+        : ($horizon_health_issue_count === 0
+            ? 'No Horizon health issues were reported.'
+            : $horizon_health_issue_count . ' Horizon health issue(s) were reported.');
+    $horizon_next_action = $horizon_health_issue_count > 0
+        ? ($horizon_reported_next_action !== '' ? $horizon_reported_next_action : (string) ($horizon_attention[0]['action'] ?? 'Review Horizon service, listener, and certificate evidence.'))
+        : '';
+    $horizon_required_https = $horizon_detected
+        ? ((int) ($horizon_summary['ports_missing'] ?? 0) === 0 ? 'Listening' : 'Missing')
+        : 'N/A';
+    $horizon_listener_detail = $horizon_detected
+        ? (string) ($horizon_summary['ports_listening'] ?? '0') . ' of ' . (string) ($horizon_summary['ports_total'] ?? '0') . ' configured'
+        : 'Server not detected';
+    $horizon_certificate_total = $horizon_detected ? (string) ($horizon_summary['certificates_total'] ?? '0') : 'N/A';
+    $horizon_certificate_detail = $horizon_detected
+        ? (string) ($horizon_summary['certificates_expired'] ?? '0') . ' expired'
+        : 'Server not detected';
+    $horizon_certificate_expiring = $horizon_detected ? (string) ($horizon_summary['certificates_expiring'] ?? '0') : 'N/A';
+
+    $horizon_details .= '<div class="windows-agent-role-dashboard">';
+    $horizon_details .= '<div class="windows-agent-role-status windows-agent-role-status-' . $esc($horizon_status_class) . '">';
+    $horizon_details .= '<span class="label label-' . $esc($horizon_status_class) . '">' . $esc($horizon_section_state['text'] ?? 'Unknown') . '</span> ';
+    $horizon_details .= '<strong>' . $esc($horizon_status_text) . '</strong>';
+    if ($horizon_next_action !== '') {
+        $horizon_details .= ' <span class="windows-agent-role-action"><strong>Next:</strong> ' . $esc($horizon_next_action) . '</span>';
+    }
+    $horizon_details .= '<span class="text-muted windows-agent-role-collected">Collected ' . $esc($data['last_agent_utc'] ?? 'unknown') . '</span></div>';
+
+    $horizon_stats = [
+        ['Services down', $horizon_detected ? (string) ($horizon_summary['services_not_running'] ?? '0') : 'N/A', (string) ($horizon_summary['services_total'] ?? '0') . ' discovered'],
+        ['Processes', $horizon_summary['processes_total'] ?? '0', $horizon_client_only ? 'Client inventory' : 'Server inventory'],
+        ['Required HTTPS', $horizon_required_https, 'TCP 443'],
+        ['Listeners', $horizon_detected ? (string) ($horizon_summary['ports_listening'] ?? '0') : 'N/A', $horizon_listener_detail],
+        ['Certificates', $horizon_certificate_total, $horizon_certificate_detail],
+        ['Expiring', $horizon_certificate_expiring, 'Configured warning window'],
+    ];
+    $horizon_details .= '<div class="row windows-agent-role-stats">';
+    foreach ($horizon_stats as [$label, $value, $detail]) {
+        $horizon_details .= '<div class="col-sm-4 col-lg-2 windows-agent-role-stat"><div class="text-muted windows-agent-role-stat-label">' . $esc($label) . '</div><div class="windows-agent-role-stat-value">' . $esc($value) . '</div><div class="text-muted windows-agent-role-stat-detail">' . $esc($detail) . '</div></div>';
+    }
+    $horizon_details .= '</div>';
+
+    if (! empty($horizon_attention)) {
+        $horizon_details .= '<div class="windows-agent-role-attention"><h4>Reported Health Issues <small>' . $horizon_health_issue_count . '</small></h4><ul>';
+        foreach ($horizon_attention as $attention) {
+            $horizon_details .= '<li><strong>' . $esc($attention['title'] ?? 'Horizon health issue') . '</strong> ';
+            $horizon_details .= '<span class="text-muted">' . $esc($attention['detail'] ?? '') . '</span>';
+            $horizon_details .= '<div class="text-muted windows-agent-role-attention-action"><strong>Next:</strong> ' . $esc($attention['action'] ?? 'Review Horizon diagnostics.') . '</div></li>';
+        }
+        $horizon_details .= '</ul></div>';
+    }
+
+    $horizon_raw_details = '';
+    if ($has_role_details($horizon_summary, $horizon_services)) {
+        $horizon_raw_details .= '<h4>Service Inventory</h4>' . $table(['Service', 'Display', 'Role', 'State', 'Start mode', 'Path'], $issue_first($horizon_services, static fn (array $row): int => strtolower((string) ($row['state'] ?? '')) === 'running' ? 0 : 1), static function ($row) use ($esc, $state_label): string {
+            return '<td>' . $esc($row['name'] ?? '') . '</td><td>' . $esc($row['display'] ?? '') . '</td><td>' . $esc($row['role'] ?? '') . '</td><td>' . $state_label($row['state'] ?? 'unknown') . '</td><td>' . $esc($row['start_mode'] ?? '') . '</td><td>' . $esc($row['path'] ?? '') . '</td>';
+        });
+    }
+    if ($has_role_details($horizon_summary, $horizon_processes)) {
+        $horizon_raw_details .= '<h4>Process Inventory</h4>' . $table(['Process', 'PID', 'Path'], $horizon_processes, static function ($row) use ($esc): string {
+            return '<td>' . $esc($row['name'] ?? '') . '</td><td>' . $esc($row['pid'] ?? '') . '</td><td>' . $esc($row['path'] ?? '') . '</td>';
+        });
+    }
+    if ($has_role_details($horizon_summary, $horizon_ports)) {
+        $horizon_raw_details .= '<h4>Listener Inventory</h4>' . $table(['Port', 'Required for health', 'Listening', 'Addresses'], $issue_first($horizon_ports, static fn (array $row): int => (int) ($row['port'] ?? 0) === 443 && (int) ($row['listening'] ?? 0) !== 1 ? 1 : 0, 'port'), static function ($row) use ($esc, $state_label): string {
+            return '<td>' . $esc($row['port'] ?? '') . '</td><td>' . ((int) ($row['port'] ?? 0) === 443 ? 'Yes' : 'No') . '</td><td>' . $state_label($row['listening'] ?? '0') . '</td><td>' . $esc($row['addresses'] ?? '') . '</td>';
+        });
+    }
+    if ($has_role_details($horizon_summary, $horizon_certificates)) {
+        $horizon_raw_details .= '<h4>Host Certificates</h4>' . $table(['Store', 'Subject', 'Issuer', 'Expires UTC', 'Days', 'Expired', 'Private key', 'Thumbprint'], $issue_first($horizon_certificates, static fn (array $row): int => ((int) ($row['expired'] ?? 0) * 10000) + max(0, 3650 - (int) ($row['days_remaining'] ?? 3650)), 'subject'), static function ($row) use ($esc, $state_label): string {
+            return '<td>' . $esc($row['store'] ?? '') . '</td><td>' . $esc($row['subject'] ?? '') . '</td><td>' . $esc($row['issuer'] ?? '') . '</td><td>' . $esc($row['not_after_utc'] ?? '') . '</td><td>' . $esc($row['days_remaining'] ?? '') . '</td><td>' . $state_label($row['expired'] ?? '0', ['0']) . '</td><td>' . $esc($row['has_private_key'] ?? '0') . '</td><td>' . $esc($row['thumbprint'] ?? '') . '</td>';
+        });
+    }
+    $horizon_details .= $render_disclosure('windows-agent-horizon-raw', 'Inventory and raw diagnostics', $horizon_raw_details, (string) count($horizon_services) . ' services, ' . count($horizon_processes) . ' processes');
+    $horizon_details .= '</div>';
 }
 
 $factorytalk_details = '';
@@ -698,14 +823,14 @@ if ($factorytalk_detected) {
         ? 'N/A'
         : number_format($factorytalk_transaction_utilization, 1) . '%';
 
-    $factorytalk_details .= '<div class="windows-agent-factorytalk-dashboard">';
-    $factorytalk_details .= '<div class="windows-agent-factorytalk-status windows-agent-factorytalk-status-' . $esc($factorytalk_status_class) . '">';
+    $factorytalk_details .= '<div class="windows-agent-role-dashboard">';
+    $factorytalk_details .= '<div class="windows-agent-role-status windows-agent-role-status-' . $esc($factorytalk_status_class) . '">';
     $factorytalk_details .= '<span class="label label-' . $esc($factorytalk_status_class) . '">' . $esc($factorytalk_section_state['text'] ?? 'Unknown') . '</span> ';
     $factorytalk_details .= '<strong>' . $esc($factorytalk_status_text) . '</strong>';
     if ($factorytalk_next_action !== '') {
-        $factorytalk_details .= ' <span class="windows-agent-factorytalk-action"><strong>Next:</strong> ' . $esc($factorytalk_next_action) . '</span>';
+        $factorytalk_details .= ' <span class="windows-agent-role-action"><strong>Next:</strong> ' . $esc($factorytalk_next_action) . '</span>';
     }
-    $factorytalk_details .= '<span class="text-muted windows-agent-factorytalk-collected">Collected ' . $esc($data['last_agent_utc'] ?? 'unknown') . '</span></div>';
+    $factorytalk_details .= '<span class="text-muted windows-agent-role-collected">Collected ' . $esc($data['last_agent_utc'] ?? 'unknown') . '</span></div>';
 
     $factorytalk_stats = [
         ['Core services down', $factorytalk_summary['core_services_not_running'] ?? '0', 'Service health'],
@@ -715,18 +840,18 @@ if ($factorytalk_detected) {
         ['Transactions', $transaction_display, $factorytalk_transactions_in_use . ' of ' . $factorytalk_transaction_pool_size],
         ['Native snapshot', $native_display_state, $native_snapshot_detail],
     ];
-    $factorytalk_details .= '<div class="row windows-agent-factorytalk-stats">';
+    $factorytalk_details .= '<div class="row windows-agent-role-stats">';
     foreach ($factorytalk_stats as [$label, $value, $detail]) {
-        $factorytalk_details .= '<div class="col-sm-4 col-lg-2 windows-agent-factorytalk-stat"><div class="text-muted windows-agent-factorytalk-stat-label">' . $esc($label) . '</div><div class="windows-agent-factorytalk-stat-value">' . $esc($value) . '</div><div class="text-muted windows-agent-factorytalk-stat-detail">' . $esc($detail) . '</div></div>';
+        $factorytalk_details .= '<div class="col-sm-4 col-lg-2 windows-agent-role-stat"><div class="text-muted windows-agent-role-stat-label">' . $esc($label) . '</div><div class="windows-agent-role-stat-value">' . $esc($value) . '</div><div class="text-muted windows-agent-role-stat-detail">' . $esc($detail) . '</div></div>';
     }
     $factorytalk_details .= '</div>';
 
     if (! empty($factorytalk_attention)) {
-        $factorytalk_details .= '<div class="windows-agent-factorytalk-attention"><h4>Reported Health Issues <small>' . $factorytalk_health_issue_count . '</small></h4><ul>';
+        $factorytalk_details .= '<div class="windows-agent-role-attention"><h4>Reported Health Issues <small>' . $factorytalk_health_issue_count . '</small></h4><ul>';
         foreach ($factorytalk_attention as $attention) {
             $factorytalk_details .= '<li><strong>' . $esc($attention['title'] ?? 'FactoryTalk health issue') . '</strong> ';
             $factorytalk_details .= '<span class="text-muted">' . $esc($attention['detail'] ?? '') . '</span>';
-            $factorytalk_details .= '<div class="text-muted windows-agent-factorytalk-attention-action"><strong>Next:</strong> ' . $esc($attention['action'] ?? 'Review the service inventory.') . '</div></li>';
+            $factorytalk_details .= '<div class="text-muted windows-agent-role-attention-action"><strong>Next:</strong> ' . $esc($attention['action'] ?? 'Review the service inventory.') . '</div></li>';
         }
         $factorytalk_details .= '</ul></div>';
     }
@@ -1008,7 +1133,7 @@ $roles_tab .= $render_section_summary('iis', 'IIS', $sections['iis']['state'], $
 $roles_tab .= $render_section_summary('horizon', 'VMware Horizon', $sections['horizon']['state'], $sections['horizon']['summary'], $horizon_details, [
     ['label' => 'Horizon State and Issues', 'key' => 'windows-agent_horizon_state_health'],
     ['label' => 'Horizon Listeners and Certificates', 'key' => 'windows-agent_horizon_edges'],
-]);
+], 'Operational view', 'Trends');
 $factorytalk_graphs = [
     ['label' => 'FactoryTalk State and Issues', 'key' => 'windows-agent_factorytalk_state_health'],
 ];
@@ -1080,27 +1205,27 @@ echo '<style>
 .windows-agent-subsection { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(127, 127, 127, 0.25); }
 .windows-agent-subsection-body { margin-top: 12px; }
 .windows-agent-disclosure-summary { margin-left: 6px; }
-.windows-agent-factorytalk-status { margin-bottom: 0; padding: 8px 10px; border-left: 3px solid #999; border-bottom: 1px solid rgba(127, 127, 127, 0.2); background: transparent; }
-.windows-agent-factorytalk-status-success { border-left-color: #5cb85c; }
-.windows-agent-factorytalk-status-warning { border-left-color: #f0ad4e; }
-.windows-agent-factorytalk-status-danger { border-left-color: #d9534f; }
-.windows-agent-factorytalk-action { margin-left: 10px; font-weight: normal; }
-.windows-agent-factorytalk-collected { float: right; margin-left: 10px; font-size: 11px; font-weight: normal; }
-.windows-agent-factorytalk-stats { margin: 0 0 18px; border-bottom: 1px solid rgba(127, 127, 127, 0.25); }
-.windows-agent-factorytalk-stat { min-height: 78px; padding-top: 12px; padding-bottom: 10px; border-right: 1px solid rgba(127, 127, 127, 0.2); }
-.windows-agent-factorytalk-stat:last-child { border-right: 0; }
-.windows-agent-factorytalk-stat-label { font-size: 12px; }
-.windows-agent-factorytalk-stat-value { margin: 2px 0; font-size: 18px; font-weight: 600; line-height: 1.2; }
-.windows-agent-factorytalk-stat-detail { font-size: 11px; }
-.windows-agent-factorytalk-attention { margin: 0 0 14px; }
-.windows-agent-factorytalk-attention h4 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
-.windows-agent-factorytalk-attention ul { margin: 0; padding: 0; list-style: none; }
-.windows-agent-factorytalk-attention li { padding: 6px 0; border-top: 1px solid rgba(127, 127, 127, 0.2); }
-.windows-agent-factorytalk-attention-action { margin-top: 2px; }
+.windows-agent-role-status { margin-bottom: 0; padding: 8px 10px; border-left: 3px solid #999; border-bottom: 1px solid rgba(127, 127, 127, 0.2); background: transparent; }
+.windows-agent-role-status-success { border-left-color: #5cb85c; }
+.windows-agent-role-status-warning { border-left-color: #f0ad4e; }
+.windows-agent-role-status-danger { border-left-color: #d9534f; }
+.windows-agent-role-action { margin-left: 10px; font-weight: normal; }
+.windows-agent-role-collected { float: right; margin-left: 10px; font-size: 11px; font-weight: normal; }
+.windows-agent-role-stats { margin: 0 0 18px; border-bottom: 1px solid rgba(127, 127, 127, 0.25); }
+.windows-agent-role-stat { min-height: 78px; padding-top: 12px; padding-bottom: 10px; border-right: 1px solid rgba(127, 127, 127, 0.2); }
+.windows-agent-role-stat:last-child { border-right: 0; }
+.windows-agent-role-stat-label { font-size: 12px; }
+.windows-agent-role-stat-value { margin: 2px 0; font-size: 18px; font-weight: 600; line-height: 1.2; }
+.windows-agent-role-stat-detail { font-size: 11px; }
+.windows-agent-role-attention { margin: 0 0 14px; }
+.windows-agent-role-attention h4 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+.windows-agent-role-attention ul { margin: 0; padding: 0; list-style: none; }
+.windows-agent-role-attention li { padding: 6px 0; border-top: 1px solid rgba(127, 127, 127, 0.2); }
+.windows-agent-role-attention-action { margin-top: 2px; }
 @media (max-width: 767px) {
-    .windows-agent-factorytalk-stat { min-height: 0; border-right: 0; border-bottom: 1px solid rgba(127, 127, 127, 0.15); }
-    .windows-agent-factorytalk-action,
-    .windows-agent-factorytalk-collected { display: block; float: none; margin: 4px 0 0; }
+    .windows-agent-role-stat { min-height: 0; border-right: 0; border-bottom: 1px solid rgba(127, 127, 127, 0.15); }
+    .windows-agent-role-action,
+    .windows-agent-role-collected { display: block; float: none; margin: 4px 0 0; }
     .windows-agent-disclosure-summary { display: block; margin: 6px 0 0; }
 }
 </style>';

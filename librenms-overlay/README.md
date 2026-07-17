@@ -29,6 +29,14 @@ counts come only from the FactoryTalk collector's scored health result and
 stopped core services. Optional listeners, non-core services, runtime/native
 availability, cumulative send failures, and transaction utilization remain
 informational and do not change section health.
+
+Horizon uses the same compact operational pattern: collector-confirmed health,
+next action, six key service/listener/certificate metrics, and collapsed raw
+inventory appear before its two trend graphs. Issue rows correspond only to
+the Horizon collector's scored automatic-service, required TCP 443,
+expired-certificate, and critical-expiry checks. Optional configured listeners
+remain visible without becoming health issues.
+
 Startup type, current state, and status are displayed as service data only; they
 are not used as inclusion or exclusion filters. Role, AD/DFSR, and logged-on
 user sections are visibility-only. Auto-classified services, logged-on user
