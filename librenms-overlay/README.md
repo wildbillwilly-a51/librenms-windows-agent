@@ -24,9 +24,11 @@ banner, six key metrics, actionable conditions, and the five busiest runtime
 processes appear before any inventory. Complete process metrics, product and
 service inventory, ports, native Counter Monitor output, and Linx counter rows
 remain available in nested disclosures. Primary FactoryTalk trends appear
-first, while secondary graphs are one additional disclosure deeper. A
-transaction-pool utilization of 80 percent or greater is a display-only review
-cue; it does not create an alert or change an RRD schema.
+first, while secondary graphs are one additional disclosure deeper. Issue
+counts come only from the FactoryTalk collector's scored health result and
+stopped core services. Optional listeners, non-core services, runtime/native
+availability, cumulative send failures, and transaction utilization remain
+informational and do not change section health.
 Startup type, current state, and status are displayed as service data only; they
 are not used as inclusion or exclusion filters. Role, AD/DFSR, and logged-on
 user sections are visibility-only. Auto-classified services, logged-on user

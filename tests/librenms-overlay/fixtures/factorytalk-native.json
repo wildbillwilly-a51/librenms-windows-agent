@@ -79,7 +79,7 @@
         "FactoryTalk Runtime Metrics",
         "Operational view",
         "Trends",
-        "No actionable FactoryTalk conditions were detected",
+        "No FactoryTalk health issues were reported.",
         "Top FactoryTalk Processes",
         "Show all process metrics",
         "Inventory and raw diagnostics",
@@ -99,7 +99,7 @@
       "not_contains": [
         "PRIVATE_CONTROLLER",
         "198.51.100.4",
-        "condition(s) need attention"
+        "Reported Health Issues"
       ]
     }
   }

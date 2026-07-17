@@ -65,7 +65,10 @@ memory, Linx connections, transaction utilization, native snapshot state, and
 the five busiest FactoryTalk processes. Complete product, service, process,
 port, and native-counter rows remain available under `Inventory and raw
 diagnostics`; additional graphs are also collapsed separately. These display
-cues do not create LibreNMS alerts.
+cues do not create LibreNMS alerts. Only the FactoryTalk collector's scored
+health result and stopped core services are presented as issues. Optional
+listeners, non-core services, runtime/native availability, and cumulative
+counter values remain informational.
 
 ### 4. Install Or Update The Windows Agent
 

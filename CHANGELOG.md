@@ -2,6 +2,11 @@
 
 ## 2026-07-16
 
+- Corrected the FactoryTalk operational view so only collector-scored health
+  issues and stopped core services affect issue state. Removed speculative
+  issue promotion for optional services/listeners, supplemental-data
+  availability, cumulative counters, and transaction utilization, and replaced
+  the oversized warning panel with a compact neutral status row.
 - Reworked the FactoryTalk application page into an issue-first operational
   view with recommended next actions, six key metrics, top-five runtime
   processes, nested inventory/raw diagnostics, and secondary graph disclosure.

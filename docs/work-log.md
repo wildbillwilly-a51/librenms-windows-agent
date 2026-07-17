@@ -2,6 +2,20 @@
 
 ## 2026-07-16
 
+- Corrected the FactoryTalk page after field feedback showed speculative UI
+  heuristics producing a large false-positive issue count. Only the collector's
+  `health_issues` result and stopped core services now affect health. Non-core
+  services, optional listeners, runtime/native availability, cumulative send
+  failures, and transaction utilization remain informational. Replaced the
+  large colored alert and repeated issue cards with a compact status row and
+  concise health list.
+- Rebuilt the corrected 0.6.13 overlay package with SHA256
+  `a3a21f87e3dc98731b6b4caf5fe271867a9b4224e3cb06a2501040b84ca0c8d7`.
+  The deliberately noisy informational fixture reports zero health issues,
+  while the stopped-core-service fixture reports exactly one. All 53 portable
+  agent tests, complete PHP lint, eight parser fixtures, eight app-page
+  fixtures, shell syntax, and healthy/issue headless renders passed. The MSI
+  remains unchanged.
 - Reworked the FactoryTalk app-page presentation without changing collection,
   alerts, or RRD schemas. The operational view now leads with status, next
   action, six key metrics, actionable conditions, and the top five runtime

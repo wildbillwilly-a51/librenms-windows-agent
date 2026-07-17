@@ -8,14 +8,16 @@
   "agent_data": {
     "windows_agent": "version=0.6.13.0 protocol=checkmk host=factorytalk-counter-unavailable utc=2026-07-16T19:00:00Z",
     "windows_agent_windows_os": "caption=\"Microsoft Windows Server 2022 Standard\"",
-    "windows_agent_factorytalk_summary": "state=ok detected=1 products_total=1 services_total=1 services_not_running=0 core_services_not_running=0 processes_total=1 ports_total=1 ports_listening=1 health_issues=0",
+    "windows_agent_factorytalk_summary": "state=ok detected=1 products_total=1 services_total=2 services_not_running=1 core_services_not_running=0 processes_total=1 ports_total=2 ports_listening=1 health_issues=0",
     "windows_agent_factorytalk_products": "name=\"FactoryTalk Example Platform\" version=1.0 publisher=\"Example Automation\" role=communications install_location=\"C:\\\\Program Files\\\\Example Automation\"",
-    "windows_agent_factorytalk_services": "name=ExampleCommunicationService display=\"Example Communication Service\" role=communications core=1 state=Running start_mode=Auto",
+    "windows_agent_factorytalk_services": "name=ExampleCommunicationService display=\"Example Communication Service\" role=communications core=1 state=Running start_mode=Auto\nname=ExampleOptionalService display=\"Example Optional Service\" role=optional core=0 state=Stopped start_mode=Manual",
     "windows_agent_factorytalk_processes": "name=Communication.exe pid=4100 role=communications path=\"C:\\\\Program Files\\\\Example Automation\\\\Communication.exe\"",
-    "windows_agent_factorytalk_ports": "name=factorytalk_linx port=4245 listening=1 addresses=0.0.0.0",
+    "windows_agent_factorytalk_ports": "name=factorytalk_linx port=4245 listening=1 addresses=0.0.0.0\nname=optional_component port=9111 listening=0 addresses=\"\"",
     "windows_agent_factorytalk_runtime_summary": "state=ok processes_total=1 cpu_percent=3.5 working_set_bytes=104857600 private_bytes=73400320 handle_count=100 thread_count=12 io_read_bytes_per_sec=1024 io_write_bytes_per_sec=512 oldest_uptime_seconds=3600 reason=none",
     "windows_agent_factorytalk_runtime_processes": "name=Communication.exe pid=4100 role=communications cpu_percent=3.5 working_set_bytes=104857600 private_bytes=73400320 handle_count=100 thread_count=12 io_read_bytes_per_sec=1024 io_write_bytes_per_sec=512 uptime_seconds=3600",
-    "windows_agent_factorytalk_native_summary": "mode=local state=warning enabled=1 available=0 signature_valid=0 version=unknown snapshot_age_seconds=-1 snapshot_duration_ms=0 last_error=counter_monitor_not_found"
+    "windows_agent_factorytalk_native_summary": "mode=local state=warning enabled=1 available=0 signature_valid=0 version=unknown snapshot_age_seconds=-1 snapshot_duration_ms=0 last_error=counter_monitor_not_found",
+    "windows_agent_factorytalk_linx_backplane": "instance=1 slot=0 packets_received=100 packets_sent=90 send_failures=25",
+    "windows_agent_factorytalk_linx_transactions": "instance=1 in_use=90 pool_size=100"
   },
   "expect": {
     "status_prefix": "OK:",
@@ -34,16 +36,19 @@
     },
     "app_page": {
       "contains": [
-        "Needs Attention",
-        "Native Counter Monitor snapshot needs review",
+        "No FactoryTalk health issues were reported.",
+        "Unavailable",
         "counter_monitor_not_found",
-        "Check Counter Monitor availability",
         "Top FactoryTalk Processes",
         "Inventory and raw diagnostics"
       ],
       "not_contains": [
         "PRIVATE_CONTROLLER",
-        "198.51.100.4"
+        "198.51.100.4",
+        "Reported Health Issues",
+        "Native Counter Monitor snapshot needs review",
+        "Expected listener is unavailable",
+        "transaction pool utilization is high"
       ]
     }
   }
