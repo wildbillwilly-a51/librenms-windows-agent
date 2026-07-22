@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-07-22 (unreleased)
+## 0.6.15 - 2026-07-22
 
 - Added an opt-in centralized Horizon API collector for one bounded query per
   pod from LibreNMS, with fixed VCS1/VCS2 bootstrap priority, validated dynamic
@@ -18,6 +18,9 @@
 - Made rollback remove the marker-verified central Horizon cron entry when the
   collector itself is removed, while retaining credentials, pod definitions,
   and last-good state.
+- Promoted the centralized Horizon implementation as overlay-only release
+  0.6.15. The Windows agent and MSI remain at 0.6.14 because endpoint code did
+  not change.
 
 ## 2026-07-17
 

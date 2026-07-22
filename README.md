@@ -77,19 +77,16 @@ Horizon configuration replication (AD LDS) and per-member Horizon domain
 access are kept separate from the Windows/Microsoft AD collector. Clone-pool
 health defaults to warning when at least 50% of unused machines are not ready,
 critical at 90%, and critical whenever no unused machine is ready. Full pod,
-pool, and machine-state counts remain in compact disclosures. The API
-Release 0.6.14's Windows-side API prototype is disabled by default and uses a
-one-time machine-protected credential file rather than a password in
-configuration. Current source also contains its successor: a centralized,
-credential-free-on-Windows collector that runs once per pod from LibreNMS.
-Release 0.6.14 includes these Horizon additions in the Windows agent and
-LibreNMS overlay. See
+pool, and machine-state counts remain in compact disclosures. Release 0.6.14's
+Windows-side API prototype is disabled by default and uses a one-time
+machine-protected credential file rather than a password in configuration.
+Overlay release 0.6.15 adds its centralized, credential-free-on-Windows
+successor, which runs once per pod from LibreNMS. See
 [Horizon monitoring design](docs/horizon-monitoring.md) for scope and setup.
 
-### Central Horizon API Collector (Pre-release)
+### Central Horizon API Collector (Overlay 0.6.15)
 
-The central implementation is intended for candidate-overlay validation before
-the next release. Keep the Windows agent on every Horizon server for local
+Keep the Windows agent on every Horizon server for local
 service/process/listener/certificate telemetry; do not place Horizon API
 credentials on those servers. On exactly one LibreNMS management node, the
 overlay helper stores one read-only service credential in LibreNMS' protected
@@ -103,7 +100,7 @@ pod-identity validation. Gateways are displayed but never used as API targets.
 The configured display device is only the LibreNMS page where pod data appears;
 it is not the preferred API endpoint or a monitoring dependency.
 
-Candidate setup, after the overlay has been installed:
+Setup after the overlay has been installed:
 
 ```bash
 cd /opt/librenms
@@ -282,7 +279,7 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Install a specific overlay version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.14
+curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.15
 ```
 
 Preview without changing the node:

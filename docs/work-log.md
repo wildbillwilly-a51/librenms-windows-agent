@@ -30,6 +30,10 @@
   was `3bf8e1374f0d5a1fc6948a47954ddfe68a313b30ed4edf14d63a27f8b8f828f8`.
   No MSI was needed because the Windows agent did not change, and no live
   deployment or Horizon authentication was performed.
+- Promoted the centralized implementation as overlay-only release 0.6.15 so
+  the existing one-command LibreNMS installer remains unchanged. The Windows
+  MSI remains 0.6.14 because no endpoint code changed. Final overlay SHA256:
+  `295949ee3e3b19a062837d928b9658fbafb05c429fc9e6a6a5b884f20b9cf074`.
 
 ## 2026-07-17
 

@@ -47,7 +47,7 @@ and statistical samples, and Horizon can also emit those events as Syslog.
 
 Release 0.6.14 implements local process telemetry and the initial disabled
 Windows-side API prototype without changing the existing Horizon RRD schema.
-The current unreleased source adds the centralized successor:
+Overlay release 0.6.15 adds the centralized successor:
 
 1. `windows_agent_horizon_runtime_summary` reports state, process count, CPU,
    working set, private bytes, handles, threads, read/write bytes per second,
@@ -187,8 +187,8 @@ waves do not page the team from one sample.
 
 ## Live Validation and Later Scope
 
-The remaining release gate is a non-production pod validation, not more local
-architecture work. Validate exact endpoint/field compatibility, service-account
+The remaining deployment gate is a non-production pod validation, not more
+local architecture work. Validate exact endpoint/field compatibility, service-account
 authorization, TLS trust, discovered-member names, pool state mix, the chosen
 display device, and simulated VCS1-to-VCS2 failover without stopping services
 or changing firewall/DNS. Only after the manual run and several five-minute
