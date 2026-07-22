@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-07-22 (unreleased)
+
+- Added an opt-in centralized Horizon API collector for one bounded query per
+  pod from LibreNMS, with fixed VCS1/VCS2 bootstrap priority, validated dynamic
+  Connection Server failover, gateway exclusion, pod-identity protection, and
+  last-good stale-state retention.
+- Added an atomic configuration helper for protected `.env` credentials,
+  non-secret pod definitions, secure prompting, sanitized status, credential-
+  free DNS/TLS tests, an explicitly invoked read-only API test, and optional
+  five-minute cron management. No secrets are accepted on command lines.
+- Made central Horizon snapshots take precedence over the disabled Windows-side
+  API prototype while preserving local telemetry from every agent. Added stale
+  UI/source timestamps, unknown RRD samples during failures, and fixture tests
+  for security, failover, topology discovery, pagination, pool thresholds,
+  stale retention, and upgrade-safe configuration behavior.
+
 ## 2026-07-17
 
 - Released 0.6.14 with the read-only Horizon integration as an independent

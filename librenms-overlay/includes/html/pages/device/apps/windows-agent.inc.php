@@ -61,6 +61,7 @@ $horizon_gateways = $data['horizon_gateways'] ?? [];
 $horizon_pools_summary = $data['horizon_pools_summary'] ?? [];
 $horizon_pools = $data['horizon_pools'] ?? [];
 $horizon_pool_machine_states = $data['horizon_pool_machine_states'] ?? [];
+$horizon_central_meta = $data['horizon_central_meta'] ?? [];
 $factorytalk_summary = $data['factorytalk_summary'] ?? [];
 $factorytalk_products = $data['factorytalk_products'] ?? [];
 $factorytalk_services = $data['factorytalk_services'] ?? [];
@@ -414,11 +415,15 @@ $horizon_runtime_state = strtolower((string) ($horizon_runtime_summary['state'] 
 $horizon_runtime_available = $horizon_runtime_state === 'ok';
 $horizon_api_state = strtolower((string) ($horizon_api_summary['state'] ?? 'disabled'));
 $horizon_api_enabled = ! in_array($horizon_api_state, ['', 'disabled'], true);
-$horizon_api_available = in_array($horizon_api_state, ['ok', 'partial'], true);
+$horizon_api_available = in_array($horizon_api_state, ['ok', 'partial', 'stale'], true);
 $horizon_api_health_state = strtolower((string) ($horizon_api_summary['health_state'] ?? $horizon_api_state));
+$horizon_api_stale = $horizon_api_state === 'stale' || (int) ($horizon_central_meta['stale'] ?? 0) === 1;
+if ($horizon_api_stale) {
+    $horizon_api_health_state = 'warning';
+}
 $horizon_api_issue_count = (int) ($horizon_api_summary['connection_servers_unhealthy'] ?? 0)
-    + (int) ($horizon_api_summary['horizon_domain_links_unhealthy'] ?? 0)
-    + (int) ($horizon_api_summary['gateways_unhealthy'] ?? 0)
+    + (int) ($horizon_directory_summary['member_links_unhealthy'] ?? 0)
+    + (int) ($horizon_pod_summary['gateways_unhealthy'] ?? 0)
     + (int) ($horizon_pools_summary['pools_warning'] ?? 0)
     + (int) ($horizon_pools_summary['pools_critical'] ?? 0);
 $horizon_attention = [];
@@ -476,9 +481,9 @@ $horizon_section_state = $section_state($horizon_summary['state'] ?? 'not_detect
 $horizon_api_is_critical = $horizon_api_available && $horizon_api_health_state === 'critical';
 $horizon_api_is_warning = $horizon_api_available && in_array($horizon_api_health_state, ['warning', 'partial', 'incomplete'], true);
 if ($horizon_api_is_critical) {
-    $horizon_section_state = ['class' => 'danger', 'text' => 'Critical'];
+    $horizon_section_state = $section_state('critical');
 } elseif ($horizon_api_is_warning && ($horizon_section_state['class'] ?? '') !== 'danger') {
-    $horizon_section_state = ['class' => 'warning', 'text' => 'Warning'];
+    $horizon_section_state = $section_state('warning');
 }
 $horizon_section_summary = $horizon_detected
     ? $metric('Local issues', $horizon_health_issue_count) . ' ' . $metric('Pod', $horizon_api_available ? ucwords((string) ($horizon_pod_summary['state'] ?? 'unknown')) : 'N/A') . ' ' . $metric('Pool issues', $horizon_api_available ? ((int) ($horizon_pools_summary['pools_warning'] ?? 0) + (int) ($horizon_pools_summary['pools_critical'] ?? 0)) : 'N/A') . ' ' . $metric('Ready spares', $horizon_api_available ? ($horizon_pools_summary['spare_ready'] ?? '0') : 'N/A')
@@ -751,9 +756,13 @@ if ($horizon_detected || $horizon_client_only || $horizon_api_enabled) {
     ][$horizon_section_state['class'] ?? ''] ?? 'info';
     $horizon_status_text = $horizon_client_only
         ? 'Horizon Client evidence was detected; server health is not evaluated.'
-        : (($horizon_health_issue_count + $horizon_api_issue_count) === 0
-            ? 'No Horizon host, pod, directory, gateway, or clone-pool issues were reported.'
-            : ($horizon_health_issue_count + $horizon_api_issue_count) . ' Horizon issue(s) need review.');
+        : ($horizon_api_stale
+            ? 'Horizon API collection is stale; the last good pod snapshot is retained.'
+            : ($horizon_api_state === 'partial' && ($horizon_health_issue_count + $horizon_api_issue_count) === 0
+                ? 'Horizon API collection is partial; available pod data is shown.'
+                : (($horizon_health_issue_count + $horizon_api_issue_count) === 0
+                    ? 'No Horizon host, pod, directory, gateway, or clone-pool issues were reported.'
+                    : ($horizon_health_issue_count + $horizon_api_issue_count) . ' Horizon issue(s) need review.')));
     $horizon_next_action = $horizon_health_issue_count > 0
         ? ($horizon_reported_next_action !== '' ? $horizon_reported_next_action : (string) ($horizon_attention[0]['action'] ?? 'Review Horizon service, listener, and certificate evidence.'))
         : '';
@@ -768,9 +777,9 @@ if ($horizon_detected || $horizon_client_only || $horizon_api_enabled) {
         ? (string) ($horizon_summary['certificates_expired'] ?? '0') . ' expired'
         : 'Server not detected';
     $horizon_certificate_expiring = $horizon_detected ? (string) ($horizon_summary['certificates_expiring'] ?? '0') : 'N/A';
-    $horizon_api_display = $horizon_api_available ? ($horizon_api_state === 'partial' ? 'Partial' : 'Connected') : ($horizon_api_enabled ? 'Unavailable' : 'Disabled');
+    $horizon_api_display = $horizon_api_stale ? 'Stale' : ($horizon_api_available ? ($horizon_api_state === 'partial' ? 'Partial' : 'Connected') : ($horizon_api_enabled ? 'Unavailable' : 'Disabled'));
     $horizon_api_detail = $horizon_api_available
-        ? (string) ($horizon_api_summary['sessions_connected'] ?? '0') . ' connected of ' . (string) ($horizon_api_summary['sessions_total'] ?? '0')
+        ? (string) ($horizon_api_summary['sessions_connected'] ?? '0') . ' connected of ' . (string) ($horizon_api_summary['sessions_total'] ?? '0') . ($horizon_api_stale ? '; last good snapshot retained' : '')
         : ($horizon_api_enabled ? (string) ($horizon_api_summary['reason'] ?? 'unknown') : 'Opt-in integration');
 
     $horizon_details .= '<div class="windows-agent-role-dashboard">';
@@ -816,6 +825,12 @@ if ($horizon_detected || $horizon_client_only || $horizon_api_enabled) {
         $horizon_details .= '<span class="label label-' . $esc($horizon_api_health) . '">Read-only API</span> ';
         $horizon_details .= '<strong>Pod ' . $esc($horizon_pod_summary['pod_name'] ?? $horizon_pod_summary['cluster_name'] ?? 'unknown') . ': ' . $esc($horizon_pod_summary['members_total'] ?? '0') . ' member(s).</strong> ';
         $horizon_details .= '<span class="text-muted">Horizon configuration replication issues: ' . $esc($horizon_pod_summary['configuration_replications_unhealthy'] ?? '0') . '; Horizon domain-access issues: ' . $esc($horizon_directory_summary['member_links_unhealthy'] ?? '0') . '; clone pools warning/critical: ' . $esc($horizon_pools_summary['pools_warning'] ?? '0') . '/' . $esc($horizon_pools_summary['pools_critical'] ?? '0') . '.</span>';
+        if (($horizon_central_meta['source'] ?? '') === 'central') {
+            $horizon_details .= ' <span class="text-muted">Source: ' . $esc($horizon_central_meta['source_endpoint'] ?? 'unknown') . '; last success: ' . $esc($horizon_central_meta['last_success_utc'] ?? 'unknown') . '; last attempt: ' . $esc($horizon_central_meta['last_attempt_utc'] ?? 'unknown') . '.</span>';
+        }
+        if ($horizon_api_stale) {
+            $horizon_details .= ' <span class="label label-warning">Stale snapshot (' . $esc($horizon_central_meta['snapshot_age_seconds'] ?? 'unknown') . 's)</span>';
+        }
         if ((int) ($horizon_api_summary['sessions_truncated'] ?? 0) === 1 || (int) ($horizon_api_summary['machines_truncated'] ?? 0) === 1) {
             $horizon_details .= ' <span class="label label-warning">Inventory incomplete</span>';
         }

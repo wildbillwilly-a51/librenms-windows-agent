@@ -1,34 +1,41 @@
 # Codex Handoff
 
-- Current objective: Publish release 0.6.14 with Horizon process telemetry and
-  bounded read-only pod, directory, gateway, and clone-pool health.
-- Current state: Release 0.6.14 adds shared process telemetry, an independent
-  `horizon_api` collector, additive Horizon runtime/API/platform sections and
-  RRDs, and compact pod/pool disclosures. The API collects Connection Server
-  health/configuration, Horizon AD LDS replication, Horizon domain access,
-  gateways, sessions, pools, and machines. API credentials use a one-time DPAPI
-  LocalMachine-protected file restricted to System and Administrators. The
-  versioned MSI and overlay are present under `artifacts/` with `SHA256SUMS`.
-- Next action: Test against a non-production
-  Horizon Connection Server only after the user supplies the target API URL,
-  provisions a least-privilege read identity, and explicitly authorizes that
-  live read-only check.
-- Blockers: Live API contract/response validation requires a non-production
-  Horizon endpoint and a dedicated read-only credential. Local work is not
-  blocked. No deployment is authorized.
-- Important decisions: Windows/Microsoft AD, Horizon configuration replication
-  (AD LDS), and Horizon domain access are distinct data models. Connection
-  Servers are reported as peers/local API target rather than invented
-  primary/secondary roles. Only instant/linked-clone pools are scored;
-  `AVAILABLE` is ready, current-session machines are not spares, and truncated
-  inventory cannot be healthy. No endpoint or LibreNMS deployment is authorized.
-- Branch/commit/sync: `main`; the containing commit is the scoped 0.6.14 release
-  commit and should be published through the audited GitHub sync workflow.
-- Validation complete: service builds cleanly; all 59 core tests pass with
-  supported runtime roll-forward; sample configuration validates; Horizon
-  fixture JSON parses; and the pool evaluator covers 50% warning, 90% critical,
-  no-ready-spare critical, and incomplete inventory. Release MSI/overlay builds,
-  installer syntax, checksums, package contents, and public-safety scans pass.
-- Validation remaining: PHP is unavailable locally, so PHP lint, parser/app-page
-  fixture execution, and rendered UI review remain. Live API validation remains
-  a separately authorized follow-up.
+- Current objective: Validate and release the centralized, read-only Horizon
+  pod collector after a controlled non-production test.
+- Current state: The source tree contains a complete central PHP collector,
+  configuration helper, package integration, application-data merge, stale
+  handling, unknown-on-stale RRD behavior, compact UI, tests, and documentation.
+  It queries each configured site pod once from LibreNMS, beginning with
+  `<site>-vcs1` and then `<site>-vcs2`, and extends failover with healthy
+  API-discovered Connection Servers. Windows agents remain credential-free and
+  continue reporting local Horizon telemetry independently.
+- Next action: After explicit deployment authorization, install the candidate
+  overlay on the required LibreNMS nodes, configure the centralized collector
+  only on the designated active node using private site values and the
+  read-only credential prompt, run one manual API test against the
+  non-production pod, and exercise collector failover without changing Horizon
+  services, DNS, firewall, or server configuration. Enable the five-minute cron
+  only after the manual result and LibreNMS presentation are accepted; then
+  promote the next release.
+- Blockers: The local candidate is ready. Live overlay installation, credential
+  entry, Horizon authentication, cron enablement, and failover testing require
+  the user's explicit deployment authorization. No live action has occurred.
+- Important decisions: There is no new service, vault, database, or Windows
+  credential distribution. Credentials live only in the protected LibreNMS
+  `.env`; pod definitions are non-secret. Windows/Microsoft AD, Horizon AD LDS
+  replication, and Horizon member-to-Microsoft-AD access stay separate. Only
+  instant/linked-clone unused capacity is scored, and incomplete/stale data
+  cannot become a false healthy zero.
+- Branch/commit/sync: `main`; the implementation is preserved in the containing
+  scoped commit. Use the audited GitHub sync workflow after committing; do not
+  bypass a history-audit failure with a raw push.
+- Validation complete: PHP lint; centralized security, failover, identity,
+  pagination, threshold, stale-retention, absent-config, and atomic-config
+  tests; all ten parser and ten app-page fixtures; all 59 agent tests; shell
+  syntax; candidate overlay build and contents; Git whitespace checks; and a
+  local browser render with no PHP or browser-console warnings. Temporary
+  candidate overlay SHA256:
+  `f73334cb9fa585e0d8f49a9edb6200889fae201989f68121532d93c3437e1de2`.
+- Validation remaining: Live read-only API behavior, failover, scheduled
+  polling, and LibreNMS display remain the protected non-production validation
+  phase. No MSI is required unless Windows-agent code changes independently.

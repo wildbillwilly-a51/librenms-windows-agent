@@ -31,6 +31,7 @@ When PHP is available:
 ```powershell
 php .\tests\librenms-overlay\run-parser-fixtures.php
 php .\tests\librenms-overlay\run-app-page-fixtures.php
+php .\tests\librenms-overlay\run-horizon-central-tests.php
 ```
 
 ## 3. Build Native Release Payloads

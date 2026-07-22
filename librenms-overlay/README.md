@@ -37,6 +37,23 @@ the Horizon collector's scored automatic-service, required TCP 443,
 expired-certificate, and critical-expiry checks. Optional configured listeners
 remain visible without becoming health issues.
 
+The package also installs three opt-in central Horizon tools under
+`<librenms-root>/windows-agent-overlay/`:
+
+- `horizon-central-config.php` atomically manages the protected LibreNMS
+  credential, pod definitions, validation, and the optional cron entry;
+- `horizon-central-collector.php` queries each configured pod once and merges
+  its aggregate snapshot into the existing `windows-agent` application;
+- `horizon-central-lib.php` contains the bounded HTTPS client, failover,
+  discovery, privacy filtering, and clone-pool scoring logic.
+
+No collection occurs merely because the overlay is installed. The node must
+have a local `.horizon-pods.json`, a credential in its protected `.env`, and an
+enabled schedule. Local configuration and state are outside the overlay
+manifest, so install, reapply, and rollback do not overwrite them. See
+`docs/horizon-monitoring.md` in the source repository for the staged setup and
+validation workflow.
+
 Startup type, current state, and status are displayed as service data only; they
 are not used as inclusion or exclusion filters. Role, AD/DFSR, and logged-on
 user sections are visibility-only. Auto-classified services, logged-on user

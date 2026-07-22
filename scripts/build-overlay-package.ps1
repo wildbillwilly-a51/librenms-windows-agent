@@ -34,8 +34,15 @@ if (-not (Test-Path -LiteralPath (Join-Path $overlayRoot 'includes'))) {
 New-Item -ItemType Directory -Force -Path $payloadRoot, $supportRoot, $ArtifactsDir | Out-Null
 try {
     Copy-Item -LiteralPath (Join-Path $overlayRoot 'includes') -Destination $payloadRoot -Recurse -Force
-    Copy-Item -LiteralPath (Join-Path $overlayRoot 'tools\validate-app.php') -Destination $supportRoot -Force
-    Copy-Item -LiteralPath (Join-Path $overlayRoot 'tools\delete-apps.php') -Destination $supportRoot -Force
+    foreach ($tool in @(
+        'validate-app.php',
+        'delete-apps.php',
+        'horizon-central-lib.php',
+        'horizon-central-collector.php',
+        'horizon-central-config.php'
+    )) {
+        Copy-Item -LiteralPath (Join-Path $overlayRoot "tools\$tool") -Destination $supportRoot -Force
+    }
 
     foreach ($name in @('install-overlay.sh', 'rollback-overlay.sh', 'validate-overlay.sh', 'web-validate.py', 'README.md')) {
         Copy-Item -LiteralPath (Join-Path $overlayRoot $name) -Destination $stagingRoot -Force

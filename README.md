@@ -78,11 +78,59 @@ access are kept separate from the Windows/Microsoft AD collector. Clone-pool
 health defaults to warning when at least 50% of unused machines are not ready,
 critical at 90%, and critical whenever no unused machine is ready. Full pod,
 pool, and machine-state counts remain in compact disclosures. The API
-integration is disabled by default and uses a one-time machine-protected
-credential file rather than a password in configuration.
+Release 0.6.14's Windows-side API prototype is disabled by default and uses a
+one-time machine-protected credential file rather than a password in
+configuration. Current source also contains its successor: a centralized,
+credential-free-on-Windows collector that runs once per pod from LibreNMS.
 Release 0.6.14 includes these Horizon additions in the Windows agent and
 LibreNMS overlay. See
 [Horizon monitoring design](docs/horizon-monitoring.md) for scope and setup.
+
+### Central Horizon API Collector (Pre-release)
+
+The central implementation is intended for candidate-overlay validation before
+the next release. Keep the Windows agent on every Horizon server for local
+service/process/listener/certificate telemetry; do not place Horizon API
+credentials on those servers. On exactly one LibreNMS management node, the
+overlay helper stores one read-only service credential in LibreNMS' protected
+`.env`, stores non-secret pod definitions in `.horizon-pods.json`, and runs one
+bounded collection per pod every five minutes.
+
+The site code and DNS suffix derive the only bootstrap targets, in fixed order:
+`abc-vcs1.example.test`, then `abc-vcs2.example.test`. Healthy Connection
+Servers returned by the API become later failover candidates after suffix and
+pod-identity validation. Gateways are displayed but never used as API targets.
+The configured display device is only the LibreNMS page where pod data appears;
+it is not the preferred API endpoint or a monitoring dependency.
+
+Candidate setup, after the overlay has been installed:
+
+```bash
+cd /opt/librenms
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php credential set
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php pod add \
+  --site abc \
+  --dns-suffix example.test \
+  --display-device abc-vcs2.example.test
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php config validate
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php test network --site abc
+```
+
+The password is entered through a hidden prompt and is never accepted on the
+command line. `test network` performs DNS and strict TLS checks without a
+credential. Run the authenticated API test and enable the schedule only during
+an explicitly authorized test window:
+
+```bash
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php test api --site abc
+sudo -u librenms php windows-agent-overlay/horizon-central-collector.php --site abc
+sudo php /opt/librenms/windows-agent-overlay/horizon-central-config.php schedule enable \
+  --librenms-root /opt/librenms
+```
+
+Overlay upgrades do not replace `.env`, `.horizon-pods.json`, or the collector's
+last-good state. Use `config status` for a sanitized summary; it reports only
+whether a credential exists.
 
 ### 4. Install Or Update The Windows Agent
 

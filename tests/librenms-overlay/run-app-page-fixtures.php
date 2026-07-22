@@ -61,10 +61,11 @@ namespace {
         public static array $updatedApplication = [];
         public static int $appId = 1;
 
-        public static function reset(int $appId): void
+        public static function reset(int $appId, array $initialData = []): void
         {
             self::$appId = $appId;
             self::$application = new \App\Models\Application($appId);
+            self::$application->data = $initialData;
             self::$updatedApplication = [];
         }
     }
@@ -159,7 +160,7 @@ namespace {
     function renderFixture(string $fixturePath, string $parserPath, string $pagePath): string
     {
         $fixture = json_decode((string) file_get_contents($fixturePath), true, flags: JSON_THROW_ON_ERROR);
-        LibreNMSAppPageTestState::reset((int) $fixture['app_id']);
+        LibreNMSAppPageTestState::reset((int) $fixture['app_id'], $fixture['existing_application_data'] ?? []);
 
         $agent_data = $fixture['agent_data'];
         $device = $fixture['device'];
@@ -193,8 +194,10 @@ namespace {
         exit(2);
     }
 
-    $renderOnly = '';
-    foreach (array_slice($argv, 1) as $argument) {
+    $renderOnly = PHP_SAPI === 'cli-server'
+        ? basename((string) ($_GET['render'] ?? ''))
+        : '';
+    foreach (array_slice($argv ?? [], 1) as $argument) {
         if (str_starts_with($argument, '--render=')) {
             $renderOnly = basename(substr($argument, strlen('--render=')));
         }
@@ -204,6 +207,10 @@ namespace {
         if (! is_file($renderFixturePath)) {
             fwrite(STDERR, "Fixture not found: $renderOnly\n");
             exit(2);
+        }
+
+        if (PHP_SAPI === 'cli-server') {
+            header('Content-Type: text/html; charset=utf-8');
         }
 
         echo renderFixture($renderFixturePath, $parserPath, $pagePath);

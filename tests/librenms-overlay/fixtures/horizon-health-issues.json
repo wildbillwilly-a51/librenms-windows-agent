@@ -52,7 +52,7 @@
     },
     "app_page": {
       "contains": [
-        "3 Horizon health issue(s) were reported.",
+        "3 Horizon issue(s) need review.",
         "Reported Health Issues <small>3</small>",
         "Required service is not running: VMware Horizon View Connection Server",
         "Required HTTPS listener is unavailable",

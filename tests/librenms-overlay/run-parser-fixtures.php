@@ -52,10 +52,11 @@ namespace {
         public static array $updatedApplication = [];
         public static int $appId = 1;
 
-        public static function reset(int $appId): void
+        public static function reset(int $appId, array $initialData = []): void
         {
             self::$appId = $appId;
             self::$application = new \App\Models\Application($appId);
+            self::$application->data = $initialData;
             self::$datastoreWrites = [];
             self::$updatedApplication = [];
         }
@@ -148,7 +149,7 @@ namespace {
     function runFixture(string $fixturePath, string $parserPath): void
     {
         $fixture = json_decode((string) file_get_contents($fixturePath), true, flags: JSON_THROW_ON_ERROR);
-        WindowsAgentOverlayParserTestState::reset((int) $fixture['app_id']);
+        WindowsAgentOverlayParserTestState::reset((int) $fixture['app_id'], $fixture['existing_application_data'] ?? []);
 
         $agent_data = $fixture['agent_data'];
         $device = $fixture['device'];

@@ -32,7 +32,7 @@ they are not active on a particular server.
 | Local Windows inventory | Services, processes, listeners, certificates | None beyond the agent service | Implemented |
 | Local Windows process performance | CPU, memory, handles, threads, I/O, uptime, restart evidence | None beyond the agent service | Implemented |
 | Local Horizon logs | Bounded warning/error counts, component, last occurrence | Local file read | Add only as sanitized aggregates; do not ship raw logs by default |
-| Horizon Server REST/View API | Connection Servers, sessions, machines, clone pools, gateways, domains, and component health | Dedicated Horizon read-only identity/token | Initial bounded integration implemented; live contract validation pending |
+| Horizon Server REST/View API | Connection Servers, sessions, machines, clone pools, gateways, domains, and component health | Dedicated Horizon read-only identity/token | Central bounded implementation complete; live contract validation pending |
 | Horizon Event Database or Syslog | Failures, user/session lifecycle, administrative changes, and statistical events | Database read identity or configured Syslog | Prefer centralized ingestion rather than querying from every Connection Server |
 | Horizon Cloud/Intelligence | Cloud-connected pod, session, and user-experience metrics | Cloud API/OAuth and subscription | Separate optional integration |
 
@@ -45,8 +45,9 @@ and statistical samples, and Horizon can also emit those events as Syslog.
 
 ## Development Status
 
-Release 0.6.14 implements the first two additive phases without changing the
-existing Horizon RRD schema:
+Release 0.6.14 implements local process telemetry and the initial disabled
+Windows-side API prototype without changing the existing Horizon RRD schema.
+The current unreleased source adds the centralized successor:
 
 1. `windows_agent_horizon_runtime_summary` reports state, process count, CPU,
    working set, private bytes, handles, threads, read/write bytes per second,
@@ -76,53 +77,78 @@ existing Horizon RRD schema:
 10. Additive `windows-agent-horizon-api` and
     `windows-agent-horizon-platform` RRD families supply API/session, pod, and
     aggregate clone-pool graphs.
+11. One LibreNMS-side PHP job now queries each configured pod once per cycle.
+    Windows agents remain installed on every member and remain credential-free.
+12. Bootstrap priority is always `<site>-vcs1.<suffix>`, then
+    `<site>-vcs2.<suffix>`. API-discovered Connection Servers become later
+    candidates only after suffix and expected-pod validation. Gateways never
+    become API candidates.
+13. The central snapshot is merged into the existing `windows-agent`
+    application on a configured display device and takes precedence over the
+    Windows-side prototype. The display device is a UI anchor, not the API
+    preference or a single point of collection failure.
+14. Failed cycles retain the last good values, mark them stale with source and
+    timestamps, and leave RRD gaps as unknown instead of writing false zeroes.
 
 The existing FactoryTalk runtime sampler was generalized into a shared role
 process sampler rather than duplicated.
 
-## API Safety and Credential Provisioning
+## Central API Safety and Credential Provisioning
 
-API collection remains `disabled` by default. It requires HTTPS, uses a 5-60
-second total request budget, limits page size to 1,000 and page count to 20,
-and marks session/machine inventory as truncated when the configured bound is
-reached. It is a separate collector with its own timeout, so API unavailability
-does not change or suppress local Horizon host collection.
+Central collection is opt-in. Installing the overlay alone does not query a
+pod. The client requires HTTPS, verifies the operating system trust store and
+hostname, refuses redirects and non-HTTPS protocols, uses bounded connection
+and request timeouts, limits responses and pagination, and marks truncated
+session/machine inventories incomplete. Authentication at `/rest/login` and a
+best-effort logout are the only POST requests; telemetry calls are GET-only.
+There are no configuration, session, machine, entitlement, or action calls.
 
-The password is not stored in `agent.json`. An administrator provisions it
-once on the Windows host with:
+Use a dedicated Horizon identity with read access to Connection Server
+configuration/monitoring, pool and machine inventory, sessions, domains, and
+gateways. The helper prompts for the username, login domain, and password. It
+does not accept them as command-line values. Values are written atomically to
+the existing protected LibreNMS `.env`; temporary rollback material is mode
+`0600` and removed after validation. Pod configuration contains no secret and
+is written to `.horizon-pods.json` by the same helper.
 
-```powershell
-& 'C:\Program Files\LibreNMS Windows Agent\LibreNMS.WindowsAgent.Service.exe' --store-horizon-credential
+Generic candidate setup:
+
+```bash
+cd /opt/librenms
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php credential set
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php pod add \
+  --site abc --dns-suffix example.test \
+  --display-device abc-vcs2.example.test
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php config validate
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php config status
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php test network --site abc
 ```
 
-The command writes a Windows DPAPI LocalMachine-protected file whose ACL grants
-access only to Local System and local Administrators. The API can then be
-enabled in `collectors.horizon.api`:
+`config status` reports only credential presence and non-secret pod topology.
+`test network` performs DNS and strict TLS checks without authenticating. The
+following commands make authenticated read-only requests and therefore belong
+inside an explicitly authorized test window:
 
-```json
-{
-  "mode": "enabled",
-  "baseUrl": "https://horizon-connection-server.example.test",
-  "credentialFile": "%ProgramData%\\LibreNMS\\Windows Agent\\horizon-api-credential.bin",
-  "timeoutSeconds": 15,
-  "pageSize": 500,
-  "maxPages": 20,
-  "includeConnectionServers": true,
-  "includeHorizonDomains": true,
-  "includeGateways": true,
-  "includeSessions": true,
-  "includeClonePools": true,
-  "poolWarningUnreadyPercent": 50,
-  "poolCriticalUnreadyPercent": 90,
-  "poolMinimumSpareSample": 2
-}
+```bash
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php test api --site abc
+sudo -u librenms php windows-agent-overlay/horizon-central-collector.php --site abc
 ```
 
-Use a dedicated Horizon identity with the view privileges required for
-Connection Server configuration/monitoring, pool and machine inventory,
-sessions, domains, and gateways. Authentication is the sole POST request. All
-telemetry requests are GET requests; no configuration, session, machine,
-entitlement, or action endpoint is present in the client.
+After the manual result and UI are accepted, enable the existing five-minute
+cron path:
+
+```bash
+sudo php /opt/librenms/windows-agent-overlay/horizon-central-config.php schedule enable \
+  --librenms-root /opt/librenms
+```
+
+Use `credential rotate`, `credential remove`, `pod enable`, `pod disable`,
+`pod remove`, or `schedule disable` for lifecycle operations; no file editing
+is required. Overlay install/reapply/rollback never replaces `.env`,
+`.horizon-pods.json`, or last-good state.
+
+The 0.6.14 Windows-side DPAPI prototype remains disabled for compatibility. It
+is not the mass-deployment path. If both sources exist, central data wins.
 
 ## Directory and Server-Role Semantics
 
@@ -156,35 +182,20 @@ unused machines is warning for capacity exhaustion. Alert rules should require
 the state to persist for at least two polls so normal instant-clone replacement
 waves do not page the team from one sample.
 
-## Next Collection Phase
+## Live Validation and Later Scope
 
-Verify the exact endpoint availability, least-privilege role, pool state mix,
-and thresholds against a non-production pod. Then consider vCenter/event
-database health, image-push/provisioning-task state, expected spare targets,
-farm/RDS health, and bounded recent event counts without messages or identities.
-API-version fallback should be added only when evidence from the target Horizon
-version shows that a selected v3/v2 endpoint is unavailable.
+The remaining release gate is a non-production pod validation, not more local
+architecture work. Validate exact endpoint/field compatibility, service-account
+authorization, TLS trust, discovered-member names, pool state mix, the chosen
+display device, and simulated VCS1-to-VCS2 failover without stopping services
+or changing firewall/DNS. Only after the manual run and several five-minute
+cycles are accepted should the candidate become a release.
 
-## Authenticated Pod-Level Phase
-
-An authenticated Horizon integration should collect aggregated, non-user
-identifying values such as:
-
-- Connection Servers healthy, warning, or unavailable;
-- event database, gateway, vCenter, and domain health;
-- sessions by state and display protocol;
-- machines by available, connected, problem, disabled, and maintenance state;
-- pool, farm, and RDS host health, session count, and load index;
-- recent warning/error event counts and last occurrence;
-- optional logon-timing percentiles when Help Desk data is licensed and
-  available.
-
-This integration should run once per pod rather than once on every Connection
-Server. It requires API version negotiation, pagination, throttling, strict
-timeouts, a least-privilege read-only Horizon role, and a credential reference
-that does not place a password or refresh token in public configuration or
-agent output. The collector must never call session, machine, entitlement, or
-configuration mutation endpoints.
+Later optional scope may include vCenter/event-database health,
+image-push/provisioning-task state, expected spare targets, farm/RDS health,
+and bounded event counts without messages or identities. API-version fallback
+should be added only when evidence from a supported target shows a selected
+v3/v2 endpoint is unavailable.
 
 ## Privacy and Alerting Boundaries
 

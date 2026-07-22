@@ -1,5 +1,32 @@
 # Work Log
 
+## 2026-07-22
+
+- Added the opt-in centralized Horizon REST collector and configuration helper
+  for a single bounded query per site pod from LibreNMS. Bootstrap order is
+  `<site>-vcs1` then `<site>-vcs2`; API-discovered healthy Connection Servers
+  extend failover without making gateways eligible, and pod identity is pinned
+  to prevent collecting the wrong site.
+- Kept Windows agents credential-free and retained their local Horizon
+  service/process/listener/certificate telemetry. Central snapshots contain
+  aggregate operational data only, take precedence in the existing
+  `windows-agent` application, preserve the last good result when collection
+  fails, and write unknown rather than false-zero Horizon API RRD samples while
+  stale.
+- Added secure prompt-only `.env` credential management, atomic pod
+  configuration, credential rotation/removal, DNS/TLS and explicitly invoked
+  read-only API tests, status output with no secrets, and optional five-minute
+  cron management. Overlay packaging does not overwrite credentials, pod
+  configuration, or collector state.
+- Validated all 59 agent tests, ten parser fixtures, ten app-page fixtures,
+  centralized collector/helper security and failover tests, PHP lint, shell
+  syntax, package contents, and checksum generation. A local browser render
+  also exposed and verified a corrected Horizon status-badge defect with no PHP
+  or browser-console warnings. The temporary `0.6.15-candidate` overlay SHA256
+  was `f73334cb9fa585e0d8f49a9edb6200889fae201989f68121532d93c3437e1de2`.
+  No MSI was needed because the Windows agent did not change, and no live
+  deployment or Horizon authentication was performed.
+
 ## 2026-07-17
 
 - Split authenticated Horizon REST collection from local Horizon collection so

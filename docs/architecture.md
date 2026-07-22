@@ -116,3 +116,27 @@ diagnostics.
   Backup Agent service/process/evidence health without Datto cloud or appliance
   API access.
 - `local`: alertable status lines for legacy watched services and reboot state.
+
+## Central Horizon Pod Collection
+
+Authenticated Horizon inventory is a LibreNMS-side overlay function, not a
+Windows-agent responsibility. The Windows agent remains credential-free and
+continues to report local telemetry from every pod member. One opted-in
+LibreNMS management node runs a PHP CLI job through the existing five-minute
+cron mechanism. No daemon, queue, database schema, or external secret service
+is added.
+
+For each independent site/pod, bootstrap endpoints are derived as
+`<site>-vcs1.<dns-suffix>` and `<site>-vcs2.<dns-suffix>`. Successfully
+discovered Connection Servers may be cached as lower-priority candidates after
+DNS-suffix and expected-pod-identity validation. Gateway inventory is never an
+endpoint candidate. A cycle stops after the first complete usable snapshot, so
+the pod is not queried redundantly from every Windows host.
+
+The collector stores only aggregates and operational topology: Connection
+Server/gateway state, Horizon AD LDS replication, Horizon-to-Microsoft-AD
+access, session counts/protocols, clone-pool capacity, and machine-state
+counts. Usernames, client addresses, entitlements, machine names, tokens, and
+raw responses are not persisted. On failure, the last good snapshot remains
+visible with explicit age, attempt, source, and sanitized reason metadata;
+RRDs receive unknown samples instead of false zeroes.
