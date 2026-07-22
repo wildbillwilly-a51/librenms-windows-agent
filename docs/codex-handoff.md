@@ -31,11 +31,12 @@
   bypass a history-audit failure with a raw push.
 - Validation complete: PHP lint; centralized security, failover, identity,
   pagination, threshold, stale-retention, absent-config, and atomic-config
-  tests; all ten parser and ten app-page fixtures; all 59 agent tests; shell
-  syntax; candidate overlay build and contents; Git whitespace checks; and a
-  local browser render with no PHP or browser-console warnings. Temporary
+  tests; no-edit pod lifecycle coverage; all ten parser and ten app-page
+  fixtures; all 59 agent tests; shell syntax; candidate overlay build and
+  contents; marker-verified rollback schedule cleanup; Git whitespace checks;
+  and a local browser render with no PHP or browser-console warnings. Temporary
   candidate overlay SHA256:
-  `f73334cb9fa585e0d8f49a9edb6200889fae201989f68121532d93c3437e1de2`.
+  `3bf8e1374f0d5a1fc6948a47954ddfe68a313b30ed4edf14d63a27f8b8f828f8`.
 - Validation remaining: Live read-only API behavior, failover, scheduled
   polling, and LibreNMS display remain the protected non-production validation
   phase. No MSI is required unless Windows-agent code changes independently.

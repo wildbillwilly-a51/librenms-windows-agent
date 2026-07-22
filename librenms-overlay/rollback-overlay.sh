@@ -8,10 +8,12 @@ librenms_root="${LIBRENMS_ROOT:-/opt/librenms}"
 backup_root="${WINDOWS_AGENT_OVERLAY_BACKUP_ROOT:-/var/backups/librenms-windows-agent-overlay}"
 state_root="${WINDOWS_AGENT_OVERLAY_STATE_ROOT:-/usr/local/lib/librenms-windows-agent-overlay}"
 reapply_command="${WINDOWS_AGENT_OVERLAY_REAPPLY_COMMAND:-/usr/local/sbin/librenms-windows-agent-overlay-reapply}"
+horizon_cron_path="${WINDOWS_AGENT_HORIZON_CRON_PATH:-/etc/cron.d/librenms-windows-agent-horizon}"
 backup_dir="${WINDOWS_AGENT_OVERLAY_BACKUP_DIR:-}"
 dry_run=0
 delete_apps=0
 remove_state=0
+central_collector_after_rollback=1
 
 usage() {
   cat <<'EOF'
@@ -111,7 +113,21 @@ while IFS= read -r rel || [[ -n "$rel" ]]; do
   else
     echo "Absent: $rel"
   fi
+
+  if [[ "$rel" == "windows-agent-overlay/horizon-central-collector.php" ]]; then
+    if [[ -n "$backup" && -f "$backup" ]]; then
+      central_collector_after_rollback=1
+    else
+      central_collector_after_rollback=0
+    fi
+  fi
 done < "$manifest_file"
+
+if [[ "$central_collector_after_rollback" -eq 0 && -f "$horizon_cron_path" ]] &&
+   grep -Fqx '# Managed by LibreNMS Windows Agent overlay; collection is inactive without local pod configuration.' "$horizon_cron_path"; then
+  run sudo rm -f "$horizon_cron_path"
+  echo "Disabled the managed Horizon schedule because the central collector was removed."
+fi
 
 if [[ "$dry_run" -eq 1 ]]; then
   run sudo -u librenms php "$librenms_root/validate.php"

@@ -145,7 +145,10 @@ sudo php /opt/librenms/windows-agent-overlay/horizon-central-config.php schedule
 Use `credential rotate`, `credential remove`, `pod enable`, `pod disable`,
 `pod remove`, or `schedule disable` for lifecycle operations; no file editing
 is required. Overlay install/reapply/rollback never replaces `.env`,
-`.horizon-pods.json`, or last-good state.
+`.horizon-pods.json`, or last-good state. A rollback that removes the central
+collector also removes only its marker-verified managed cron entry, preventing
+a scheduled missing-file error while retaining credentials, pod definitions,
+and last-good state.
 
 The 0.6.14 Windows-side DPAPI prototype remains disabled for compatibility. It
 is not the mass-deployment path. If both sources exist, central data wins.

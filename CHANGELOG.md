@@ -15,6 +15,9 @@
   UI/source timestamps, unknown RRD samples during failures, and fixture tests
   for security, failover, topology discovery, pagination, pool thresholds,
   stale retention, and upgrade-safe configuration behavior.
+- Made rollback remove the marker-verified central Horizon cron entry when the
+  collector itself is removed, while retaining credentials, pod definitions,
+  and last-good state.
 
 ## 2026-07-17
 

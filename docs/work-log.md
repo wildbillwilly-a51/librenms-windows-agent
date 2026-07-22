@@ -18,12 +18,16 @@
   read-only API tests, status output with no secrets, and optional five-minute
   cron management. Overlay packaging does not overwrite credentials, pod
   configuration, or collector state.
+- Exercised the no-edit pod lifecycle through the configuration helper and
+  corrected rollback so removing the central collector also removes only its
+  marker-verified managed cron entry. Credentials, pod definitions, and
+  last-good state remain untouched.
 - Validated all 59 agent tests, ten parser fixtures, ten app-page fixtures,
   centralized collector/helper security and failover tests, PHP lint, shell
   syntax, package contents, and checksum generation. A local browser render
   also exposed and verified a corrected Horizon status-badge defect with no PHP
   or browser-console warnings. The temporary `0.6.15-candidate` overlay SHA256
-  was `f73334cb9fa585e0d8f49a9edb6200889fae201989f68121532d93c3437e1de2`.
+  was `3bf8e1374f0d5a1fc6948a47954ddfe68a313b30ed4edf14d63a27f8b8f828f8`.
   No MSI was needed because the Windows agent did not change, and no live
   deployment or Horizon authentication was performed.
 

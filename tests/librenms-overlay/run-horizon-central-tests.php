@@ -169,6 +169,31 @@ $tests['absent configuration is a safe no-op'] = static function (): void {
     expect(HorizonCentralRuntime::run(['librenms-root' => $root]) === 0, 'absent config should not activate collection');
     rmdir($root);
 };
+$tests['configuration helper manages pod lifecycle without manual edits'] = static function (): void {
+    $dir = sys_get_temp_dir() . '/horizon-lifecycle-' . bin2hex(random_bytes(5));
+    mkdir($dir, 0700, true);
+    $envPath = $dir . '/.env';
+    $configPath = $dir . '/pods.json';
+    file_put_contents($envPath, "APP_KEY=unchanged\n");
+
+    $base = ['config.php', 'pod', 'add', '--config', $configPath, '--env', $envPath];
+    expect(HorizonCentralConfiguration::main([...$base, '--site', 'abc', '--dns-suffix', 'example.test', '--display-device', 'abc-vcs2.example.test']) === 0, 'pod add failed');
+    expect(HorizonCentralConfiguration::main([...$base, '--site', 'abc', '--dns-suffix', 'example.test', '--display-device', 'abc-vcs1.example.test', '--warning-percent', '60']) === 0, 'pod update failed');
+    $config = json_decode((string) file_get_contents($configPath), true, flags: JSON_THROW_ON_ERROR);
+    expect(count($config['pods']) === 1, 'pod update created a duplicate');
+    expect($config['pods'][0]['display_device'] === 'abc-vcs1.example.test' && $config['pods'][0]['pool_warning_percent'] === 60, 'pod update was not persisted');
+
+    expect(HorizonCentralConfiguration::main(['config.php', 'pod', 'disable', '--config', $configPath, '--site', 'abc']) === 0, 'pod disable failed');
+    expect(HorizonCentralConfiguration::main(['config.php', 'config', 'validate', '--config', $configPath, '--env', $envPath]) === 0, 'configuration validation failed');
+    expect(HorizonCentralConfiguration::main(['config.php', 'pod', 'enable', '--config', $configPath, '--site', 'abc']) === 0, 'pod enable failed');
+    expect(HorizonCentralConfiguration::main(['config.php', 'pod', 'remove', '--config', $configPath, '--site', 'abc']) === 0, 'pod remove failed');
+    $config = json_decode((string) file_get_contents($configPath), true, flags: JSON_THROW_ON_ERROR);
+    expect($config['pods'] === [], 'pod remove left configuration behind');
+
+    unlink($envPath);
+    unlink($configPath);
+    rmdir($dir);
+};
 $tests['atomic env update is idempotent and secret-safe'] = static function (): void {
     $dir = sys_get_temp_dir() . '/horizon-config-' . bin2hex(random_bytes(5));
     mkdir($dir, 0700, true);
