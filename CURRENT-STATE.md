@@ -23,24 +23,25 @@ may consume public builds for environment-specific deployment validation, but
 their hostnames, IPs, credentials, device IDs, deployment scripts, branding,
 and private exports do not belong here.
 
-## Current Release
+## Current Releases
 
-- Version: `0.6.14`
-- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.14.tar.gz`
+- Overlay version: `0.6.15`
+- Windows agent version: `0.6.14`
+- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.15.tar.gz`
 - Windows MSI: `artifacts/librenms-windows-agent-0.6.14.msi`
 - Checksums: `SHA256SUMS`
-- Overlay SHA256: `151b8389fada2f833d2374e844af83497c75cb44dd7aeefbe15f70b632af08c8`
+- Overlay SHA256: `295949ee3e3b19a062837d928b9658fbafb05c429fc9e6a6a5b884f20b9cf074`
 - Windows MSI SHA256: `e2dc68edd5b0aaa1f21828e8292d37b7412dcb0353dcf11db0f458859d759b89`
 - Public overlay installer: `install.sh`
 - Public Windows installer: `install-agent.ps1`
 
-Release `0.6.14` retains the complete bounded FactoryTalk collection set and
-adds local Horizon process telemetry plus the disabled-by-default read-only
-Horizon API integration. The Horizon overlay separates Windows/Microsoft AD,
-Horizon configuration replication (AD LDS), and Horizon domain access, and
-adds pod, gateway, session, and instant/linked-clone pool health. Existing
-installations remain rollback-safe and setup requires the service to reach
-`Running` before it succeeds.
+Windows agent release `0.6.14` retains the complete bounded FactoryTalk
+collection set and adds local Horizon process telemetry plus the
+disabled-by-default read-only Horizon API integration. Overlay release `0.6.15`
+adds the centralized Horizon pod collector, keeps API credentials off Windows
+hosts, and preserves local agent telemetry independently. Existing
+installations remain rollback-safe, and Windows setup requires the service to
+reach `Running` before it succeeds.
 
 ## Product Contract
 
@@ -76,17 +77,18 @@ Before publishing, review the full committed snapshot for secrets, private
 environment facts, machine-user paths, and legacy branding. When PHP is
 available, run PHP lint and both overlay fixture runners.
 
-## Current Validation Limitation
+## Current Validation Environment
 
 The workstation has the required .NET SDK and successfully builds the service,
-portable tests, WiX MSI, and overlay package. The test executable uses supported
-major-version runtime roll-forward because .NET 8 is not installed locally.
-PHP is not installed in Windows or WSL, so overlay PHP lint and fixture runners
-must be run on a PHP-capable environment before or during overlay deployment.
+portable tests, WiX MSI, and overlay package. WSL provides PHP 8.3 for complete
+source and packaged PHP lint plus parser, app-page, and centralized-collector
+fixtures.
 
 ## Next Recommended Action
 
-Install the 0.6.14 overlay on a LibreNMS test node and applicable test poller,
-then upgrade an authorized non-production Horizon Connection Server with the
-0.6.14 MSI. Provision a dedicated read-only Horizon credential, verify pod and
-pool API contracts, and observe at least two polls before enabling alerts.
+Install overlay 0.6.15 on the required LibreNMS nodes. On the designated active
+node only, provision a dedicated read-only Horizon credential through the
+protected prompt, validate one non-production pod manually, and verify
+failover, polling, and LibreNMS presentation before enabling the managed
+five-minute schedule. The Windows MSI remains at 0.6.14 and does not require an
+upgrade for this overlay-only release.

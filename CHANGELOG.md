@@ -21,6 +21,9 @@
 - Promoted the centralized Horizon implementation as overlay-only release
   0.6.15. The Windows agent and MSI remain at 0.6.14 because endpoint code did
   not change.
+- Corrected the read-first current-state record to distinguish overlay 0.6.15
+  from Windows agent/MSI 0.6.14 and to reflect the available WSL PHP validation
+  environment.
 
 ## 2026-07-17
 

@@ -1,5 +1,23 @@
 # Work Log
 
+## 2026-07-25
+
+- Audited the four local Horizon release commits against the fetched public
+  `origin/main`, confirmed a clean and strictly fast-forwardable branch, and
+  corrected the stale read-first current-state record to distinguish overlay
+  0.6.15 from Windows agent/MSI 0.6.14.
+- Re-ran all 59 portable agent tests, all ten parser fixtures, all ten app-page
+  fixtures, centralized security/failover/lifecycle tests, complete source and
+  packaged PHP lint under WSL PHP 8.3, Bash and PowerShell parsing, JSON/XML
+  parsing, Git whitespace checks, native release builds, package listing, and
+  checksum verification.
+- Rebuilt overlay 0.6.15 into temporary output and verified that all 72
+  extracted files matched the tracked release payload by path, size, and
+  SHA256. The gzip container hash changed only because the build records
+  timestamps. The rebuilt 0.6.14 MSI passed service output, 23-collector,
+  upgrade/rollback, config-preservation, and firewall-table assertions; its
+  generated ProductCode makes the MSI container intentionally non-reproducible.
+
 ## 2026-07-22
 
 - Added the opt-in centralized Horizon REST collector and configuration helper
