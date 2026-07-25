@@ -1,5 +1,11 @@
 # Changelog
 
+## Workflow maintenance - 2026-07-25
+
+- Migrated the managed Codex project workflow from the exact initial V6 cohort
+  to local-first V7 without changing agent, overlay, installer, or release
+  behavior.
+
 ## 0.6.15 - 2026-07-22
 
 - Added an opt-in centralized Horizon API collector for one bounded query per

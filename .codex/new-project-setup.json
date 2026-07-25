@@ -1,52 +1,24 @@
 {
-  "format": 2,
-  "workflow_version": 6,
-  "github_mode": "private-public-ready",
-  "repository": "wildbillwilly-a51/librenms-windows-agent",
-  "remote": "origin",
-  "source_authority": "source-first",
-  "target_path_policy": "contained-no-reparse",
-  "managed_marker_policy": "unique-fail-closed",
-  "apply_preflight": "locked-stage-validate-immutable-before-write",
-  "operation_lock": "path-keyed-named-mutex",
-  "input_immutability": "sha256-recheck",
-  "apply_transaction": "atomic-file-replace-with-retained-rollback",
-  "helper_ownership": "first-line-marker-with-versioned-state-or-known-release-hash",
-  "managed_helpers": {
-    "scripts\\github-sync.ps1": "70B02D170B38EC346B9DED897CE540984F5C0DBB202319BA0208C96A4AB54276",
-    "scripts\\github-backup.ps1": "EFBCC4EAB1CCDAB6E6C50D57C5CD15F05D4C3602D70B789A7ACDCC71D3BEA8DB"
+  "format": 3,
+  "workflow_version": 7,
+  "managed_blocks": {
+    "AGENTS.md": {
+      "marker": "new-project-setup:v7",
+      "sha256": "d2437d870ba4a62ce7df5531815f7248b5e2834a568559181be78ecb78fd8a62"
+    },
+    ".gitignore": {
+      "marker": "new-project-setup:v7",
+      "sha256": "21344f48649a1a8da60394c4d08477888139aaf33ae70c3817ea3f362ce92566"
+    },
+    ".gitattributes": {
+      "marker": "new-project-setup:v7",
+      "sha256": "b39a2da35a901ab1b1f89e4ea93feed53ebbf4b219a114fd330bbd813b600437"
+    }
   },
-  "source_history_sync": true,
-  "audit_failure_action": "ask",
-  "development_log": true,
-  "codex_handoff": "always",
-  "handoff_presence": "required",
-  "handoff_refresh": "state-boundary",
-  "handoff_evidence": "summary",
-  "handoff_sync_reference": "containing-commit",
-  "execution_mode": "adaptive",
-  "durability_ambiguity_action": "ask",
-  "classification_notice": "concise",
-  "routine_project_dependencies": "allow",
-  "new_project_stack": "allow",
-  "isolated_local_build": "allow",
-  "exploration_cleanup": "own-current-artifacts-only",
-  "deployment_confirmation": "separate",
-  "documentation_detail": "proportional",
-  "context_loading": "progressive",
-  "effort_classification": "adaptive",
-  "validation_strategy": "risk-based",
-  "risk_set": "bounded-to-objective",
-  "evidence_reuse": "required",
-  "evidence_definition": "distinct-risk",
-  "completion_invariant": "criteria_and_risk_boundary_records",
-  "evidence_equivalence": "material_risk_or_protected_boundary",
-  "convergence_action": "change-strategy",
-  "convergence_escalation": "minimal-reproducer",
-  "convergence_terminal": "no-material-progress-and-no-credible-bounded-probe",
-  "final_validation_matrix": "one-broad-pass-then-invalidated-only",
-  "final_validation_scope": "effort-appropriate",
-  "unresolved_local_failure": "preserve-and-report",
-  "deployment_waiver": "explicit-target-effect-waiver-is-confirmation",
-  "deployment_request_alone": "not-waiver"
+  "managed_files": {
+    ".codex/new-project-setup/execution-and-continuity.md": "f39eb8f98bc5620b248fdf32e8efae9b3073717748164c0ff8323fed8e495bcc",
+    ".codex/new-project-setup/local-saving.md": "c10ce58c88fa7f2126899e37b9c84ab700777a92c5de2521e0e00bcb8bdc1143",
+    "scripts/save-local-work.ps1": "78bcb38ecab3360d40e872c77dc28303ec397632bf5b10aec72756ab5024dbce"
+  },
+  "text_eol": "lf"
 }

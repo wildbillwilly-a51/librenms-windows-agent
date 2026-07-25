@@ -4,14 +4,16 @@
 SHA256SUMS text eol=lf
 *.tar.gz binary
 
-# new-project-setup:v6:start
+# new-project-setup:v7:start
 * text=auto
-*.ps1 text eol=crlf
-*.cmd text eol=crlf
-*.bat text eol=crlf
-*.sh text eol=lf
 *.md text eol=lf
 *.json text eol=lf
 *.yaml text eol=lf
 *.yml text eol=lf
-# new-project-setup:v6:end
+*.ps1 text eol=lf
+*.psm1 text eol=lf
+*.psd1 text eol=lf
+*.sh text eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+# new-project-setup:v7:end

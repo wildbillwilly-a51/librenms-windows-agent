@@ -106,84 +106,42 @@ unless reviewed, scanned, and intentionally added.
 If GitHub push is unavailable, keep the local commit and report push as skipped
 or pending. Do not rewrite history to repair a failed push.
 
-<!-- new-project-setup:v6:start -->
-### New project setup invocation
+<!-- new-project-setup:v7:start -->
+## Project Workflow
 
-A bare or primary `$new-project-setup` invocation runs install/sync. Use the
-invoked installed apply helper for a normal target; in this skill's source use
-the source helper, then sync runtime. Never only load; questions are
-consultation-only.
+1. Orient from Git status, `docs/codex-handoff.md`, and files directly relevant
+   to the objective. Expand context only for dependencies, contradictions,
+   failures, or material risks. For a new objective, use
+   `docs/project-summary.md` before the handoff; when referencing another
+   project, read its summary first and do not scan that repository by default.
+2. Preserve implementation and retained reusable output. Clearly disposable
+   investigation may remain lightweight, but preserve it when it is reused,
+   continued, incorporated, or requested for retention.
+3. Determine completion conditions and material risks internally. Ask only
+   when ambiguity affects preservation, authorization, or the requested result.
+4. Run the smallest checks that cover changed material risks. Reuse evidence
+   that remains valid and rerun only checks that failed or were invalidated.
+5. Do not repeat an equivalent failed check. Change diagnostic strategy and
+   create a minimal reproduction when it is likely to clarify the cause.
+6. Preserve unrelated staged, unstaged, and untracked work. Do not include an
+   objective file in automatic saving when it contains known unrelated edits.
+7. When durable work is complete, update continuity state when needed, stage
+   only objective-related whole-file or whole-directory paths, verify the exact
+   staged tree, and create a clear local commit. Local completion depends only
+   on local Git.
 
-### Adaptive efficient execution
+The current handoff always contains Objective, Current State, and Validation
+Completed. Include Relevant Decisions, Validation Remaining, and Blockers only
+when they contain useful state. Include one Next Action only while work remains;
+a completed objective does not need a fabricated continuation action. Keep the
+handoff compact and replace obsolete task history rather than accumulating it.
 
-Infer durability, operational risk, and effort independently. State them
-briefly and continue:
+Use `.codex/new-project-setup/execution-and-continuity.md` for exceptional
+execution or memory cases and `.codex/new-project-setup/local-saving.md` for
+local-save details.
 
-- Lasting work preserves revisions and memory. Exploration is disposable only
-  for clear learning or feasibility; `quick`, `prototype`, and `MVP` do not
-  imply it. Promote reused or retained work; never demote. Delete only current
-  uncommitted Codex-created artifacts confirmed unused, never pre-existing,
-  shared, or lasting output.
-- Risk controls authorization, not routine local implementation authority.
-- Effort controls context and evidence, not authority: focused checks direct
-  effects; standard covers primary workflows and distinct risks;
-  release-critical gathers broad deduplicated evidence.
-
-Ask one preservation question only for ambiguous durability. Do not ask for
-routine implementation, context expansion, or validation transitions. Bounded
-local work authorizes architecture, a reasonable initial stack for an empty project,
-dependencies, tests, demo data, and empty-DB schemas.
-
-### Progressive context and evidence
-
-Start file changes with Git status and relevant files; durable work adds
-`docs/codex-handoff.md`. Read logs only when useful. Expand for dependencies,
-failures, or risk; exclude unrelated roots and artifacts. Rebuild stale
-handoffs from Git and evidence; ask only if the objective remains unsafe.
-
-Keep a compact ledger of acceptance criteria, material risks, boundaries,
-evidence, invalidators, and completion conditions. Claim
-completion only when every criterion passes, every material risk or protected
-boundary has distinct evidence, no unresolved high-risk failure remains, and
-durable records are current. Evidence is distinct only for a materially
-different risk or protected boundary; code-path or presentation variation
-alone is equivalent evidence.
-
-Reuse valid evidence and batch failures by cause. After targeted checks pass,
-run one effort-appropriate final matrix. On failure, preserve passing evidence,
-retest only failed or invalidated checks, and do not restart a broad matrix.
-Non-improving cycles require a different strategy, then a minimal reproducer;
-they do not stop productive debugging. Stop unresolved
-only when the latest strategy made no material progress and no credible bounded
-probe remains. Preserve diagnostics and report the blocker.
-
-### Proportional durable memory
-
-Preserve every lasting change in Git. Log useful decisions, failures, validation,
-or lessons; refresh the concise handoff at state boundaries with
-valid and remaining evidence; update the changelog for notable behavior. Keep
-private details in ignored `*.local.md` and recheck branch, HEAD, and scope.
-Prepare the final handoff before its containing commit and record sync relative
-to it; a matching push needs no bookkeeping-only commit.
-
-After a safe commit, run `scripts/github-sync.ps1` for a complete audit and
-private fast-forward push. Never force-push or change visibility. If blocked,
-keep the commit and ask whether to use isolated `scripts/github-backup.ps1` or
-remain local-only.
-
-### Autonomous local work
-
-Complete bounded objectives end-to-end through appropriate validation without
-routine checkpoints.
-Ask before deployment; credentials or live/paid services; auth/security changes;
-global or native tool installation; framework or platform replacement;
-consequential licensing changes; changes to existing, shared, or production
-data; destructive operations; material product-direction expansion beyond the
-request; or unrelated conflicting work. Internal refactoring, routine local
-dependencies, and isolated local construction need no checkpoint.
-Protected boundaries override implied authority. Deployment requires
-confirmation immediately before the action unless the current request explicitly
-names the target and effect and waives that checkpoint; that explicit waiver is
-the confirmation. Merely asking to deploy is not a waiver. One confirmation may
-cover several protected effects only when it names them all.
-<!-- new-project-setup:v6:end -->
+Authorization is required before destructive operations, deployment,
+production or shared-data changes, credential or authentication changes, paid
+services, global or native installation, external side effects, or material
+expansion beyond the objective.
+<!-- new-project-setup:v7:end -->

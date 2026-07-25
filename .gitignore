@@ -38,13 +38,19 @@ artifacts/librenms-windows-agent/
 artifacts/*.zip
 artifacts/native-build-validation/
 
-# new-project-setup:v6:start
+# new-project-setup:v7:start
 # Machine-local private documentation
 *.local.md
 .github-backup.local.json
+.codex/migrations/new-project-setup-v4-github.local.json
+.codex/migrations/new-project-setup-v6-github.local.json
 
-# Generated dependencies and artifacts
+# Generated dependencies and build output
 node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
 dist/
 build/
 out/
@@ -52,4 +58,8 @@ out/
 coverage/
 test-artifacts/
 playwright-report/
-# new-project-setup:v6:end
+.pytest_cache/
+.mypy_cache/
+.DS_Store
+Thumbs.db
+# new-project-setup:v7:end

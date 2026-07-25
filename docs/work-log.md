@@ -2,6 +2,10 @@
 
 ## 2026-07-25
 
+- Migrated the managed project workflow from initial V6 to V7 with the installed
+  exact-cohort planner. Check-only revalidation reports current format-3/V7
+  state; the private compatibility export is ignored, legacy helper files still
+  match tracked `HEAD`, and no product build, remote, or publication action ran.
 - Audited the four local Horizon release commits against the fetched public
   `origin/main`, confirmed a clean and strictly fast-forwardable branch, and
   corrected the stale read-first current-state record to distinguish overlay
