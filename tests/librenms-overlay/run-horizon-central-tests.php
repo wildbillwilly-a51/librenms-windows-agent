@@ -111,7 +111,7 @@ function testConfig(): array
     return [
         'site' => 'abc', 'dns_suffix' => 'example.test', 'display_device' => 'abc-vcs2.example.test',
         'enabled' => true, 'pool_warning_percent' => 50, 'pool_critical_percent' => 90,
-        'pool_minimum_spares' => 2, 'page_size' => 100, 'max_pages' => 2,
+        'pool_minimum_spares' => 2, 'machine_issue_limit' => 100, 'page_size' => 100, 'max_pages' => 2,
     ];
 }
 
@@ -119,8 +119,8 @@ function testConfig(): array
 function successfulResponses(string $identity = 'ABC Pod'): array
 {
     $machines = [];
-    $machines[] = ['id' => 'a1', 'name' => 'must-not-persist', 'desktop_pool_id' => 'pool-a', 'state' => 'AVAILABLE'];
-    $machines[] = ['id' => 'a2', 'desktop_pool_id' => 'pool-a', 'state' => 'ERROR'];
+    $machines[] = ['id' => 'a1', 'name' => 'abc-desktop-001', 'desktop_pool_id' => 'pool-a', 'state' => 'AVAILABLE'];
+    $machines[] = ['id' => 'a2', 'name' => 'abc-desktop-002', 'desktop_pool_id' => 'pool-a', 'state' => 'ERROR'];
     $machines[] = ['id' => 'b1', 'desktop_pool_id' => 'pool-b', 'state' => 'AVAILABLE'];
     for ($i = 2; $i <= 10; $i++) $machines[] = ['id' => 'b' . $i, 'desktop_pool_id' => 'pool-b', 'state' => 'ERROR'];
 
@@ -173,10 +173,16 @@ $tests['failover discovery gateway exclusion and scoring'] = static function ():
     expect(in_array('abc-vcs3.example.test', $snapshot['discovered_connection_servers'], true), 'additional Connection Server not discovered');
     expect(! in_array('abc-horizon-gw.example.test', $snapshot['discovered_connection_servers'], true), 'gateway became API failover candidate');
     expect(count($snapshot['horizon_gateways']) === 1, 'gateway not displayed');
-    expect($snapshot['horizon_pools'][0]['health_state'] === 'warning', '50 percent pool should warn');
-    expect($snapshot['horizon_pools'][1]['health_state'] === 'critical', '90 percent pool should be critical');
+    expect($snapshot['horizon_pools'][0]['health_state'] === 'info', 'one unavailable spare should be informational while capacity remains');
+    expect($snapshot['horizon_pools'][1]['health_state'] === 'warning', 'two or more unavailable spares should warn while ready capacity remains');
+    expect($snapshot['horizon_pools_summary']['pools_informational'] === 1, 'informational pool total missing');
+    expect($snapshot['horizon_pools_summary']['pools_warning'] === 1, 'warning pool total missing');
+    expect($snapshot['horizon_pool_machine_issues'][0]['name'] === 'abc-desktop-002', 'bounded issue-machine identity was not retained');
     expect(! str_contains(json_encode($snapshot, JSON_THROW_ON_ERROR), $fixtureValue), 'credential leaked into snapshot');
-    expect(! str_contains(json_encode($snapshot, JSON_THROW_ON_ERROR), 'must-not-persist'), 'user or machine identity leaked into snapshot');
+    expect(! str_contains(json_encode($snapshot, JSON_THROW_ON_ERROR), 'must-not-persist'), 'user or client identity leaked into snapshot');
+    expect(($snapshot['horizon_central_meta']['requests_total'] ?? 0) >= 8, 'collector request count missing');
+    expect(($snapshot['horizon_central_meta']['pages_total'] ?? 0) >= 2, 'collector page count missing');
+    expect(($snapshot['horizon_central_meta']['inventory_complete'] ?? 0) === 1, 'complete inventory was not recorded');
 };
 $tests['identity mismatch retains stale last good'] = static function (): void {
     $credential = ['username' => 'reader', 'password' => str_repeat('x', 12)];
@@ -186,6 +192,9 @@ $tests['identity mismatch retains stale last good'] = static function (): void {
     expect($stale['horizon_api_summary']['state'] === 'stale', 'identity mismatch did not retain stale data');
     expect($stale['horizon_api_summary']['sessions_total'] === $good['horizon_api_summary']['sessions_total'], 'last good values were overwritten');
     expect(str_contains($stale['horizon_central_meta']['reason'], 'pod_identity_mismatch'), 'sanitized mismatch reason absent');
+    expect($stale['horizon_central_meta']['endpoints_attempted'] >= 2, 'failed endpoint attempts were not observed');
+    expect($stale['horizon_central_meta']['inventory_complete'] === 0, 'stale refresh incorrectly retained complete inventory state');
+    expect($stale['horizon_central_meta']['snapshot_inventory_complete'] === 1, 'stale refresh lost last-good snapshot coverage');
 };
 $tests['authentication and authorization failures are sanitized'] = static function (): void {
     $attempt = 0;
@@ -213,7 +222,7 @@ $tests['partial endpoint and truncation become incomplete'] = static function ()
     expect($snapshot['horizon_api_summary']['sessions_truncated'] === 1, 'session truncation absent');
     expect($snapshot['horizon_pools_summary']['pools_incomplete'] === 2, 'truncated pool inventories should be incomplete');
 };
-$tests['zero ready and no unused capacity are explicit'] = static function (): void {
+$tests['zero ready and no placement capacity are critical'] = static function (): void {
     $responses = successfulResponses();
     $responses['rest/inventory/v1/desktop-pools'] = [
         ['id' => 'zero-ready', 'name' => 'Zero Ready', 'source' => 'INSTANT_CLONE', 'enabled' => true],
@@ -231,7 +240,44 @@ $tests['zero ready and no unused capacity are explicit'] = static function (): v
     ];
     $snapshot = (new PodCollector(static fn (): ApiSession => new FakeHorizonSession($responses)))->collect(testConfig(), ['username' => 'reader', 'password' => str_repeat('x', 12)]);
     expect($snapshot['horizon_pools'][0]['health_state'] === 'critical' && $snapshot['horizon_pools'][0]['health_reason'] === 'no_ready_spares', 'zero-ready pool was not critical');
-    expect($snapshot['horizon_pools'][1]['health_state'] === 'warning' && $snapshot['horizon_pools'][1]['health_reason'] === 'no_unused_machines', 'no-unused pool was not warning');
+    expect($snapshot['horizon_pools'][1]['health_state'] === 'critical' && $snapshot['horizon_pools'][1]['health_reason'] === 'no_placement_capacity', 'pool with every machine in session was not critical');
+};
+$tests['active machines with bad Horizon state remain selectable evidence'] = static function (): void {
+    $responses = successfulResponses();
+    $responses['rest/inventory/v1/sessions?page=1&size=100'] = [
+        ['machine_id' => 'a2', 'session_state' => 'CONNECTED', 'user_name' => 'must-not-persist'],
+    ];
+    $snapshot = (new PodCollector(static fn (): ApiSession => new FakeHorizonSession($responses)))->collect(testConfig(), ['username' => 'reader', 'password' => str_repeat('x', 12)]);
+    $issue = array_values(array_filter($snapshot['horizon_pool_machine_issues'], static fn (array $row): bool => ($row['id'] ?? '') === 'a2'))[0] ?? [];
+    expect(($issue['has_session'] ?? 0) === 1, 'active issue machine did not retain session-presence evidence');
+    expect(($issue['issue_reason'] ?? '') === 'machine_state_error', 'active issue machine reason changed');
+    expect(! str_contains(json_encode($snapshot, JSON_THROW_ON_ERROR), 'must-not-persist'), 'session user identity leaked into issue evidence');
+};
+$tests['issue details and unhealthy service evidence are bounded'] = static function (): void {
+    $responses = successfulResponses();
+    $responses['rest/monitor/v3/connection-servers'][0]['services'] = [
+        ['name' => 'CRL_PREFETCH', 'status' => 'DOWN'],
+        ['name' => 'MESSAGE_BUS', 'status' => 'STOPPED'],
+    ];
+    $config = testConfig();
+    $config['machine_issue_limit'] = 1;
+    $config['unhealthy_service_limit'] = 1;
+    $snapshot = (new PodCollector(static fn (): ApiSession => new FakeHorizonSession($responses)))->collect($config, ['username' => 'reader', 'password' => str_repeat('x', 12)]);
+    expect(count($snapshot['horizon_pool_machine_issues']) === 1, 'machine issue detail limit was not enforced');
+    expect($snapshot['horizon_api_summary']['machine_issues_total'] === 10, 'authoritative issue total was reduced to the detail limit');
+    expect($snapshot['horizon_api_summary']['machine_issues_truncated'] === 1, 'machine issue truncation was not disclosed');
+    expect(count($snapshot['horizon_pod_members'][0]['unhealthy_services']) === 1, 'service detail limit was not enforced');
+    expect($snapshot['horizon_pod_members'][0]['unhealthy_services'][0]['name'] === 'CRL_PREFETCH', 'unhealthy service name was not retained');
+    expect($snapshot['horizon_pod_members'][0]['unhealthy_services_truncated'] === 1, 'service detail truncation was not disclosed');
+    expect($snapshot['horizon_api_summary']['service_details_truncated'] === 1, 'service detail truncation summary was not disclosed');
+    expect($snapshot['horizon_central_meta']['inventory_complete'] === 0, 'truncated issue evidence incorrectly reported complete');
+};
+$tests['cluster name is used when local pod name is empty'] = static function (): void {
+    $responses = successfulResponses();
+    $responses['rest/config/v1/environment-properties'] = ['local_pod_name' => '', 'cluster_name' => 'ABC Cluster'];
+    $snapshot = (new PodCollector(static fn (): ApiSession => new FakeHorizonSession($responses)))->collect(testConfig(), ['username' => 'reader', 'password' => str_repeat('x', 12)]);
+    expect($snapshot['pod_identity'] === 'ABC Cluster', 'cluster name did not supply pod identity fallback');
+    expect($snapshot['horizon_pod_summary']['pod_name'] === 'ABC Cluster', 'cluster name did not supply pod display fallback');
 };
 $tests['absent configuration is a safe no-op'] = static function (): void {
     $root = sys_get_temp_dir() . '/horizon-absent-' . bin2hex(random_bytes(5));
@@ -389,7 +435,7 @@ $tests['discovery reports TLS auth identity and cross-site ambiguity failures'] 
 $tests['capability manifest advertises the stable private integration contract'] = static function (): void {
     $path = dirname(__DIR__, 2) . '/librenms-overlay/tools/capabilities.json';
     $manifest = json_decode((string) file_get_contents($path), true, flags: JSON_THROW_ON_ERROR);
-    expect($manifest['overlay_version'] === '0.6.17', 'overlay capability version mismatch');
+    expect($manifest['overlay_version'] === '0.6.18', 'overlay capability version mismatch');
     expect($manifest['configuration_schema_version'] === 2, 'configuration schema version mismatch');
     expect($manifest['capabilities']['horizon_trigger_producer'] === 1, 'trigger capability missing');
     expect($manifest['capabilities']['horizon_central_worker'] === 1, 'worker capability missing');

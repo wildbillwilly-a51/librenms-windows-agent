@@ -168,6 +168,12 @@ final class PodCollector
 {
     /** @var callable(string,array<string,string>,array<string,mixed>):ApiSession */
     private $sessionFactory;
+    private int $requestCount = 0;
+    private int $pageCount = 0;
+    private int $sessionPages = 0;
+    private int $machinePages = 0;
+    private int $sessionRows = 0;
+    private int $machineRows = 0;
 
     /** @param callable(string,array<string,string>,array<string,mixed>):ApiSession|null $sessionFactory */
     public function __construct(?callable $sessionFactory = null)
@@ -190,9 +196,13 @@ final class PodCollector
     public function collect(array $config, array $credential, array $previous = []): array
     {
         self::validateConfig($config);
+        $started = microtime(true);
         $attemptedAt = gmdate('c');
         $failures = [];
+        $endpointAttempts = 0;
+        $this->resetObservability();
         foreach (array_slice(self::candidateEndpoints($config, $previous), 0, 10) as $endpoint) {
+            $endpointAttempts++;
             $session = null;
             try {
                 $session = ($this->sessionFactory)($endpoint, $credential, $config);
@@ -209,7 +219,21 @@ final class PodCollector
                     'configured_endpoints' => self::seedEndpoints($config),
                     'discovered_endpoints' => $snapshot['discovered_connection_servers'],
                     'pod_identity' => $snapshot['pod_identity'],
+                    'outcome' => 'fresh',
+                    'collection_duration_ms' => max(0, (int) round((microtime(true) - $started) * 1000)),
+                    'endpoints_attempted' => $endpointAttempts,
+                    'requests_total' => $this->requestCount,
+                    'pages_total' => $this->pageCount,
+                    'session_pages' => $this->sessionPages,
+                    'machine_pages' => $this->machinePages,
+                    'session_rows' => $this->sessionRows,
+                    'machine_rows' => $this->machineRows,
+                    'inventory_complete' => ((int) ($snapshot['horizon_api_summary']['sessions_truncated'] ?? 0) === 0
+                        && (int) ($snapshot['horizon_api_summary']['machines_truncated'] ?? 0) === 0
+                        && (int) ($snapshot['horizon_api_summary']['machine_issues_truncated'] ?? 0) === 0
+                        && (int) ($snapshot['horizon_api_summary']['service_details_truncated'] ?? 0) === 0) ? 1 : 0,
                 ];
+                $snapshot['horizon_central_meta']['snapshot_inventory_complete'] = $snapshot['horizon_central_meta']['inventory_complete'];
 
                 return $snapshot;
             } catch (HorizonFailure $failure) {
@@ -228,6 +252,21 @@ final class PodCollector
             $stale['horizon_central_meta']['snapshot_age_seconds'] = $age;
             $stale['horizon_central_meta']['stale'] = 1;
             $stale['horizon_central_meta']['reason'] = $reason;
+            $stale['horizon_central_meta']['outcome'] = 'stale';
+            $stale['horizon_central_meta']['collection_duration_ms'] = max(0, (int) round((microtime(true) - $started) * 1000));
+            $stale['horizon_central_meta']['endpoints_attempted'] = $endpointAttempts;
+            $stale['horizon_central_meta']['requests_total'] = $this->requestCount;
+            $stale['horizon_central_meta']['pages_total'] = $this->pageCount;
+            $stale['horizon_central_meta']['session_pages'] = $this->sessionPages;
+            $stale['horizon_central_meta']['machine_pages'] = $this->machinePages;
+            $stale['horizon_central_meta']['session_rows'] = $this->sessionRows;
+            $stale['horizon_central_meta']['machine_rows'] = $this->machineRows;
+            $stale['horizon_central_meta']['snapshot_inventory_complete'] = (int) (
+                $stale['horizon_central_meta']['snapshot_inventory_complete']
+                ?? $stale['horizon_central_meta']['inventory_complete']
+                ?? 0
+            );
+            $stale['horizon_central_meta']['inventory_complete'] = 0;
             $stale['horizon_api_summary']['state'] = 'stale';
             $stale['horizon_api_summary']['reason'] = $reason;
 
@@ -315,6 +354,10 @@ final class PodCollector
         if ((int) ($config['pool_warning_percent'] ?? 50) >= (int) ($config['pool_critical_percent'] ?? 90)) {
             throw new HorizonFailure('invalid_pool_threshold_order');
         }
+        $issueLimit = (int) ($config['machine_issue_limit'] ?? 100);
+        if ($issueLimit < 1 || $issueLimit > 500) {
+            throw new HorizonFailure('invalid_machine_issue_limit');
+        }
     }
 
     /** @param array<string,mixed> $config @return list<string> */
@@ -346,7 +389,10 @@ final class PodCollector
     {
         $failures = [];
         $environment = $this->required($session, 'rest/config/v1/environment-properties');
-        $identity = trim((string) ($environment['local_pod_name'] ?? $environment['cluster_name'] ?? ''));
+        $identity = trim((string) ($environment['local_pod_name'] ?? ''));
+        if ($identity === '') {
+            $identity = trim((string) ($environment['cluster_name'] ?? ''));
+        }
         $expected = trim((string) ($config['pod_identity'] ?? $previous['pod_identity'] ?? $previous['horizon_central_meta']['pod_identity'] ?? ''));
         if ($expected !== '' && $identity === '') {
             throw new HorizonFailure('pod_identity_missing');
@@ -357,7 +403,12 @@ final class PodCollector
 
         $monitorRows = self::rows($this->optional($session, 'rest/monitor/v3/connection-servers', 'connection_server_monitor', $failures));
         $configRows = self::rows($this->required($session, 'rest/config/v2/connection-servers'));
-        [$members, $replications, $memberTotals] = self::connectionServers($monitorRows, $configRows, $endpoint);
+        [$members, $replications, $memberTotals] = self::connectionServers(
+            $monitorRows,
+            $configRows,
+            $endpoint,
+            max(1, min(64, (int) ($config['unhealthy_service_limit'] ?? 16)))
+        );
         $discovered = [];
         foreach ($members as $member) {
             if ((int) ($member['enabled'] ?? 0) !== 1 || ! self::healthy((string) ($member['status'] ?? ''))) {
@@ -378,7 +429,17 @@ final class PodCollector
         [$sessionTotals, $protocols, $activeMachineIds, $sessionsTruncated] = $this->sessions($session, $pageSize, $maxPages, $failures);
         $poolRows = self::rows($this->optional($session, 'rest/inventory/v1/desktop-pools', 'desktop_pools', $failures));
         [$pools, $poolById] = self::pools($poolRows);
-        [$pools, $machineStates, $machinesTruncated] = $this->machines($session, $pools, $poolById, $activeMachineIds, $pageSize, $maxPages, $failures);
+        [$pools, $machineStates, $machineIssues, $machineIssuesTruncated, $machinesTruncated] = $this->machines(
+            $session,
+            $pools,
+            $poolById,
+            $activeMachineIds,
+            $pageSize,
+            $maxPages,
+            $failures,
+            max(1, min(500, (int) ($config['machine_issue_limit'] ?? 100))),
+            gmdate('c')
+        );
         [$pools, $poolTotals] = self::scorePools($pools, $sessionsTruncated || $machinesTruncated || in_array('sessions', $failures, true) || in_array('machines', $failures, true), $config);
 
         $state = $failures === [] ? 'ok' : 'partial';
@@ -401,8 +462,18 @@ final class PodCollector
             'sessions_other' => $sessionTotals['other'],
             'sessions_truncated' => $sessionsTruncated ? 1 : 0,
             'machines_truncated' => $machinesTruncated ? 1 : 0,
+            'machine_issues_total' => (int) ($poolTotals['issue_machines'] ?? count($machineIssues)),
+            'machine_issues_truncated' => $machineIssuesTruncated ? 1 : 0,
+            'service_details_truncated' => (int) ($memberTotals['service_details_truncated'] ?? 0),
             'source' => 'central',
         ];
+        $podName = trim((string) ($environment['local_pod_name'] ?? ''));
+        if ($podName === '') {
+            $podName = trim((string) ($environment['cluster_name'] ?? ''));
+        }
+        if ($podName === '') {
+            $podName = $identity;
+        }
 
         return [
             'pod_identity' => $identity,
@@ -411,7 +482,7 @@ final class PodCollector
             'horizon_api_session_protocols' => $protocols,
             'horizon_pod_summary' => [
                 'state' => $healthState,
-                'pod_name' => (string) ($environment['local_pod_name'] ?? ''),
+                'pod_name' => $podName,
                 'cluster_name' => (string) ($environment['cluster_name'] ?? ''),
                 'members_total' => $memberTotals['total'],
                 'members_unhealthy' => $memberTotals['unhealthy'],
@@ -433,20 +504,21 @@ final class PodCollector
             'horizon_pools_summary' => $poolTotals,
             'horizon_pools' => $pools,
             'horizon_pool_machine_states' => $machineStates,
+            'horizon_pool_machine_issues' => $machineIssues,
         ];
     }
 
     /** @return array<mixed> */
     private function required(ApiSession $session, string $path): array
     {
-        return $session->get($path);
+        return $this->trackedGet($session, $path);
     }
 
     /** @param list<string> $failures @return array<mixed> */
     private function optional(ApiSession $session, string $path, string $label, array &$failures): array
     {
         try {
-            return $session->get($path);
+            return $this->trackedGet($session, $path);
         } catch (HorizonFailure) {
             $failures[] = $label;
 
@@ -455,18 +527,29 @@ final class PodCollector
     }
 
     /** @param list<array<string,mixed>> $monitor @param list<array<string,mixed>> $configs @return array{0:list<array<string,mixed>>,1:list<array<string,mixed>>,2:array<string,int>} */
-    private static function connectionServers(array $monitor, array $configs, string $endpoint): array
+    private static function connectionServers(array $monitor, array $configs, string $endpoint, int $serviceLimit): array
     {
         $members = [];
         $replications = [];
-        $totals = ['total' => 0, 'unhealthy' => 0, 'services_unhealthy' => 0, 'replications_total' => 0, 'replications_unhealthy' => 0, 'certificates_invalid' => 0];
+        $totals = ['total' => 0, 'unhealthy' => 0, 'services_unhealthy' => 0, 'service_details_truncated' => 0, 'replications_total' => 0, 'replications_unhealthy' => 0, 'certificates_invalid' => 0];
         foreach ($monitor as $row) {
             $name = (string) ($row['name'] ?? '');
             $servicesBad = 0;
+            $unhealthyServices = [];
+            $unhealthyServicesTruncated = false;
             foreach (self::rows($row['services'] ?? []) as $service) {
-                if (! self::healthy((string) ($service['status'] ?? ''))) {
-                    $servicesBad++;
+                $serviceStatus = self::status((string) ($service['status'] ?? ''));
+                if (self::healthy($serviceStatus)) continue;
+                $servicesBad++;
+                if (count($unhealthyServices) >= $serviceLimit) {
+                    $unhealthyServicesTruncated = true;
+                    continue;
                 }
+                $serviceName = (string) ($service['name'] ?? $service['service_name'] ?? $service['display_name'] ?? 'unknown');
+                $unhealthyServices[] = [
+                    'name' => self::boundedText($serviceName, 96, 'unknown'),
+                    'status' => self::boundedText($serviceStatus, 32, 'UNKNOWN'),
+                ];
             }
             $replBad = 0;
             foreach (self::rows($row['cs_replications'] ?? []) as $replication) {
@@ -486,11 +569,16 @@ final class PodCollector
                 'server_type' => 'connection_server', 'local_api_target' => strcasecmp($name, $endpoint) === 0 ? 1 : 0,
                 'enabled' => 1, 'gateway_mode' => 'none', 'version' => (string) (($row['details']['version'] ?? '')),
                 'connections' => (int) ($row['connection_count'] ?? 0), 'services_unhealthy' => $servicesBad,
+                'unhealthy_services' => $unhealthyServices,
+                'unhealthy_services_truncated' => $unhealthyServicesTruncated ? 1 : 0,
                 'configuration_replications_total' => count(self::rows($row['cs_replications'] ?? [])),
                 'configuration_replications_unhealthy' => $replBad, 'certificate_valid' => $certValid ? 1 : 0,
             ];
             $members[] = $member;
             $totals['services_unhealthy'] += $servicesBad;
+            if ($unhealthyServicesTruncated) {
+                $totals['service_details_truncated'] = 1;
+            }
             if (! $certValid) {
                 $totals['certificates_invalid']++;
             }
@@ -498,7 +586,7 @@ final class PodCollector
         foreach ($configs as $row) {
             $index = self::findMember($members, (string) ($row['id'] ?? ''), (string) ($row['name'] ?? ''));
             if ($index < 0) {
-                $members[] = ['id' => (string) ($row['id'] ?? ''), 'name' => (string) ($row['name'] ?? ''), 'status' => 'UNKNOWN', 'services_unhealthy' => 0, 'configuration_replications_total' => 0, 'configuration_replications_unhealthy' => 0, 'certificate_valid' => 1, 'connections' => 0];
+                $members[] = ['id' => (string) ($row['id'] ?? ''), 'name' => (string) ($row['name'] ?? ''), 'status' => 'UNKNOWN', 'services_unhealthy' => 0, 'unhealthy_services' => [], 'unhealthy_services_truncated' => 0, 'configuration_replications_total' => 0, 'configuration_replications_unhealthy' => 0, 'certificate_valid' => 1, 'connections' => 0];
                 $index = count($members) - 1;
             }
             $gatewayModes = [];
@@ -579,7 +667,9 @@ final class PodCollector
         $truncated = false;
         for ($page = 1; $page <= $maxPages; $page++) {
             try {
-                $rows = self::rows($session->get("rest/inventory/v1/sessions?page={$page}&size={$pageSize}"));
+                $rows = self::rows($this->trackedGet($session, "rest/inventory/v1/sessions?page={$page}&size={$pageSize}", true));
+                $this->sessionPages++;
+                $this->sessionRows += count($rows);
             } catch (HorizonFailure) {
                 $failures[] = 'sessions';
                 break;
@@ -612,7 +702,7 @@ final class PodCollector
         foreach ($rows as $row) {
             $source = self::status((string) ($row['source'] ?? ''));
             if (! in_array($source, ['INSTANT_CLONE', 'LINKED_CLONE', 'VIEW_COMPOSER'], true)) continue;
-            $pool = ['id' => (string) ($row['id'] ?? ''), 'name' => (string) ($row['name'] ?? ''), 'display_name' => (string) ($row['display_name'] ?? ''), 'source' => $source, 'clone_type' => $source, 'enabled' => self::boolean($row['enabled'] ?? true, true) ? 1 : 0, 'machines_total' => 0, 'machines_with_sessions' => 0, 'spare_total' => 0, 'spare_ready' => 0, 'spare_unready' => 0, 'spare_maintenance' => 0, '_states' => []];
+            $pool = ['id' => (string) ($row['id'] ?? ''), 'name' => (string) ($row['name'] ?? ''), 'display_name' => (string) ($row['display_name'] ?? ''), 'source' => $source, 'clone_type' => $source, 'enabled' => self::boolean($row['enabled'] ?? true, true) ? 1 : 0, 'machines_total' => 0, 'machines_with_sessions' => 0, 'spare_total' => 0, 'spare_ready' => 0, 'spare_unready' => 0, 'spare_maintenance' => 0, 'issue_machines' => 0, '_states' => []];
             if ($pool['id'] !== '') $byId[$pool['id']] = count($pools);
             $pools[] = $pool;
         }
@@ -620,13 +710,17 @@ final class PodCollector
         return [$pools, $byId];
     }
 
-    /** @param list<array<string,mixed>> $pools @param array<string,int> $poolById @param array<string,true> $active @param list<string> $failures @return array{0:list<array<string,mixed>>,1:list<array<string,mixed>>,2:bool} */
-    private function machines(ApiSession $session, array $pools, array $poolById, array $active, int $pageSize, int $maxPages, array &$failures): array
+    /** @param list<array<string,mixed>> $pools @param array<string,int> $poolById @param array<string,true> $active @param list<string> $failures @return array{0:list<array<string,mixed>>,1:list<array<string,mixed>>,2:list<array<string,mixed>>,3:bool,4:bool} */
+    private function machines(ApiSession $session, array $pools, array $poolById, array $active, int $pageSize, int $maxPages, array &$failures, int $issueLimit, string $collectedUtc): array
     {
         $truncated = false;
+        $issuesTruncated = false;
+        $issues = [];
         for ($page = 1; $page <= $maxPages; $page++) {
             try {
-                $rows = self::rows($session->get("rest/inventory/v1/machines?page={$page}&size={$pageSize}"));
+                $rows = self::rows($this->trackedGet($session, "rest/inventory/v1/machines?page={$page}&size={$pageSize}", true));
+                $this->machinePages++;
+                $this->machineRows += count($rows);
             } catch (HorizonFailure) {
                 $failures[] = 'machines';
                 break;
@@ -639,16 +733,40 @@ final class PodCollector
                 $state = self::status((string) ($row['state'] ?? 'UNKNOWN')) ?: 'UNKNOWN';
                 $pools[$index]['_states'][$state] = ($pools[$index]['_states'][$state] ?? 0) + 1;
                 $machineId = (string) ($row['id'] ?? '');
-                if ($machineId !== '' && isset($active[$machineId])) {
+                $hasSession = $machineId !== '' && isset($active[$machineId]);
+                $managed = is_array($row['managed_machine_data'] ?? null) ? $row['managed_machine_data'] : [];
+                $maintenance = self::boolean($managed['in_maintenance_mode'] ?? false, false) || $state === 'MAINTENANCE';
+                $isIssue = $maintenance || self::machineStateIsIssue($state, $hasSession);
+                if ($isIssue) {
+                    $pools[$index]['issue_machines']++;
+                    if (count($issues) >= $issueLimit) {
+                        $issuesTruncated = true;
+                    } else {
+                        $issues[] = [
+                            'id' => self::boundedText($machineId, 128, 'unknown'),
+                            'name' => self::boundedText((string) ($row['name'] ?? $machineId), 128, 'unknown'),
+                            'pool_id' => self::boundedText($poolId, 128, 'unknown'),
+                            'pool' => self::boundedText((string) ($pools[$index]['name'] ?? ''), 128, 'unknown'),
+                            'pool_display_name' => self::boundedText((string) ($pools[$index]['display_name'] ?? $pools[$index]['name'] ?? ''), 128, 'unknown'),
+                            'clone_type' => (string) ($pools[$index]['clone_type'] ?? ''),
+                            'state' => $state,
+                            'maintenance' => $maintenance ? 1 : 0,
+                            'has_session' => $hasSession ? 1 : 0,
+                            'issue_reason' => self::machineIssueReason($state, $maintenance),
+                            'collected_utc' => $collectedUtc,
+                        ];
+                    }
+                }
+                if ($hasSession) {
                     $pools[$index]['machines_with_sessions']++;
                     continue;
                 }
                 $pools[$index]['spare_total']++;
-                $managed = is_array($row['managed_machine_data'] ?? null) ? $row['managed_machine_data'] : [];
-                $maintenance = self::boolean($managed['in_maintenance_mode'] ?? false, false) || $state === 'MAINTENANCE';
                 if ($maintenance) $pools[$index]['spare_maintenance']++;
                 if ($state === 'AVAILABLE' && ! $maintenance) $pools[$index]['spare_ready']++;
-                else $pools[$index]['spare_unready']++;
+                else {
+                    $pools[$index]['spare_unready']++;
+                }
             }
             if (count($rows) < $pageSize) break;
             if ($page === $maxPages) $truncated = true;
@@ -658,36 +776,41 @@ final class PodCollector
             foreach ($pool['_states'] as $state => $count) $states[] = ['pool' => $pool['name'], 'clone_type' => $pool['clone_type'], 'machine_state' => $state, 'count' => $count];
         }
 
-        return [$pools, $states, $truncated];
+        usort($issues, static fn (array $left, array $right): int => strcasecmp(
+            (string) ($left['pool_display_name'] ?? $left['pool'] ?? ''),
+            (string) ($right['pool_display_name'] ?? $right['pool'] ?? '')
+        ) ?: strcasecmp((string) ($left['name'] ?? ''), (string) ($right['name'] ?? '')));
+
+        return [$pools, $states, $issues, $issuesTruncated, $truncated];
     }
 
     /** @param list<array<string,mixed>> $pools @param array<string,mixed> $config @return array{0:list<array<string,mixed>>,1:array<string,int>} */
     private static function scorePools(array $pools, bool $incomplete, array $config): array
     {
-        $warning = (int) ($config['pool_warning_percent'] ?? 50);
-        $critical = (int) ($config['pool_critical_percent'] ?? 90);
-        $minimum = max(1, (int) ($config['pool_minimum_spares'] ?? 2));
-        $totals = ['pools_total' => count($pools), 'pools_healthy' => 0, 'pools_warning' => 0, 'pools_critical' => 0, 'pools_disabled' => 0, 'pools_incomplete' => 0, 'spare_total' => 0, 'spare_ready' => 0, 'spare_unready' => 0, 'warning_percent' => $warning, 'critical_percent' => $critical];
+        $totals = ['pools_total' => count($pools), 'pools_healthy' => 0, 'pools_informational' => 0, 'pools_warning' => 0, 'pools_critical' => 0, 'pools_disabled' => 0, 'pools_incomplete' => 0, 'spare_total' => 0, 'spare_ready' => 0, 'spare_unready' => 0, 'issue_machines' => 0];
         foreach ($pools as &$pool) {
             $spares = (int) $pool['spare_total'];
             $unready = (int) $pool['spare_unready'];
             $percent = $spares > 0 ? round(($unready / $spares) * 100, 1) : 0.0;
             if ((int) $pool['enabled'] === 0) [$state, $reason] = ['disabled', 'pool_disabled'];
             elseif ($incomplete) [$state, $reason] = ['incomplete', 'inventory_incomplete'];
-            elseif ((int) $pool['machines_total'] > 0 && $spares === 0) [$state, $reason] = ['warning', 'no_unused_machines'];
+            elseif ((int) $pool['machines_total'] > 0 && $spares === 0) [$state, $reason] = ['critical', 'no_placement_capacity'];
             elseif ($spares > 0 && (int) $pool['spare_ready'] === 0) [$state, $reason] = ['critical', 'no_ready_spares'];
-            elseif ($spares < $minimum) [$state, $reason] = ['warning', 'sample_below_minimum'];
-            elseif ($percent >= $critical) [$state, $reason] = ['critical', 'unready_percent_critical'];
-            elseif ($percent >= $warning) [$state, $reason] = ['warning', 'unready_percent_warning'];
+            elseif ($unready >= 2) [$state, $reason] = ['warning', 'multiple_unavailable_spares'];
+            elseif ($unready === 1) [$state, $reason] = ['info', 'one_unavailable_capacity_remains'];
             else [$state, $reason] = ['ok', 'within_threshold'];
             $pool['health_state'] = $state;
             $pool['health_reason'] = $reason;
             $pool['spare_unready_percent'] = $percent;
+            $pool['placement_headroom_percent'] = (int) ($pool['machines_total'] ?? 0) > 0
+                ? round(((int) ($pool['spare_ready'] ?? 0) / (int) $pool['machines_total']) * 100, 1)
+                : 0.0;
             unset($pool['_states']);
             $totals['spare_total'] += $spares;
             $totals['spare_ready'] += (int) $pool['spare_ready'];
             $totals['spare_unready'] += $unready;
-            $key = ['ok' => 'pools_healthy', 'warning' => 'pools_warning', 'critical' => 'pools_critical', 'disabled' => 'pools_disabled', 'incomplete' => 'pools_incomplete'][$state];
+            $totals['issue_machines'] += (int) ($pool['issue_machines'] ?? 0);
+            $key = ['ok' => 'pools_healthy', 'info' => 'pools_informational', 'warning' => 'pools_warning', 'critical' => 'pools_critical', 'disabled' => 'pools_disabled', 'incomplete' => 'pools_incomplete'][$state];
             $totals[$key]++;
         }
         unset($pool);
@@ -758,5 +881,68 @@ final class PodCollector
     private static function validDnsName(string $value): bool
     {
         return strlen($value) <= 253 && preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i', $value) === 1;
+    }
+
+    private function resetObservability(): void
+    {
+        $this->requestCount = 0;
+        $this->pageCount = 0;
+        $this->sessionPages = 0;
+        $this->machinePages = 0;
+        $this->sessionRows = 0;
+        $this->machineRows = 0;
+    }
+
+    /** @return array<mixed> */
+    private function trackedGet(ApiSession $session, string $path, bool $page = false): array
+    {
+        $this->requestCount++;
+        if ($page) $this->pageCount++;
+
+        return $session->get($path);
+    }
+
+    private static function machineIssueReason(string $state, bool $maintenance): string
+    {
+        if ($maintenance) return 'maintenance_mode';
+        $normalized = strtolower((string) preg_replace('/[^a-z0-9]+/i', '_', trim($state)));
+        $normalized = trim($normalized, '_');
+
+        return match ($normalized) {
+            'agent_unreachable' => 'agent_unreachable',
+            'provisioning_error' => 'provisioning_error',
+            'error' => 'machine_state_error',
+            'disabled' => 'machine_disabled',
+            '' => 'machine_state_unknown',
+            default => 'machine_state_' . substr($normalized, 0, 48),
+        };
+    }
+
+    private static function machineStateIsIssue(string $state, bool $hasSession): bool
+    {
+        $normalized = self::status($state);
+        $knownIssues = [
+            'AGENT_UNREACHABLE',
+            'ALREADY_USED',
+            'CUSTOMIZING_ERROR',
+            'DISABLED',
+            'ERROR',
+            'PROVISIONING_ERROR',
+            'UNAVAILABLE',
+            'UNKNOWN',
+        ];
+        if (in_array($normalized, $knownIssues, true)) {
+            return true;
+        }
+
+        return ! $hasSession && $normalized !== 'AVAILABLE';
+    }
+
+    private static function boundedText(string $value, int $limit, string $fallback): string
+    {
+        $value = trim((string) preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $value));
+        if ($value === '') return $fallback;
+
+        return function_exists('mb_substr') ? mb_substr($value, 0, $limit) : substr($value, 0, $limit);
     }
 }

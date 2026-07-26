@@ -70,21 +70,25 @@ health result and stopped core services are presented as issues. Optional
 listeners, non-core services, runtime/native availability, and cumulative
 counter values remain informational.
 
-The Horizon application view uses the same compact operational pattern. It
-shows local host health plus optional read-only pod, directory, gateway,
-session, and instant/linked-clone pool health before the complete inventory.
+The Horizon application view is a problems-first operational workspace. It
+leads with actionable conditions and pool capacity, defaults trends to 30
+days, and keeps platform health, collector reliability, and complete
+diagnostics available below. Every pool expands in place; bounded issue
+machines can be selected for focused state, evidence, and next-action detail.
 Horizon configuration replication (AD LDS) and per-member Horizon domain
-access are kept separate from the Windows/Microsoft AD collector. Clone-pool
-health defaults to warning when at least 50% of unused machines are not ready,
-critical at 90%, and critical whenever no unused machine is ready. Full pod,
-pool, and machine-state counts remain in compact disclosures. Release 0.6.14's
-Windows-side API prototype is disabled by default and uses a one-time
-machine-protected credential file rather than a password in configuration.
-Overlay release 0.6.17 provides the cluster-safe, poll-triggered centralized
-successor, which runs once per effective pod cycle from LibreNMS. See
+access remain separate from the Windows/Microsoft AD collector.
+
+Central clone-pool policy is count based: one unavailable spare is
+informational while another spare is ready, two or more unavailable spares is
+a warning, zero ready spares is critical, and a non-empty pool with every
+machine in session is critical because it has no placement capacity. This
+visibility does not enable LibreNMS notifications. Release 0.6.14's
+Windows-side API prototype remains disabled by default. Overlay release 0.6.18
+provides the cluster-safe, poll-triggered centralized collector and the new
+operational UI. See
 [Horizon monitoring design](docs/horizon-monitoring.md) for scope and setup.
 
-### Central Horizon API Collector (Overlay 0.6.17)
+### Central Horizon API Collector (Overlay 0.6.18)
 
 Keep the Windows agent on every Horizon server for local
 service/process/listener/certificate telemetry; do not place Horizon API
@@ -150,6 +154,12 @@ device or application produces a bounded reassignment error. Central collection
 owns the Horizon API/platform RRD writes, so pollers cannot create duplicate or
 conflicting central samples. Failed refreshes retain the last good application
 snapshot and write unknown RRD samples.
+
+The central snapshot also records bounded unhealthy-service evidence, bounded
+issue-machine detail with explicit truncation, collection duration,
+endpoint/request/page counts, returned inventory counts, completeness, and
+outcome. These metrics feed a new additive collector-health RRD family; no
+existing RRD schema changes.
 
 Use `config status`, `pod list`, and `worker status` for sanitized state.
 `capability show` prints the generic overlay/configuration/private-integration
@@ -305,7 +315,7 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Install a specific overlay version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.17
+curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.18
 ```
 
 Preview without changing the node:

@@ -1,23 +1,23 @@
 # Changelog
 
-## Unreleased - Horizon collector and UI design
+## 0.6.18 - 2026-07-25
 
-- Locked the next collector requirements for bounded unhealthy service detail,
-  collector self-observability, explicit per-pool capacity policy, pod-name
-  fallback, and non-alerting defaults.
-- Made an approved operational information architecture and visual concept a
-  prerequisite for implementation so high-value health, capacity, demand,
-  freshness, and reliability signals are not buried in equal-weight summaries
-  or disclosures.
-- Approved problems-first/pools-second first-viewport hierarchy, 24-hour,
-  7-day, and 30-day trends, and spare health semantics: one unavailable spare
-  is informational when another is ready, two is warning, and zero ready is
-  critical when the spare set is non-empty. Notification rules remain
-  separately gated.
-- Classified a non-empty pool with every machine in session and no remaining
-  placement capacity as critical, independently of unavailable-spare health.
-- Required expandable pool rows and selectable issue-machine detail backed by
-  a bounded sanitized per-machine issue inventory with explicit truncation.
+- Added bounded unhealthy Connection Server service evidence, bounded
+  selectable issue-machine evidence, pod-name fallback, and collector
+  duration/endpoint/request/page/inventory/outcome observability.
+- Replaced percentage-based central pool scoring with the approved count
+  policy: one unavailable spare is informational while ready capacity remains,
+  two or more is warning, and zero ready or zero placement capacity is
+  critical.
+- Rebuilt the Horizon application page as a problems-first operational
+  workspace with expandable pools, issue-only filtering, a read-only machine
+  evidence drawer, 24-hour/7-day/30-day trends with 30 days as the default,
+  platform health, collector reliability, and complete lower diagnostics.
+- Added an additive Horizon collector-health RRD family and a combined
+  sessions/headroom graph without changing existing RRD schemas.
+- Preserved local-only Horizon diagnostics when central API collection is not
+  configured. All visibility remains non-alerting by default.
+- Kept the Windows agent/MSI unchanged at 0.6.14.
 
 ## 0.6.17 - 2026-07-25
 

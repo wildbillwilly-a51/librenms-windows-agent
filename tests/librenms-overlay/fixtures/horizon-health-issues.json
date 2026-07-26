@@ -52,13 +52,16 @@
     },
     "app_page": {
       "contains": [
+        "VMware Horizon",
         "3 Horizon issue(s) need review.",
-        "Reported Health Issues <small>3</small>",
         "Required service is not running: VMware Horizon View Connection Server",
         "Required HTTPS listener is unavailable",
         "Horizon server certificate is expired",
         "Check Horizon Connection Server listeners and Windows firewall for required ports.",
-        "Inventory and raw diagnostics"
+        "Raw diagnostics",
+        "Local Service Inventory",
+        "Listener Inventory",
+        "Host Certificates"
       ],
       "not_contains": [
         "No Horizon health issues were reported.",

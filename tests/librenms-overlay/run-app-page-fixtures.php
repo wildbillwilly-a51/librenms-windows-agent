@@ -211,9 +211,16 @@ namespace {
 
         if (PHP_SAPI === 'cli-server') {
             header('Content-Type: text/html; charset=utf-8');
+            echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">';
+            echo '<title>Windows Agent application fixture</title>';
+            echo '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/css/bootstrap.min.css">';
+            echo '<style>body{padding:20px;background:#f6f7f9}.tab-content{background:#fff;padding:15px;border:1px solid #ddd;border-top:0}</style></head><body>';
         }
 
         echo renderFixture($renderFixturePath, $parserPath, $pagePath);
+        if (PHP_SAPI === 'cli-server') {
+            echo '</body></html>';
+        }
         exit(0);
     }
 

@@ -2,6 +2,29 @@
 
 ## 2026-07-25
 
+- Implemented and packaged overlay 0.6.18 with the approved Horizon collector
+  and UI iteration. The collector now publishes bounded unhealthy service and
+  issue-machine evidence, explicit truncation, pod-name fallback, and
+  attempt/snapshot observability. Central pool scoring now treats one
+  unavailable spare as informational while capacity remains, two or more as
+  warning, and zero ready or zero placement capacity as critical.
+- Rebuilt the Horizon page around conditions, expandable pools, issue-only
+  filtering, a read-only machine drawer, 30-day-default demand/headroom
+  trends, platform health, collector reliability, and complete diagnostics.
+  Local-only Horizon evidence remains available without central API
+  configuration. LibreNMS notifications remain disabled.
+- Validation passed: all 59 .NET tests; ten parser fixtures; ten rendered-page
+  fixtures; 20 central collector/trigger/worker/discovery cases; 68 packaged
+  PHP files plus all source/test PHP linted through WSL; Bash syntax;
+  ShellCheck; JSON and whitespace checks; checksum, archive, package manifest,
+  and required-file verification; and browser interaction/visual QA for pool
+  expansion, issue filtering, machine drawer, Escape close, and trend ranges.
+  The release helper's Windows-only PHP probe was unavailable, but the broader
+  WSL PHP source and packaged-payload lint passed. Overlay SHA-256:
+  `6eb69b7c560b6958a596a117c38298c246bb720ad90700342c31608b1058e829`.
+  The Windows agent/MSI remains 0.6.14 with unchanged checksum
+  `e2dc68edd5b0aaa1f21828e8292d37b7412dcb0353dcf11db0f458859d759b89`.
+
 - Locked the next Horizon collector requirements without changing code or live
   collection: bounded per-member unhealthy service details, collector
   self-observability, explicit per-pool capacity policy, correct empty

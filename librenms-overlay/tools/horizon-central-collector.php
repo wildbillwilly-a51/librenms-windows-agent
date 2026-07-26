@@ -27,7 +27,8 @@ final class HorizonCentralRuntime
         'horizon_api_summary', 'horizon_api_session_protocols', 'horizon_pod_summary',
         'horizon_pod_members', 'horizon_configuration_replications', 'horizon_directory_summary',
         'horizon_directory_domains', 'horizon_directory_member_status', 'horizon_gateways',
-        'horizon_pools_summary', 'horizon_pools', 'horizon_pool_machine_states', 'horizon_central_meta',
+        'horizon_pools_summary', 'horizon_pools', 'horizon_pool_machine_states',
+        'horizon_pool_machine_issues', 'horizon_central_meta',
     ];
 
     /** @param array<string,mixed> $options */
@@ -248,6 +249,9 @@ final class HorizonCentralRuntime
             'horizon_api_sessions_disconnected' => (int) ($api['sessions_disconnected'] ?? 0),
             'horizon_api_sessions_other' => (int) ($api['sessions_other'] ?? 0),
             'horizon_api_sessions_truncated' => (int) ($api['sessions_truncated'] ?? 0),
+            'horizon_api_service_details_truncated' => (int) ($api['service_details_truncated'] ?? 0),
+            'horizon_api_machine_issues_total' => (int) ($api['machine_issues_total'] ?? 0),
+            'horizon_api_machine_issues_truncated' => (int) ($api['machine_issues_truncated'] ?? 0),
             'horizon_pod_members_total' => (int) ($pod['members_total'] ?? 0),
             'horizon_pod_members_unhealthy' => (int) ($pod['members_unhealthy'] ?? 0),
             'horizon_pod_replications_total' => (int) ($pod['configuration_replications_total'] ?? 0),
@@ -257,6 +261,7 @@ final class HorizonCentralRuntime
             'horizon_gateways_total' => (int) ($pod['gateways_total'] ?? 0),
             'horizon_gateways_unhealthy' => (int) ($pod['gateways_unhealthy'] ?? 0),
             'horizon_pools_total' => (int) ($pools['pools_total'] ?? 0),
+            'horizon_pools_informational' => (int) ($pools['pools_informational'] ?? 0),
             'horizon_pools_warning' => (int) ($pools['pools_warning'] ?? 0),
             'horizon_pools_critical' => (int) ($pools['pools_critical'] ?? 0),
             'horizon_pools_incomplete' => (int) ($pools['pools_incomplete'] ?? 0),
@@ -265,6 +270,11 @@ final class HorizonCentralRuntime
             'horizon_spare_unready' => (int) ($pools['spare_unready'] ?? 0),
             'horizon_central_stale' => (int) ($meta['stale'] ?? 0),
             'horizon_central_snapshot_age_seconds' => (int) ($meta['snapshot_age_seconds'] ?? -1),
+            'horizon_central_collection_duration_ms' => (int) ($meta['collection_duration_ms'] ?? 0),
+            'horizon_central_endpoints_attempted' => (int) ($meta['endpoints_attempted'] ?? 0),
+            'horizon_central_requests_total' => (int) ($meta['requests_total'] ?? 0),
+            'horizon_central_pages_total' => (int) ($meta['pages_total'] ?? 0),
+            'horizon_central_inventory_complete' => (int) ($meta['inventory_complete'] ?? 0),
         ];
     }
 
@@ -288,6 +298,13 @@ final class HorizonCentralRuntime
     /** @param array<string,mixed> $device @param array<string,int|float> $m */
     private static function writeRrds(array $device, int $appId, array $m, bool $stale): void
     {
+        $collectorFields = [
+            'duration_ms' => $m['horizon_central_collection_duration_ms'],
+            'endpoints' => $m['horizon_central_endpoints_attempted'],
+            'requests' => $m['horizon_central_requests_total'],
+            'pages' => $m['horizon_central_pages_total'],
+            'complete' => $m['horizon_central_inventory_complete'],
+        ];
         if ($stale) {
             foreach ($m as $name => $_value) {
                 $m[$name] = 'U';
@@ -302,6 +319,7 @@ final class HorizonCentralRuntime
         $write('windows-agent-horizon-platform', RrdDefinition::make()->addDataset('members', 'GAUGE', 0)->addDataset('members_bad', 'GAUGE', 0)->addDataset('repl_bad', 'GAUGE', 0)->addDataset('domain_bad', 'GAUGE', 0)->addDataset('gateways_bad', 'GAUGE', 0)->addDataset('pools', 'GAUGE', 0)->addDataset('pools_warn', 'GAUGE', 0)->addDataset('pools_crit', 'GAUGE', 0)->addDataset('incomplete', 'GAUGE', 0)->addDataset('spare_total', 'GAUGE', 0)->addDataset('spare_ready', 'GAUGE', 0)->addDataset('spare_unready', 'GAUGE', 0), [
             'members' => $m['horizon_pod_members_total'], 'members_bad' => $m['horizon_pod_members_unhealthy'], 'repl_bad' => $m['horizon_pod_replications_unhealthy'], 'domain_bad' => $m['horizon_directory_links_unhealthy'], 'gateways_bad' => $m['horizon_gateways_unhealthy'], 'pools' => $m['horizon_pools_total'], 'pools_warn' => $m['horizon_pools_warning'], 'pools_crit' => $m['horizon_pools_critical'], 'incomplete' => $m['horizon_pools_incomplete'], 'spare_total' => $m['horizon_spare_total'], 'spare_ready' => $m['horizon_spare_ready'], 'spare_unready' => $m['horizon_spare_unready'],
         ]);
+        $write('windows-agent-horizon-collector', RrdDefinition::make()->addDataset('duration_ms', 'GAUGE', 0)->addDataset('endpoints', 'GAUGE', 0)->addDataset('requests', 'GAUGE', 0)->addDataset('pages', 'GAUGE', 0)->addDataset('complete', 'GAUGE', 0, 1), $collectorFields);
     }
 
     /** @return array<string,mixed> */

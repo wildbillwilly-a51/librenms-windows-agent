@@ -448,12 +448,14 @@ $horizon_gateways = $parse_rows($horizon_gateways_raw, 'name');
 $horizon_pools_summary = $parse_windows_agent_kv($horizon_pools_summary_raw);
 $horizon_pools = $parse_rows($horizon_pools_raw, 'name');
 $horizon_pool_machine_states = $parse_rows($horizon_pool_machine_states_raw, 'pool');
+$horizon_pool_machine_issues = [];
 $horizon_central_meta = is_array($existing_application_data['horizon_central_meta'] ?? null) ? $existing_application_data['horizon_central_meta'] : [];
 $horizon_central_data_keys = [
     'horizon_api_summary', 'horizon_api_session_protocols', 'horizon_pod_summary',
     'horizon_pod_members', 'horizon_configuration_replications', 'horizon_directory_summary',
     'horizon_directory_domains', 'horizon_directory_member_status', 'horizon_gateways',
     'horizon_pools_summary', 'horizon_pools', 'horizon_pool_machine_states',
+    'horizon_pool_machine_issues',
     'horizon_central_meta',
 ];
 if (($horizon_central_meta['source'] ?? '') === 'central') {
@@ -660,6 +662,9 @@ $fields = [
     'horizon_api_sessions_disconnected' => (int) ($horizon_api_summary['sessions_disconnected'] ?? 0),
     'horizon_api_sessions_other' => (int) ($horizon_api_summary['sessions_other'] ?? 0),
     'horizon_api_sessions_truncated' => (int) ($horizon_api_summary['sessions_truncated'] ?? 0),
+    'horizon_api_service_details_truncated' => (int) ($horizon_api_summary['service_details_truncated'] ?? 0),
+    'horizon_api_machine_issues_total' => (int) ($horizon_api_summary['machine_issues_total'] ?? 0),
+    'horizon_api_machine_issues_truncated' => (int) ($horizon_api_summary['machine_issues_truncated'] ?? 0),
     'horizon_pod_members_total' => (int) ($horizon_pod_summary['members_total'] ?? 0),
     'horizon_pod_members_unhealthy' => (int) ($horizon_pod_summary['members_unhealthy'] ?? 0),
     'horizon_pod_replications_total' => (int) ($horizon_pod_summary['configuration_replications_total'] ?? 0),
@@ -669,6 +674,7 @@ $fields = [
     'horizon_gateways_total' => (int) ($horizon_pod_summary['gateways_total'] ?? 0),
     'horizon_gateways_unhealthy' => (int) ($horizon_pod_summary['gateways_unhealthy'] ?? 0),
     'horizon_pools_total' => (int) ($horizon_pools_summary['pools_total'] ?? 0),
+    'horizon_pools_informational' => (int) ($horizon_pools_summary['pools_informational'] ?? 0),
     'horizon_pools_warning' => (int) ($horizon_pools_summary['pools_warning'] ?? 0),
     'horizon_pools_critical' => (int) ($horizon_pools_summary['pools_critical'] ?? 0),
     'horizon_pools_incomplete' => (int) ($horizon_pools_summary['pools_incomplete'] ?? 0),
@@ -677,6 +683,11 @@ $fields = [
     'horizon_spare_unready' => (int) ($horizon_pools_summary['spare_unready'] ?? 0),
     'horizon_central_stale' => (int) ($horizon_central_meta['stale'] ?? 0),
     'horizon_central_snapshot_age_seconds' => (int) ($horizon_central_meta['snapshot_age_seconds'] ?? -1),
+    'horizon_central_collection_duration_ms' => (int) ($horizon_central_meta['collection_duration_ms'] ?? 0),
+    'horizon_central_endpoints_attempted' => (int) ($horizon_central_meta['endpoints_attempted'] ?? 0),
+    'horizon_central_requests_total' => (int) ($horizon_central_meta['requests_total'] ?? 0),
+    'horizon_central_pages_total' => (int) ($horizon_central_meta['pages_total'] ?? 0),
+    'horizon_central_inventory_complete' => (int) ($horizon_central_meta['inventory_complete'] ?? 0),
     'factorytalk_detected' => (int) ($factorytalk_summary['detected'] ?? 0),
     'factorytalk_products_total' => (int) ($factorytalk_summary['products_total'] ?? 0),
     'factorytalk_services_total' => (int) ($factorytalk_summary['services_total'] ?? 0),
@@ -866,6 +877,7 @@ $windows_agent_app->data = [
     'horizon_pools_summary' => $horizon_pools_summary,
     'horizon_pools' => $horizon_pools,
     'horizon_pool_machine_states' => $horizon_pool_machine_states,
+    'horizon_pool_machine_issues' => $horizon_pool_machine_issues,
     'horizon_central_meta' => $horizon_central_meta,
     'factorytalk_summary' => $factorytalk_summary,
     'factorytalk_products' => $factorytalk_products,

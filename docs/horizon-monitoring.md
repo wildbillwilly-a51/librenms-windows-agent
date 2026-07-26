@@ -19,11 +19,12 @@ evidence and reports:
 - collector-scored health for automatic services, required TCP 443, expired
   certificates, and certificates inside the critical expiration window.
 
-The LibreNMS operational view presents collector-confirmed health and next
-action first, followed by six compact metrics. Complete service, process,
-listener, and certificate rows remain available under `Inventory and raw
-diagnostics`. Optional listeners do not become health issues merely because
-they are not active on a particular server.
+The LibreNMS operational view presents conditions and next actions first,
+followed by expandable pool capacity, 30-day demand/headroom trends by default,
+platform health, collector reliability, and complete lower diagnostics. Issue
+machines open a read-only evidence drawer without losing pool context. Local
+service, process, listener, and certificate evidence remains available even
+when central API collection is not configured.
 
 ## Supported Monitoring Sources
 
@@ -47,7 +48,8 @@ and statistical samples, and Horizon can also emit those events as Syslog.
 
 Release 0.6.14 implements local process telemetry and the initial disabled
 Windows-side API prototype without changing the existing Horizon RRD schema.
-Overlay release 0.6.17 provides the cluster-safe centralized successor:
+Overlay release 0.6.18 provides the cluster-safe centralized successor and
+operational UI:
 
 1. `windows_agent_horizon_runtime_summary` reports state, process count, CPU,
    working set, private bytes, handles, threads, read/write bytes per second,
@@ -71,9 +73,11 @@ Overlay release 0.6.17 provides the cluster-safe centralized successor:
 8. Pool health removes machines with a current session from the spare set.
    Every remaining machine that is not `AVAILABLE` is an unready spare;
    maintenance machines remain visible and count as unavailable capacity.
-9. Default pool health is warning at 50% unready spares and critical at 90%.
-   Zero ready spares is always critical, and zero unused capacity is warning.
-   Truncated machine/session inventory is `incomplete`, never healthy.
+9. Central pool health is count based: one unavailable spare is informational
+   while another spare remains ready, two or more unavailable spares is
+   warning, zero ready spares is critical, and a non-empty pool with every
+   machine in session is critical for zero placement capacity. Truncated
+   machine/session inventory is `incomplete`, never healthy.
 10. Additive `windows-agent-horizon-api` and
     `windows-agent-horizon-platform` RRD families supply API/session, pod, and
     aggregate clone-pool graphs.
@@ -101,31 +105,32 @@ Overlay release 0.6.17 provides the cluster-safe centralized successor:
     centralized collector is the sole writer for central Horizon RRD families.
 17. `capabilities.json` exposes overlay version, configuration schema, producer,
     worker, discovery, fallback, and private-integration API compatibility.
+18. Bounded unhealthy-service and issue-machine evidence, explicit truncation,
+    and collector duration/endpoint/request/page/row/outcome metadata support
+    root-cause drill-down without retaining user or client identity.
+19. An additive collector-health RRD and combined sessions/headroom graph add
+    reliability and demand trends without changing existing RRD schemas.
 
 The existing FactoryTalk runtime sampler was generalized into a shared role
 process sampler rather than duplicated.
 
-## Accepted Next-Iteration Requirements
+## Implemented In Overlay 0.6.18
 
-The following collector improvements are accepted requirements for the next
-Horizon overlay iteration:
+Overlay 0.6.18 implements the approved collector and UI requirements:
 
 1. Retain a bounded, sanitized list of unhealthy service names and statuses
    for each Connection Server instead of publishing only a count.
 2. Add collector self-observability: collection duration, attempted and
    selected endpoints, request/page counts, returned session/machine counts,
    truncation, and the final outcome/reason.
-3. Replace the global minimum-spare sample warning with explicit per-pool
-   capacity policy. Each pool may define desired ready-spare count and warning
-   and critical headroom, while unconfigured pools remain informational.
+3. Replace central percentage scoring with the approved observed-count policy
+   while retaining percentage fields only for compatibility and context.
 4. Fall back from an empty API `pod_name` to the non-empty cluster/pod identity
    in the operational display.
 5. Keep all new collector, pool, and runtime visibility non-alerting until
    observed baselines and alert semantics are separately approved.
 
-The UI is a first-class part of this work, not a presentation pass after the
-collector is finished. Implementation is gated on an approved information
-architecture and visual concept. The redesign must:
+The UI is a first-class part of this work. The implemented redesign:
 
 - lead with current actionable conditions, their affected objects, reasons,
   and next actions rather than a generic aggregate issue count;
@@ -292,11 +297,11 @@ maintenance, unreachable, disabled, and other states remain visible as state
 counts and are treated as not ready. This intentionally answers whether the
 currently unused capacity can accept a connection now.
 
-Percentage scoring begins at `poolMinimumSpareSample`, but a non-empty spare
-set with zero ready machines is always critical. An enabled pool with no
-unused machines is warning for capacity exhaustion. Alert rules should require
-the state to persist for at least two polls so normal instant-clone replacement
-waves do not page the team from one sample.
+One unavailable spare is informational while another spare is ready. Two or
+more unavailable spares is warning while ready capacity remains. A non-empty
+spare set with zero ready machines is critical, and an enabled non-empty pool
+with every machine in session is critical for capacity exhaustion. These
+states are visibility only; no alert rules are installed or enabled.
 
 ## Live Validation and Later Scope
 
