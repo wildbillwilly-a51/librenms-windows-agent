@@ -6,7 +6,12 @@
   The next collector requirements are locked in
   `docs/horizon-monitoring.md`: bounded unhealthy service details, collector
   self-observability, per-pool capacity policy, pod-name fallback, and
-  non-alerting defaults. Implementation is paused at the UI design gate.
+  non-alerting defaults. The approved UI hierarchy leads with actionable
+  conditions and pools; trend ranges are 24 hours, 7 days, and 30 days. Pool
+  health treats one unavailable spare as informational when another is ready,
+  two unavailable spares as warning, and zero ready spares as critical when
+  the spare set is non-empty. Implementation is paused at the visual-concept
+  gate.
 - Relevant decisions: Installation alone remains inert. Pollers never receive
   Horizon credentials, protected pod files, or private CA trust. The display
   device is a stable UI/data anchor rather than an availability gate. The
@@ -19,6 +24,6 @@
 - Downstream validation: A full Windows-agent poll on 0.6.17 completed with
   zero PHP errors and zero indirect-modification warnings while preserving the
   central snapshot data.
-- Next action: Agree on Horizon operational information architecture and
-  visual direction, then create and approve a complete desktop concept before
+- Next action: Resolve the severity of all-machines-in-session capacity
+  exhaustion, then create and approve a complete desktop concept before
   changing collector or UI code.

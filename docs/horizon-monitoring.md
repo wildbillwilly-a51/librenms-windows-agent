@@ -143,6 +143,36 @@ architecture and visual concept. The redesign must:
 - remain consistent with LibreNMS navigation, accessibility, and responsive
   behavior while substantially improving hierarchy and readability.
 
+The approved information hierarchy leads with actionable conditions and then
+the pool-capacity workspace in the first viewport. It does not lead with a
+generic score or an equal-weight metric-card grid. The primary order is:
+
+1. current conditions requiring attention, with affected object, reason, and
+   next action;
+2. pool capacity and headroom;
+3. session demand and 24-hour, 7-day, and 30-day trends;
+4. Connection Server and platform health;
+5. collector freshness and reliability;
+6. directory, gateway, replication, protocol, machine-state, and raw
+   diagnostics.
+
+Pool health uses observed ready and unavailable spare counts rather than a
+minimum sample-size warning:
+
+- zero unavailable spares is healthy;
+- one unavailable spare is informational and non-alerting when at least one
+  other spare is ready;
+- two or more unavailable spares is a warning while at least one ready spare
+  remains;
+- zero ready spares is critical when the spare set is non-empty, including the
+  case where the pool's only spare is unavailable.
+
+This health classification does not itself enable LibreNMS alert
+notifications. Alert rules remain separately gated. A pool with no unused
+machines because every machine is in session is a distinct capacity-exhaustion
+condition; its final warning/critical policy remains part of the visual-design
+review rather than being conflated with unavailable-spare health.
+
 ## Central API Safety and Credential Provisioning
 
 Central collection is opt-in. Installing the overlay alone does not query a

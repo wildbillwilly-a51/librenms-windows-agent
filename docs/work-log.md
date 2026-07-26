@@ -10,6 +10,14 @@
   the redesign must prioritize actionable issues, pool headroom, demand,
   platform causes, freshness, and reliability over equal-weight summary cards
   and buried disclosures.
+- Approved the UI hierarchy: actionable conditions and pool capacity occupy
+  the first viewport, followed by demand trends, platform health, collector
+  reliability, and diagnostics. Approved pool semantics make one unavailable
+  spare informational when another remains ready, two unavailable spares a
+  warning, and zero ready spares critical when the spare set is non-empty.
+  Added 24-hour, 7-day, and 30-day trend requirements. Notification rules
+  remain separately gated, and all-machines-in-session capacity exhaustion
+  remains an explicit design-policy decision.
 
 - Released overlay-only patch 0.6.17 after production validation of 0.6.16
   exposed a redundant Eloquent cast-property mutation. The existing

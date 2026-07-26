@@ -9,6 +9,11 @@
   prerequisite for implementation so high-value health, capacity, demand,
   freshness, and reliability signals are not buried in equal-weight summaries
   or disclosures.
+- Approved problems-first/pools-second first-viewport hierarchy, 24-hour,
+  7-day, and 30-day trends, and spare health semantics: one unavailable spare
+  is informational when another is ready, two is warning, and zero ready is
+  critical when the spare set is non-empty. Notification rules remain
+  separately gated.
 
 ## 0.6.17 - 2026-07-25
 
