@@ -105,6 +105,44 @@ Overlay release 0.6.17 provides the cluster-safe centralized successor:
 The existing FactoryTalk runtime sampler was generalized into a shared role
 process sampler rather than duplicated.
 
+## Accepted Next-Iteration Requirements
+
+The following collector improvements are accepted requirements for the next
+Horizon overlay iteration:
+
+1. Retain a bounded, sanitized list of unhealthy service names and statuses
+   for each Connection Server instead of publishing only a count.
+2. Add collector self-observability: collection duration, attempted and
+   selected endpoints, request/page counts, returned session/machine counts,
+   truncation, and the final outcome/reason.
+3. Replace the global minimum-spare sample warning with explicit per-pool
+   capacity policy. Each pool may define desired ready-spare count and warning
+   and critical headroom, while unconfigured pools remain informational.
+4. Fall back from an empty API `pod_name` to the non-empty cluster/pod identity
+   in the operational display.
+5. Keep all new collector, pool, and runtime visibility non-alerting until
+   observed baselines and alert semantics are separately approved.
+
+The UI is a first-class part of this work, not a presentation pass after the
+collector is finished. Implementation is gated on an approved information
+architecture and visual concept. The redesign must:
+
+- lead with current actionable conditions, their affected objects, reasons,
+  and next actions rather than a generic aggregate issue count;
+- make session demand, pool capacity/headroom, unhealthy members/services,
+  collection freshness, and collection reliability visible without opening
+  disclosures;
+- make pool health the primary operational workspace, with one row per pool,
+  explicit policy versus observed capacity, machine-state distribution, and
+  useful trend context;
+- preserve complete pod, directory, gateway, replication, protocol, and raw
+  diagnostics below the operational summary without crowding the first
+  viewport;
+- distinguish API availability, Horizon platform health, pool-capacity risk,
+  and collector freshness instead of collapsing them into one red/green state;
+- remain consistent with LibreNMS navigation, accessibility, and responsive
+  behavior while substantially improving hierarchy and readability.
+
 ## Central API Safety and Credential Provisioning
 
 Central collection is opt-in. Installing the overlay alone does not query a

@@ -1,18 +1,12 @@
 # Codex Handoff
 
-- Objective: Release overlay-only patch 0.6.17 without changing the Windows
-  agent/MSI.
-- Current state: The patch removes a redundant Eloquent cast-property mutation
-  that emitted PHP warnings during a production Windows-agent poll. The
-  fixture-backed merge path already preserves central Horizon data, so the
-  removal does not change the resulting application data. Normal and explicit
-  application polls continue to share a
-  credential-free Redis trigger path. A designated collector worker validates
-  local pod registrations, owns central RRD writes, deduplicates collection
-  with distributed locks/cooldowns, retains last-good snapshots, and runs from
-  both triggers and an independent five-minute fallback. Discovery is
-  preview-first, add-only, strict-TLS, identity-validated, and preserves
-  existing choices.
+- Objective: Define and approve the next Horizon collector and operational UI
+  iteration before implementation.
+- Current state: Overlay 0.6.17 is released and downstream validation is clean.
+  The next collector requirements are locked in
+  `docs/horizon-monitoring.md`: bounded unhealthy service details, collector
+  self-observability, per-pool capacity policy, pod-name fallback, and
+  non-alerting defaults. Implementation is paused at the UI design gate.
 - Relevant decisions: Installation alone remains inert. Pollers never receive
   Horizon credentials, protected pod files, or private CA trust. The display
   device is a stable UI/data anchor rather than an availability gate. The
@@ -25,3 +19,6 @@
 - Downstream validation: A full Windows-agent poll on 0.6.17 completed with
   zero PHP errors and zero indirect-modification warnings while preserving the
   central snapshot data.
+- Next action: Agree on Horizon operational information architecture and
+  visual direction, then create and approve a complete desktop concept before
+  changing collector or UI code.

@@ -2,6 +2,15 @@
 
 ## 2026-07-25
 
+- Locked the next Horizon collector requirements without changing code or live
+  collection: bounded per-member unhealthy service details, collector
+  self-observability, explicit per-pool capacity policy, correct empty
+  pod-name fallback, and non-alerting defaults. Made UI information
+  architecture and an approved visual concept mandatory before implementation;
+  the redesign must prioritize actionable issues, pool headroom, demand,
+  platform causes, freshness, and reliability over equal-weight summary cards
+  and buried disclosures.
+
 - Released overlay-only patch 0.6.17 after production validation of 0.6.16
   exposed a redundant Eloquent cast-property mutation. The existing
   fixture-backed central snapshot merge already preserved the correct data;

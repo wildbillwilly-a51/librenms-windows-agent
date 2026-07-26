@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased - Horizon collector and UI design
+
+- Locked the next collector requirements for bounded unhealthy service detail,
+  collector self-observability, explicit per-pool capacity policy, pod-name
+  fallback, and non-alerting defaults.
+- Made an approved operational information architecture and visual concept a
+  prerequisite for implementation so high-value health, capacity, demand,
+  freshness, and reliability signals are not buried in equal-weight summaries
+  or disclosures.
+
 ## 0.6.17 - 2026-07-25
 
 - Removed a redundant Eloquent cast-property mutation after central Horizon
