@@ -135,6 +135,12 @@ architecture and visual concept. The redesign must:
 - make pool health the primary operational workspace, with one row per pool,
   explicit policy versus observed capacity, machine-state distribution, and
   useful trend context;
+- allow every pool row to expand in place into its machine inventory, with
+  issue machines sorted first and visibly distinguished from healthy,
+  in-session, maintenance, and unavailable machines;
+- make each issue machine selectable so an operator can inspect its state,
+  pool, maintenance and session context, issue reason, collection time, and
+  next action without losing the expanded pool context;
 - preserve complete pod, directory, gateway, replication, protocol, and raw
   diagnostics below the operational summary without crowding the first
   viewport;
@@ -155,6 +161,15 @@ generic score or an equal-weight metric-card grid. The primary order is:
 5. collector freshness and reliability;
 6. directory, gateway, replication, protocol, machine-state, and raw
    diagnostics.
+
+The central snapshot must therefore add a bounded, sanitized per-machine issue
+inventory suitable for the expanded pool view. Each issue row must carry only
+the stable machine identifier/name, pool association, current state,
+maintenance flag, session-presence flag, normalized issue reason, and
+collection timestamp needed by the UI. Healthy-machine detail may remain
+summary-oriented to keep snapshots bounded, but the pool expansion must still
+communicate total, in-session, ready, unavailable, maintenance, and issue
+counts. Truncation must be explicit.
 
 Pool health uses observed ready and unavailable spare counts rather than a
 minimum sample-size warning:

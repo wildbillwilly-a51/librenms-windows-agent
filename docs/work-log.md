@@ -20,6 +20,11 @@
   non-empty pool when every machine is in session and no machine remains
   available for another placement; this is distinct from unavailable-spare
   health.
+- Added the pool drill-down interaction requirement: every pool expands in
+  place, issue machines sort first, and an issue machine opens focused
+  evidence and next-action detail without discarding pool context. This
+  requires a bounded sanitized per-machine issue inventory with explicit
+  truncation rather than only machine-state aggregates.
 
 - Released overlay-only patch 0.6.17 after production validation of 0.6.16
   exposed a redundant Eloquent cast-property mutation. The existing

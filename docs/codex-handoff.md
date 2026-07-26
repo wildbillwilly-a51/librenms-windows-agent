@@ -12,7 +12,10 @@
   two unavailable spares as warning, and zero ready spares as critical when
   the spare set is non-empty. A non-empty pool with every machine in session
   and no remaining placement capacity is also critical. Implementation is
-  paused at the visual-concept gate.
+  paused at the visual-concept gate. Pool rows must expand in place into
+  machine inventory, sort issue machines first, and allow issue-machine
+  selection for focused evidence and next actions. The collector must add a
+  bounded sanitized per-machine issue inventory with explicit truncation.
 - Relevant decisions: Installation alone remains inert. Pollers never receive
   Horizon credentials, protected pod files, or private CA trust. The display
   device is a stable UI/data anchor rather than an availability gate. The

@@ -16,6 +16,8 @@
   separately gated.
 - Classified a non-empty pool with every machine in session and no remaining
   placement capacity as critical, independently of unavailable-spare health.
+- Required expandable pool rows and selectable issue-machine detail backed by
+  a bounded sanitized per-machine issue inventory with explicit truncation.
 
 ## 0.6.17 - 2026-07-25
 
