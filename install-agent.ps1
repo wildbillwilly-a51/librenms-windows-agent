@@ -505,7 +505,7 @@ if (-not $BaseUrl) {
 }
 $BaseUrl = $BaseUrl.TrimEnd('/')
 $msiName = "librenms-windows-agent-$Version.msi"
-$configName = "librenms-windows-agent-config-$Version.json"
+$configName = "librenms-windows-agent-config-$Version-win.json"
 $msiArtifactPath = "artifacts/$msiName"
 $configArtifactPath = "artifacts/$configName"
 

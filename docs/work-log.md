@@ -25,8 +25,9 @@
 - Raw-publication verification detected Git line-ending normalization of the
   first versioned config commit before endpoint use. Added a release-artifact
   attribute that preserves the Windows-generated config bytes, retained the
-  accepted checksum, and required raw GitHub MSI/config/manifest verification
-  after the corrective push.
+  accepted checksum, moved the bootstrap to a new `-win.json` release URL that
+  had never been cached with normalized bytes, and required raw GitHub
+  MSI/config/manifest verification after the corrective push.
 - Implemented the overlay 0.6.19 Horizon UI correction. The centralized
   snapshot now carries a bounded sanitized all-machine inventory, and expanded
   pools filter actual rows by all, issues, in-session, ready, or unavailable.

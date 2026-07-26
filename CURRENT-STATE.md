@@ -29,7 +29,7 @@ and private exports do not belong here.
 - Windows agent version: `0.6.15`
 - Overlay: `artifacts/librenms-windows-agent-overlay-0.6.19.tar.gz`
 - Windows MSI: `artifacts/librenms-windows-agent-0.6.15.msi`
-- Versioned agent config: `artifacts/librenms-windows-agent-config-0.6.15.json`
+- Versioned agent config: `artifacts/librenms-windows-agent-config-0.6.15-win.json`
 - Checksums: `SHA256SUMS`
 - Overlay SHA256: `b1ebee731985199c0c6661b536a76aa5516b952d351d2b4d83be8977df93644b`
 - Windows MSI SHA256: `80cd00920000c108d0bbe7a73b96289aca40e07231dda88ecd90312e4d622b20`

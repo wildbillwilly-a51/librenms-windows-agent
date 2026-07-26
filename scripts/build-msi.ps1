@@ -19,7 +19,7 @@ $payloadDir = Join-Path $workRoot 'payload'
 $assetsDir = Join-Path $workRoot 'assets'
 $msiOutputDir = Join-Path $workRoot 'msi'
 $targetMsi = Join-Path $ArtifactsDir "librenms-windows-agent-$Version.msi"
-$targetConfig = Join-Path $ArtifactsDir "librenms-windows-agent-config-$Version.json"
+$targetConfig = Join-Path $ArtifactsDir "librenms-windows-agent-config-$Version-win.json"
 $utf8NoBom = [Text.UTF8Encoding]::new($false)
 
 function Get-MsiProperty {

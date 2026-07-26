@@ -23,7 +23,7 @@ $requiredPatterns = [ordered]@{
     'verbose MSI logging' = "'/L\*V'"
     'rollback-safe major upgrade' = 'START_AGENT_SERVICE=\$StartService'
     'reboot suppression' = "'REBOOT=ReallySuppress'"
-    'versioned configuration artifact' = 'librenms-windows-agent-config-\$Version\.json'
+    'versioned configuration artifact' = 'librenms-windows-agent-config-\$Version-win\.json'
     'framework preflight' = 'minimumDotNetRelease = 394802'
     'listener preflight' = 'Get-ListeningOwners -Port \$Port'
     'MSI failure evidence' = 'Write-MsiFailureEvidence'

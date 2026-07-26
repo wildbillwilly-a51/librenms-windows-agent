@@ -60,7 +60,7 @@ Agent-only release while preserving the current overlay:
 This builds:
 
 - `artifacts/librenms-windows-agent-<version>.msi`
-- `artifacts/librenms-windows-agent-config-<version>.json`
+- `artifacts/librenms-windows-agent-config-<version>-win.json`
 - `artifacts/librenms-windows-agent-overlay-<version>.tar.gz`
 
 The MSI build validates generic service output, the 23 default collectors,
@@ -78,7 +78,7 @@ or legacy identifiers.
 tar -tzf .\artifacts\librenms-windows-agent-overlay-<version>.tar.gz
 Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-<version>.tar.gz
 Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-<version>.msi
-Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-config-<version>.json
+Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-config-<version>-win.json
 Get-Content .\SHA256SUMS
 ```
 

@@ -36,7 +36,7 @@ if ($OverlayOnly) {
     $msi = ($msi | Select-Object -Last 1).Trim()
     $AgentVersion = $Version
 }
-$agentConfig = Join-Path $ArtifactsDir "librenms-windows-agent-config-$AgentVersion.json"
+$agentConfig = Join-Path $ArtifactsDir "librenms-windows-agent-config-$AgentVersion-win.json"
 if (-not (Test-Path -LiteralPath $agentConfig)) {
     if ($OverlayOnly) {
         $agentConfig = ''
@@ -77,7 +77,7 @@ $overlayHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $overlay).Hash.ToLow
 if ($UpdateChecksums) {
     $manifestLines = @("$overlayHash  artifacts/librenms-windows-agent-overlay-$OverlayVersion.tar.gz")
     if ($agentConfig) {
-        $manifestLines += "$agentConfigHash  artifacts/librenms-windows-agent-config-$AgentVersion.json"
+        $manifestLines += "$agentConfigHash  artifacts/librenms-windows-agent-config-$AgentVersion-win.json"
     }
     $manifestLines += "$msiHash  artifacts/librenms-windows-agent-$AgentVersion.msi"
     $manifest = $manifestLines -join "`n"
