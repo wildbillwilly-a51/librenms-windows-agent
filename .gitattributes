@@ -17,3 +17,6 @@ SHA256SUMS text eol=lf
 *.cmd text eol=crlf
 *.bat text eol=crlf
 # new-project-setup:v7:end
+
+# Release config checksums cover the exact Windows-generated artifact bytes.
+artifacts/librenms-windows-agent-config-*.json binary

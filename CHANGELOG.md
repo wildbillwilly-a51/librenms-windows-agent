@@ -22,6 +22,8 @@
   firewall registration, portable administrative-extraction validation, and a
   clean-host elevated acceptance suite covering 0.6.14 upgrade, fresh install,
   repair, occupied-port refusal, protocol response, uninstall, and cleanup.
+- Preserved versioned Windows configuration artifacts byte-for-byte in Git so
+  their published raw downloads match `SHA256SUMS`.
 
 ## 0.6.18 - 2026-07-25
 

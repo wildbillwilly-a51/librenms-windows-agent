@@ -17,6 +17,6 @@
   administrative MSI extraction and packaged-config validation; exact-artifact
   0.6.14 upgrade with config preservation; fresh install; same-version repair;
   occupied-port refusal; reinstall; live TCP payload; clean uninstall and
-  residue checks. All acceptance MSI logs returned zero with no `Return value
-  3`. MSI SHA-256:
+  residue checks; and byte-for-byte raw GitHub artifact verification. All
+  acceptance MSI logs returned zero with no `Return value 3`. MSI SHA-256:
   `80cd00920000c108d0bbe7a73b96289aca40e07231dda88ecd90312e4d622b20`.

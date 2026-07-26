@@ -22,6 +22,11 @@
   `80cd00920000c108d0bbe7a73b96289aca40e07231dda88ecd90312e4d622b20`.
   Versioned config SHA-256:
   `79f37b860b2aab30a373fecc7af604b48f0a6d8e416d7057f184544da0816294`.
+- Raw-publication verification detected Git line-ending normalization of the
+  first versioned config commit before endpoint use. Added a release-artifact
+  attribute that preserves the Windows-generated config bytes, retained the
+  accepted checksum, and required raw GitHub MSI/config/manifest verification
+  after the corrective push.
 - Implemented the overlay 0.6.19 Horizon UI correction. The centralized
   snapshot now carries a bounded sanitized all-machine inventory, and expanded
   pools filter actual rows by all, issues, in-session, ready, or unavailable.
