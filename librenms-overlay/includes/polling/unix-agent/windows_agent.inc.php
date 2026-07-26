@@ -1407,18 +1407,6 @@ app('Datastore')->put($device, 'app', [
     'health_issues' => $fields['datto_backup_health_issues'],
 ]);
 
-$latest_windows_agent_app = Application::find($windows_agent_app->app_id);
-$latest_application_data = is_array($latest_windows_agent_app?->data ?? null)
-    ? $latest_windows_agent_app->data
-    : [];
-if (($latest_application_data['horizon_central_meta']['source'] ?? '') === 'central') {
-    foreach ($horizon_central_data_keys as $central_key) {
-        if (array_key_exists($central_key, $latest_application_data)) {
-            $windows_agent_app->data[$central_key] = $latest_application_data[$central_key];
-        }
-    }
-}
-
 update_application($windows_agent_app, $response, $fields, $response);
 
 if (function_exists('base_path')) {

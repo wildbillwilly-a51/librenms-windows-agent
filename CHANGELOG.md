@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.17 - 2026-07-25
+
+- Removed a redundant Eloquent cast-property mutation after central Horizon
+  data had already been merged into the application model. Central data
+  preservation is unchanged, while normal Windows-agent polls no longer emit
+  `Indirect modification of overloaded property` PHP warnings.
+- Kept the Windows agent/MSI unchanged at 0.6.14.
+
 ## 0.6.16 - 2026-07-25
 
 - Added a credential-free Redis trigger producer to the shared

@@ -2,6 +2,18 @@
 
 ## 2026-07-25
 
+- Released overlay-only patch 0.6.17 after production validation of 0.6.16
+  exposed a redundant Eloquent cast-property mutation. The existing
+  fixture-backed central snapshot merge already preserved the correct data;
+  removing the redundant post-merge loop eliminates recurring `Indirect
+  modification of overloaded property` warnings during normal Windows-agent
+  polls. The Windows agent/MSI remains 0.6.14.
+- All 59 agent tests, ten parser fixtures including central-data precedence,
+  central trigger/worker/discovery tests, source PHP lint, Bash syntax,
+  ShellCheck, the overlay-only release build, archive inspection, checksums,
+  and public-safety checks passed. Overlay SHA-256:
+  `3909e53f592e148282d6b4ff092a07b43a8184dd1f8f8ef1ed3fee087f7dd187`.
+
 - Released generic overlay 0.6.16 with a poll-safe, credential-free Redis
   trigger producer shared by normal and explicit application polling; a
   collector-only worker with per-site distributed locks/cooldowns; an

@@ -47,7 +47,7 @@ and statistical samples, and Horizon can also emit those events as Syslog.
 
 Release 0.6.14 implements local process telemetry and the initial disabled
 Windows-side API prototype without changing the existing Horizon RRD schema.
-Overlay release 0.6.16 completes the cluster-safe centralized successor:
+Overlay release 0.6.17 provides the cluster-safe centralized successor:
 
 1. `windows_agent_horizon_runtime_summary` reports state, process count, CPU,
    working set, private bytes, handles, threads, read/write bytes per second,
