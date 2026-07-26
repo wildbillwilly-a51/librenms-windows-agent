@@ -1,5 +1,20 @@
 # Changelog
 
+## Windows agent 0.6.16 / Overlay 0.6.19 - 2026-07-26
+
+- Added stable Horizon Windows-service expectedness for core, conditional
+  gateway, and optional components. A stopped Manual core service is now
+  critical, while disabled CRL Prefetcher, Log Collector, and Script Host
+  services remain informational.
+- Limited Horizon certificate health to the active `vdm` certificate or an
+  explicitly configured thumbprint. Other hostname certificates remain
+  inventory and cannot create false health failures.
+- Added compatible `expected`, `severity`, `reason`, `impact`, `component`,
+  and certificate-active fields without changing existing section names.
+- Released the matching Windows agent/MSI and versioned default configuration
+  as 0.6.16. Overlay 0.6.19 remains the published overlay for this agent-only
+  release checkpoint.
+
 ## Overlay 0.6.19 / Windows agent 0.6.15 - 2026-07-26
 
 - Made the Horizon Operations workspace native to both LibreNMS light and dark

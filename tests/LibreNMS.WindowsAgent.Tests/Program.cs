@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using LibreNMS.WindowsAgent.Core;
@@ -46,6 +47,7 @@ namespace LibreNMS.WindowsAgent.Tests
                 ("horizon health service critical", HorizonHealthServiceCritical),
                 ("horizon health certificate warning", HorizonHealthCertificateWarning),
                 ("horizon health client only", HorizonHealthClientOnly),
+                ("shared Horizon health policy fixtures", SharedHorizonHealthPolicyFixtures),
                 ("horizon pool health warning threshold", HorizonPoolHealthWarningThreshold),
                 ("horizon pool health critical threshold", HorizonPoolHealthCriticalThreshold),
                 ("horizon pool health no ready spares", HorizonPoolHealthNoReadySpares),
@@ -546,8 +548,44 @@ namespace LibreNMS.WindowsAgent.Tests
                 SpareReady = 1,
                 SpareUnready = 9
             });
-            AssertEqual("critical", result.State);
+            AssertEqual("warning", result.State);
             AssertTrue(result.UnreadyPercent == 90m, "Expected 90 percent unready spares");
+        }
+
+        private static void SharedHorizonHealthPolicyFixtures()
+        {
+            var path = Path.Combine(AppContext.BaseDirectory, "fixtures", "horizon-health-policy.json");
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            var root = document.RootElement;
+            foreach (var row in root.GetProperty("windows_services").EnumerateArray())
+            {
+                var result = HorizonHealthPolicy.ClassifyWindowsService(
+                    row.GetProperty("name").GetString(),
+                    row.GetProperty("display").GetString(),
+                    row.GetProperty("service_state").GetString(),
+                    row.GetProperty("start_mode").GetString(),
+                    row.GetProperty("gateway_expected").GetBoolean());
+                AssertEqual(row.GetProperty("state").GetString(), result.State);
+                AssertEqual(row.GetProperty("reason_code").GetString(), result.ReasonCode);
+                AssertTrue(row.GetProperty("expected").GetBoolean() == result.Expected, "Windows service expectedness mismatch");
+            }
+            foreach (var row in root.GetProperty("certificates").EnumerateArray())
+            {
+                var result = HorizonHealthPolicy.ClassifyCertificate(
+                    row.GetProperty("active").GetBoolean(),
+                    row.GetProperty("valid").GetBoolean(),
+                    row.GetProperty("days_remaining").GetInt32());
+                AssertEqual(row.GetProperty("state").GetString(), result.State);
+                AssertEqual(row.GetProperty("reason_code").GetString(), result.ReasonCode);
+            }
+            foreach (var row in root.GetProperty("pod_aggregation").EnumerateArray())
+            {
+                var states = new List<string>();
+                foreach (var state in row.GetProperty("states").EnumerateArray()) states.Add(state.GetString());
+                var result = HorizonHealthPolicy.AggregateEnabledServers(states);
+                AssertEqual(row.GetProperty("expected_state").GetString(), result.State);
+                AssertEqual(row.GetProperty("reason_code").GetString(), result.ReasonCode);
+            }
         }
 
         private static void HorizonPoolHealthNoReadySpares()

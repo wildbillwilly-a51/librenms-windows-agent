@@ -179,7 +179,7 @@ iwr -UseBasicParsing https://raw.githubusercontent.com/wildbillwilly-a51/librenm
 Direct MSI link:
 
 ```text
-https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/artifacts/librenms-windows-agent-0.6.15.msi
+https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/artifacts/librenms-windows-agent-0.6.16.msi
 ```
 
 The default Windows install is normally enough. It installs the
@@ -188,7 +188,7 @@ Windows firewall rules, starts the service, and preserves existing config on
 upgrade.
 On FactoryTalk hosts, the MSI also enables the complete bounded FactoryTalk
 feature set, including localhost Counter Monitor snapshots every 15 minutes.
-Release 0.6.15 upgrades prior packages inside the MSI rollback boundary, and
+Release 0.6.16 upgrades prior packages inside the MSI rollback boundary, and
 setup reports success only after the installed Windows service reaches
 `Running` and returns a valid agent payload. The one-command installer checks
 the .NET Framework prerequisite and listener port before changing the host,
@@ -339,13 +339,13 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Interactive install after downloading the MSI:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.15.msi /L*V "$env:TEMP\librenms-windows-agent-0.6.15-install.log"
+msiexec /i librenms-windows-agent-0.6.16.msi /L*V "$env:TEMP\librenms-windows-agent-0.6.16-install.log"
 ```
 
 Silent install after downloading the MSI:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.15.msi /qn /L*V "$env:TEMP\librenms-windows-agent-0.6.15-install.log"
+msiexec /i librenms-windows-agent-0.6.16.msi /qn /L*V "$env:TEMP\librenms-windows-agent-0.6.16-install.log"
 ```
 
 The direct MSI intentionally uses one reliable default path:
@@ -367,7 +367,7 @@ registered MSI before the replacement transaction.
 Silent uninstall:
 
 ```powershell
-msiexec /x librenms-windows-agent-0.6.15.msi /qn /L*V "$env:TEMP\librenms-windows-agent-0.6.15-uninstall.log"
+msiexec /x librenms-windows-agent-0.6.16.msi /qn /L*V "$env:TEMP\librenms-windows-agent-0.6.16-uninstall.log"
 ```
 
 ### Collector Expectations

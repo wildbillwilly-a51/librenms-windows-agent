@@ -26,19 +26,19 @@ and private exports do not belong here.
 ## Current Releases
 
 - Overlay version: `0.6.19`
-- Windows agent version: `0.6.15`
+- Windows agent version: `0.6.16`
 - Overlay: `artifacts/librenms-windows-agent-overlay-0.6.19.tar.gz`
-- Windows MSI: `artifacts/librenms-windows-agent-0.6.15.msi`
-- Versioned agent config: `artifacts/librenms-windows-agent-config-0.6.15-win.json`
+- Windows MSI: `artifacts/librenms-windows-agent-0.6.16.msi`
+- Versioned agent config: `artifacts/librenms-windows-agent-config-0.6.16-win.json`
 - Checksums: `SHA256SUMS`
 - Overlay SHA256: `b1ebee731985199c0c6661b536a76aa5516b952d351d2b4d83be8977df93644b`
-- Windows MSI SHA256: `80cd00920000c108d0bbe7a73b96289aca40e07231dda88ecd90312e4d622b20`
-- Versioned config SHA256: `79f37b860b2aab30a373fecc7af604b48f0a6d8e416d7057f184544da0816294`
+- Windows MSI SHA256: `5a40c9965a44179b09c57e4e3951e55982b983bfd1fd83b4e93cbeaaf5811732`
+- Versioned config SHA256: `94fd8b56e0ac2ca15f50dd0ffff1d3f9167032b4717aeecd5b091f336fbe404b`
 - Public overlay installer: `install.sh`
 - Public Windows installer: `install-agent.ps1`
 
-Windows agent release `0.6.15` retains the 0.6.14 collector behavior while
-repairing the complete install and upgrade path. The bootstrap verifies a
+Windows agent release `0.6.16` keeps the repaired install and upgrade path and
+adds explicit Horizon service expectedness plus active-certificate health. The bootstrap verifies a
 matching versioned config, checks prerequisites and port ownership, prepares
 configuration before service startup, leaves registered upgrades inside MSI
 rollback, retains verbose diagnostics, and verifies a live protocol response.
@@ -79,7 +79,7 @@ For an intentional release:
 For an agent-only release that preserves the current overlay:
 
 ```powershell
-.\scripts\build-release.ps1 -Version 0.6.15 -AgentOnly -OverlayVersion 0.6.19 -UpdateChecksums
+.\scripts\build-release.ps1 -Version 0.6.16 -AgentOnly -OverlayVersion 0.6.19 -UpdateChecksums
 ```
 
 Before publishing, review the full committed snapshot for secrets, private
@@ -96,8 +96,6 @@ fixtures.
 ## Next Recommended Action
 
 Deployment is intentionally waiting at an explicit approval checkpoint. After
-publication, install Windows agent 0.6.15 first on the server that exposed the
-0.6.14 failure and confirm the retained verbose log, running service, local
-payload, firewall result, and LibreNMS reachability before any wider rollout.
-The Horizon health-classification implementation remains the next product
-objective after installer rollout is accepted.
+publication, install Windows agent 0.6.16 first on an approved canary and
+confirm the running service, local payload, firewall result, Horizon
+classification evidence, and LibreNMS reachability before any wider rollout.

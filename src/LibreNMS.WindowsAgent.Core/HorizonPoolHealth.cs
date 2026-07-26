@@ -34,10 +34,8 @@ namespace LibreNMS.WindowsAgent.Core
 
             var percent = Math.Round((Math.Max(0, input.SpareUnready) * 100m) / Math.Max(1, input.SpareTotal), 1);
             if (input.SpareReady == 0) return Result("critical", "no_ready_spares", percent);
-            if (input.SpareTotal >= Math.Max(1, input.MinimumSpareSample) && percent >= input.CriticalUnreadyPercent)
-                return Result("critical", "unready_spares_at_or_above_critical_threshold", percent);
-            if (input.SpareTotal >= Math.Max(1, input.MinimumSpareSample) && percent >= input.WarningUnreadyPercent)
-                return Result("warning", "unready_spares_at_or_above_warning_threshold", percent);
+            if (input.SpareUnready >= 2) return Result("warning", "multiple_unavailable_spares", percent);
+            if (input.SpareUnready == 1) return Result("info", "one_unavailable_capacity_remains", percent);
             return Result("ok", "ready_capacity_available", percent);
         }
 

@@ -178,6 +178,9 @@ namespace LibreNMS.WindowsAgent.Core
         public List<int> Ports { get; set; } = new List<int> { 443, 8443, 4172, 32111 };
         public int CertificateWarningDays { get; set; } = 30;
         public int CertificateCriticalDays { get; set; } = 7;
+        public bool GatewayServicesExpected { get; set; }
+        public string ActiveCertificateThumbprint { get; set; } = string.Empty;
+        public Dictionary<string, string> ServiceExpectations { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         public HorizonApiConfig Api { get; set; } = new HorizonApiConfig();
     }
 

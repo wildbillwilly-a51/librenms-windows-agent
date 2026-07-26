@@ -7,6 +7,7 @@ namespace LibreNMS.WindowsAgent.Core
         public bool Detected { get; set; }
         public string NotDetectedState { get; set; } = "not_detected";
         public int ServicesNotRunning { get; set; }
+        public int ServicesWarning { get; set; }
         public int PortsMissing { get; set; }
         public int CertificatesExpired { get; set; }
         public int CertificatesExpiringCritical { get; set; }
@@ -37,17 +38,18 @@ namespace LibreNMS.WindowsAgent.Core
             }
 
             var serviceIssues = Math.Max(0, input.ServicesNotRunning);
+            var serviceWarnings = Math.Max(0, input.ServicesWarning);
             var portIssues = Math.Max(0, input.PortsMissing);
             var expiredIssues = Math.Max(0, input.CertificatesExpired);
             var criticalCertificateIssues = Math.Max(0, input.CertificatesExpiringCritical);
-            var issues = serviceIssues + portIssues + expiredIssues + criticalCertificateIssues;
+            var issues = serviceIssues + serviceWarnings + portIssues + expiredIssues + criticalCertificateIssues;
 
             if (serviceIssues > 0 || portIssues > 0 || expiredIssues > 0)
             {
                 return new HorizonHealthResult { State = "critical", HealthIssues = issues };
             }
 
-            if (criticalCertificateIssues > 0)
+            if (serviceWarnings > 0 || criticalCertificateIssues > 0)
             {
                 return new HorizonHealthResult { State = "warning", HealthIssues = issues };
             }

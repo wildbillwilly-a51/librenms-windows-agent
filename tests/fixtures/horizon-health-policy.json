@@ -1,0 +1,60 @@
+{
+  "connection_server_status": [
+    { "status": "OK", "enabled": true, "state": "ok", "reason_code": "connection_server_ok" },
+    { "status": "RESTART_REQUIRED", "enabled": true, "state": "warning", "reason_code": "connection_server_restart_required" },
+    { "status": "UNKNOWN", "enabled": true, "state": "incomplete", "reason_code": "connection_server_status_unknown" },
+    { "status": "ERROR", "enabled": true, "state": "critical", "reason_code": "connection_server_error" },
+    { "status": "NOT_RESPONDING", "enabled": true, "state": "critical", "reason_code": "connection_server_not_responding" },
+    { "status": "ERROR", "enabled": false, "state": "disabled", "reason_code": "connection_server_disabled" }
+  ],
+  "api_services": [
+    { "name": "CRL_PREFETCH", "status": "DOWN", "gateway_expected": false, "state": "info", "reason_code": "crl_prefetch_not_running" },
+    { "name": "PCOIP_SECURE_GATEWAY", "status": "DOWN", "gateway_expected": false, "state": "info", "reason_code": "unused_gateway_service_not_running" },
+    { "name": "PCOIP_SECURE_GATEWAY", "status": "DOWN", "gateway_expected": true, "state": "warning", "reason_code": "expected_api_service_not_running" },
+    { "name": "MESSAGE_BUS", "status": "DOWN", "gateway_expected": false, "state": "warning", "reason_code": "expected_api_service_not_running" }
+  ],
+  "replication": [
+    { "status": "OK", "state": "ok", "reason_code": "replication_healthy" },
+    { "status": "UNKNOWN", "state": "incomplete", "reason_code": "replication_status_unknown" },
+    { "status": "ERROR", "state": "warning", "reason_code": "replication_unhealthy" }
+  ],
+  "domain_access": [
+    { "status": "FULLY_ACCESSIBLE", "state": "ok", "reason_code": "domain_access_healthy" },
+    { "status": "ACCESSIBLE", "state": "ok", "reason_code": "domain_access_healthy" },
+    { "status": "UNKNOWN", "state": "incomplete", "reason_code": "domain_access_unknown" },
+    { "status": "UNREACHABLE", "state": "critical", "reason_code": "domain_access_unavailable" }
+  ],
+  "service_accounts": [
+    { "status": "ACTIVE", "state": "ok", "reason_code": "service_account_active" },
+    { "status": "UNKNOWN", "state": "incomplete", "reason_code": "service_account_status_unknown" },
+    { "status": "ERROR", "state": "critical", "reason_code": "service_account_unhealthy" }
+  ],
+  "gateways": [
+    { "status": "OK", "configured": true, "state": "ok", "reason_code": "gateway_healthy" },
+    { "status": "STALE", "configured": true, "state": "warning", "reason_code": "gateway_contact_degraded" },
+    { "status": "NOT_CONTACTED", "configured": true, "state": "warning", "reason_code": "gateway_contact_degraded" },
+    { "status": "PROBLEM", "configured": true, "state": "critical", "reason_code": "gateway_unhealthy" },
+    { "status": "UNKNOWN", "configured": true, "state": "incomplete", "reason_code": "gateway_status_unknown" },
+    { "status": "PROBLEM", "configured": false, "state": "disabled", "reason_code": "gateway_not_configured" }
+  ],
+  "pod_aggregation": [
+    { "states": ["ok", "ok", "ok"], "expected_state": "ok", "reason_code": "connection_server_redundancy_healthy" },
+    { "states": ["critical", "ok", "ok"], "expected_state": "warning", "reason_code": "connection_server_redundancy_degraded" },
+    { "states": ["critical", "critical", "ok"], "expected_state": "critical", "reason_code": "connection_server_redundancy_lost" },
+    { "states": ["ok"], "expected_state": "critical", "reason_code": "connection_server_redundancy_lost" },
+    { "states": ["incomplete", "ok", "ok"], "expected_state": "incomplete", "reason_code": "connection_server_health_unknown" }
+  ],
+  "windows_services": [
+    { "name": "wsbroker", "display": "Horizon Connection Server", "service_state": "Stopped", "start_mode": "Manual", "gateway_expected": false, "state": "critical", "reason_code": "required_service_not_running", "expected": true },
+    { "name": "wscrl", "display": "Horizon CRL Prefetcher", "service_state": "Stopped", "start_mode": "Disabled", "gateway_expected": false, "state": "info", "reason_code": "optional_service_disabled", "expected": false },
+    { "name": "wsblast", "display": "Horizon Blast Gateway", "service_state": "Stopped", "start_mode": "Disabled", "gateway_expected": false, "state": "info", "reason_code": "unused_gateway_service_disabled", "expected": false },
+    { "name": "wsblast", "display": "Horizon Blast Gateway", "service_state": "Stopped", "start_mode": "Manual", "gateway_expected": true, "state": "critical", "reason_code": "required_service_not_running", "expected": true }
+  ],
+  "certificates": [
+    { "active": false, "valid": false, "days_remaining": -100, "state": "info", "reason_code": "unused_certificate_inventory" },
+    { "active": true, "valid": false, "days_remaining": 100, "state": "critical", "reason_code": "active_certificate_invalid_or_expired" },
+    { "active": true, "valid": true, "days_remaining": -1, "state": "critical", "reason_code": "active_certificate_invalid_or_expired" },
+    { "active": true, "valid": true, "days_remaining": 30, "state": "warning", "reason_code": "active_certificate_expires_soon" },
+    { "active": true, "valid": true, "days_remaining": 31, "state": "ok", "reason_code": "active_certificate_valid" }
+  ]
+}

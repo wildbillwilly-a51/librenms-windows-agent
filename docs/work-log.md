@@ -2,6 +2,17 @@
 
 ## 2026-07-26
 
+- Built the separately versioned Windows agent/MSI 0.6.16 health-policy
+  checkpoint. The local Horizon collector now distinguishes required,
+  conditional, and optional services by stable component identity, scores
+  stopped Manual core services, keeps unused gateway and optional services
+  informational, and limits health to the active Horizon certificate.
+  Existing sections remain compatible and add explicit expectedness,
+  severity, reason, impact, and certificate scope. Portable tests and
+  administrative MSI extraction passed. MSI SHA-256:
+  `5a40c9965a44179b09c57e4e3951e55982b983bfd1fd83b4e93cbeaaf5811732`;
+  config SHA-256:
+  `94fd8b56e0ac2ca15f50dd0ffff1d3f9167032b4717aeecd5b091f336fbe404b`.
 - Built Windows agent/MSI 0.6.15 as an installer reliability release. The
   public bootstrap no longer removes registered packages before replacement;
   it verifies the MSI and matching versioned config, checks x64 Windows, .NET

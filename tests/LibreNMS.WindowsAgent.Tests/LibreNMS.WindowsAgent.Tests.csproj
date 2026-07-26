@@ -8,5 +8,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\LibreNMS.WindowsAgent.Core\LibreNMS.WindowsAgent.Core.csproj" />
+    <None Include="..\fixtures\horizon-health-policy.json" Link="fixtures\horizon-health-policy.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

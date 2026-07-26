@@ -58,15 +58,26 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
 
             var ports = config.IncludePorts ? ReadPorts(config.Ports) : new List<PortRow>();
             var certificates = config.IncludeCertificates ? ReadCertificates(context.NowUtc, config) : new List<CertificateRow>();
-            var servicesNotRunning = services.Count(IsServiceIssue);
+            var serviceClassifications = services.ToDictionary(
+                service => service,
+                service => HorizonHealthPolicy.ClassifyWindowsService(
+                    service.Name,
+                    service.DisplayName,
+                    service.State,
+                    service.StartMode,
+                    config.GatewayServicesExpected,
+                    config.ServiceExpectations));
+            var servicesNotRunning = serviceClassifications.Count(row => HorizonHealthPolicy.SeverityRank(row.Value.State) >= HorizonHealthPolicy.SeverityRank("critical"));
+            var servicesWarning = serviceClassifications.Count(row => string.Equals(row.Value.State, "warning", StringComparison.OrdinalIgnoreCase));
             var portsMissing = ports.Count(p => p.Port == 443 && !p.Listening);
-            var expired = certificates.Count(c => c.Expired);
-            var expiringCritical = certificates.Count(c => c.ExpiringCritical && !c.Expired);
+            var expired = certificates.Count(c => c.Active && c.Expired);
+            var expiringCritical = certificates.Count(c => c.Active && c.ExpiringWarning && !c.Expired);
             var expiring = certificates.Count(c => c.ExpiringWarning || c.ExpiringCritical || c.Expired);
             var health = HorizonHealth.Evaluate(new HorizonHealthInput
             {
                 Detected = true,
                 ServicesNotRunning = servicesNotRunning,
+                ServicesWarning = servicesWarning,
                 PortsMissing = portsMissing,
                 CertificatesExpired = expired,
                 CertificatesExpiringCritical = expiringCritical
@@ -88,7 +99,7 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
                     certificatesExpired: expired,
                     certificatesExpiring: expiring,
                     healthIssues: health.HealthIssues),
-                new AgentSection("windows_agent_horizon_services", services.Select(ServiceLine)),
+                new AgentSection("windows_agent_horizon_services", services.Select(service => ServiceLine(service, serviceClassifications[service]))),
                 new AgentSection("windows_agent_horizon_processes", processes.Select(ProcessLine)),
                 new AgentSection("windows_agent_horizon_ports", ports.Select(PortLine)),
                 new AgentSection("windows_agent_horizon_certificates", certificates.Select(CertificateLine)),
@@ -218,7 +229,16 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
             return new[]
             {
                 SummarySection("client_only", 0, 1, services.Count, 0, processes.Count, 0, 0, 0, 0, 0, 0, 0),
-                new AgentSection("windows_agent_horizon_services", services.Select(ServiceLine)),
+                new AgentSection("windows_agent_horizon_services", services.Select(service => ServiceLine(
+                    service,
+                    new HorizonClassification
+                    {
+                        State = "info",
+                        ReasonCode = "client_service_inventory",
+                        Impact = "observation",
+                        Component = "horizon_client",
+                        Expected = false
+                    }))),
                 new AgentSection("windows_agent_horizon_processes", processes.Select(ProcessLine)),
                 Empty("windows_agent_horizon_ports"),
                 Empty("windows_agent_horizon_certificates"),
@@ -299,22 +319,6 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
             return values.Any(value => text.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
-        private static bool IsServiceIssue(ServiceInventoryRecord service)
-        {
-            if (service == null)
-            {
-                return false;
-            }
-
-            if (string.Equals(service.StartMode, "Disabled", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(service.StartMode, "Manual", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            return !string.Equals(service.State, "Running", StringComparison.OrdinalIgnoreCase);
-        }
-
         private static List<ProcessRow> ReadProcesses(CancellationToken cancellationToken)
         {
             var rows = new List<ProcessRow>();
@@ -387,12 +391,29 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
             var hostNames = HostNames();
             ReadStore(rows, StoreName.My, hostNames, nowUtc, config);
             ReadStore(rows, "WebHosting", hostNames, nowUtc, config);
-            return rows
+            var result = rows
                 .GroupBy(row => row.Thumbprint ?? string.Empty, StringComparer.OrdinalIgnoreCase)
                 .Select(group => group.First())
                 .OrderBy(row => row.DaysRemaining)
                 .ThenBy(row => row.Subject, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+            var configuredThumbprint = NormalizeThumbprint(config.ActiveCertificateThumbprint);
+            var active = result.Where(row =>
+                (!string.IsNullOrEmpty(configuredThumbprint) && NormalizeThumbprint(row.Thumbprint) == configuredThumbprint)
+                || (string.IsNullOrEmpty(configuredThumbprint) && string.Equals(row.FriendlyName, "vdm", StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+            foreach (var row in result)
+            {
+                row.Active = active.Contains(row);
+                var classification = HorizonHealthPolicy.ClassifyCertificate(
+                    row.Active,
+                    !row.Expired && row.HasPrivateKey,
+                    row.DaysRemaining,
+                    config.CertificateWarningDays);
+                row.Severity = classification.State;
+                row.Reason = classification.ReasonCode;
+            }
+            return result;
         }
 
         private static void ReadStore(List<CertificateRow> rows, StoreName storeName, List<string> hostNames, DateTimeOffset nowUtc, HorizonConfig config)
@@ -432,6 +453,7 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
                             ExpiringCritical = days >= 0 && days <= config.CertificateCriticalDays,
                             ExpiringWarning = days >= 0 && days <= config.CertificateWarningDays,
                             HasPrivateKey = cert.HasPrivateKey
+                            ,FriendlyName = cert.FriendlyName ?? string.Empty
                         });
                     }
                 }
@@ -488,17 +510,22 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
             }
         }
 
-        private static string ServiceLine(ServiceInventoryRecord service)
+        private static string ServiceLine(ServiceInventoryRecord service, HorizonClassification classification)
         {
             return string.Format(
                 CultureInfo.InvariantCulture,
-                "name={0} display={1} state={2} start_mode={3} role={4} path={5}",
+                "name={0} display={1} state={2} start_mode={3} role={4} path={5} component={6} expected={7} severity={8} reason={9} impact={10}",
                 Kv(service.Name),
                 Kv(service.DisplayName),
                 Kv(service.State),
                 Kv(service.StartMode),
                 Kv(Role(service)),
-                Kv(ServiceCommandLine.RedactPath(service.PathName)));
+                Kv(ServiceCommandLine.RedactPath(service.PathName)),
+                Kv(classification.Component),
+                classification.Expected ? 1 : 0,
+                Kv(classification.State),
+                Kv(classification.ReasonCode),
+                Kv(classification.Impact));
         }
 
         private static string ProcessLine(ProcessRow process)
@@ -557,7 +584,7 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
         {
             return string.Format(
                 CultureInfo.InvariantCulture,
-                "store={0} subject={1} issuer={2} thumbprint={3} not_after_utc={4} days_remaining={5} expired={6} expiring_warning={7} expiring_critical={8} has_private_key={9}",
+                "store={0} subject={1} issuer={2} thumbprint={3} not_after_utc={4} days_remaining={5} expired={6} expiring_warning={7} expiring_critical={8} has_private_key={9} active={10} severity={11} reason={12}",
                 Kv(cert.Store),
                 Kv(cert.Subject),
                 Kv(cert.Issuer),
@@ -567,7 +594,15 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
                 cert.Expired ? 1 : 0,
                 cert.ExpiringWarning ? 1 : 0,
                 cert.ExpiringCritical ? 1 : 0,
-                cert.HasPrivateKey ? 1 : 0);
+                cert.HasPrivateKey ? 1 : 0,
+                cert.Active ? 1 : 0,
+                Kv(cert.Severity),
+                Kv(cert.Reason));
+        }
+
+        private static string NormalizeThumbprint(string value)
+        {
+            return new string((value ?? string.Empty).Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
         }
 
         private static string JoinText(params string[] values)
@@ -616,6 +651,10 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
             public bool ExpiringWarning { get; set; }
             public bool ExpiringCritical { get; set; }
             public bool HasPrivateKey { get; set; }
+            public string FriendlyName { get; set; } = string.Empty;
+            public bool Active { get; set; }
+            public string Severity { get; set; } = "info";
+            public string Reason { get; set; } = "unused_certificate_inventory";
         }
     }
 }

@@ -229,6 +229,9 @@
       ],
       "certificateWarningDays": 30,
       "certificateCriticalDays": 7,
+      "gatewayServicesExpected": false,
+      "activeCertificateThumbprint": "",
+      "serviceExpectations": {},
       "api": {
         "mode": "disabled",
         "baseUrl": "",
