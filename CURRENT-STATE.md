@@ -45,7 +45,9 @@ rollback, retains verbose diagnostics, and verifies a live protocol response.
 Overlay release `0.6.20` provides scope-separated Horizon health, explicit
 redundancy and component semantics, retained condition history, fail-soft
 vendor metrics, and the updated operations UI. Horizon credentials remain only
-on the collector node, and local Windows telemetry stays independent.
+on the collector node, and local Windows telemetry stays independent. Both
+release artifacts and their public installers are published on GitHub `main`;
+the raw public bytes match `SHA256SUMS`.
 
 ## Product Contract
 
@@ -96,7 +98,8 @@ fixtures.
 
 ## Next Recommended Action
 
-Deployment is intentionally waiting at an explicit approval checkpoint. After
-publication, install Windows agent 0.6.16 first on an approved canary and
-confirm the running service, local payload, firewall result, Horizon
-classification evidence, and LibreNMS reachability before any wider rollout.
+Deployment is intentionally waiting at an explicit approval checkpoint.
+Install Windows agent 0.6.16 first on an approved canary and confirm the
+running service, local payload, firewall result, Horizon classification
+evidence, and LibreNMS reachability before any wider rollout. Overlay 0.6.20
+also remains undeployed pending separate approval.

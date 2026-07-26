@@ -31,6 +31,11 @@
   `5a40c9965a44179b09c57e4e3951e55982b983bfd1fd83b4e93cbeaaf5811732`;
   config SHA-256:
   `94fd8b56e0ac2ca15f50dd0ffff1d3f9167032b4717aeecd5b091f336fbe404b`.
+- Published the separate agent (`6c80dab`) and overlay (`cfe5674`) release
+  commits to GitHub `main`. Commit-addressed and normal raw-`main` downloads of
+  the MSI, versioned config, overlay archive, manifest, and installers were
+  verified against the committed hashes. Neither release was deployed to a
+  Horizon server or LibreNMS application node.
 - Built Windows agent/MSI 0.6.15 as an installer reliability release. The
   public bootstrap no longer removes registered packages before replacement;
   it verifies the MSI and matching versioned config, checks x64 Windows, .NET
