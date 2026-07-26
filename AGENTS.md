@@ -58,8 +58,8 @@ Use the smallest relevant validation first:
 dotnet run --project .\tests\LibreNMS.WindowsAgent.Tests\LibreNMS.WindowsAgent.Tests.csproj -c Release
 bash -n ./install.sh
 .\scripts\build-overlay-package.ps1 -ArtifactsDir <temporary-output-directory>
-tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.11.tar.gz
-Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.11.tar.gz
+tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.19.tar.gz
+Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.19.tar.gz
 ```
 
 For release work, run `scripts/build-release.ps1`. When PHP is available, also

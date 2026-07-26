@@ -57,8 +57,12 @@ The service targets .NET Framework 4.6.2 so the current Windows Server
 Server 2012 R2 remains in scope with .NET Framework 4.6.2 or later installed.
 The public package uses a WiX x64 MSI, preserves config on upgrade by default,
 and keeps a stable UpgradeCode while generating a new ProductCode for each
-version. PowerShell remains available for source-tree service installation and
-diagnostics.
+version. The one-command bootstrap verifies a matching versioned configuration,
+prepares it before service startup, and leaves registered upgrades inside the
+MSI rollback boundary. The MSI enforces .NET Framework 4.6.2 or later and does
+not let local firewall-policy refusal roll back an otherwise valid service
+installation. PowerShell remains available for source-tree service installation
+and diagnostics.
 
 ## Initial Sections
 

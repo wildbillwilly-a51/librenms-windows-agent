@@ -51,15 +51,26 @@ Overlay-only release while preserving the current MSI:
 .\scripts\build-release.ps1 -Version <overlay-version> -OverlayOnly -UpdateChecksums
 ```
 
+Agent-only release while preserving the current overlay:
+
+```powershell
+.\scripts\build-release.ps1 -Version <agent-version> -AgentOnly -OverlayVersion <overlay-version> -UpdateChecksums
+```
+
 This builds:
 
 - `artifacts/librenms-windows-agent-<version>.msi`
+- `artifacts/librenms-windows-agent-config-<version>.json`
 - `artifacts/librenms-windows-agent-overlay-<version>.tar.gz`
 
 The MSI build validates generic service output, the 23 default collectors,
-major-upgrade metadata, and the stable UpgradeCode. The overlay builder creates
-the manifest from native `librenms-overlay/` source, runs PHP lint when
-available, and rejects private or legacy identifiers.
+major-upgrade metadata, conditional service startup, the .NET Framework launch
+condition, non-fatal firewall registration, and the stable UpgradeCode. The
+portable installer integration test administratively extracts the exact MSI,
+checks its executable version, and validates the matching versioned
+configuration. The overlay builder creates the manifest from native
+`librenms-overlay/` source, runs PHP lint when available, and rejects private
+or legacy identifiers.
 
 ## 4. Verify Payloads
 
@@ -67,12 +78,17 @@ available, and rejects private or legacy identifiers.
 tar -tzf .\artifacts\librenms-windows-agent-overlay-<version>.tar.gz
 Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-<version>.tar.gz
 Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-<version>.msi
+Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-config-<version>.json
 Get-Content .\SHA256SUMS
 ```
 
 Extract the overlay and run `php -l` over every PHP file when PHP is available.
-Test the MSI on a supported Windows host and verify install, upgrade, service
-restart, config preservation, TCP response, and uninstall behavior.
+Run `tests/installer/Invoke-ElevatedInstallerAcceptance.ps1` in a clean,
+supported Windows environment and verify previous-version upgrade, fresh
+install, same-version repair, occupied-port refusal, configuration
+preservation, service restart, TCP response, uninstall, and cleanup behavior.
+Every acceptance MSI log must finish with exit status zero and contain no
+`Return value 3` marker.
 
 ## 5. Public-Safety Review
 

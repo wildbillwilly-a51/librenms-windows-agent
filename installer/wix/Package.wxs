@@ -15,6 +15,11 @@
       DowngradeErrorMessage="A newer version of LibreNMS Windows Agent is already installed."
       Schedule="afterInstallInitialize" />
     <MediaTemplate EmbedCab="yes" />
+    <Property Id="START_AGENT_SERVICE" Value="1" Secure="yes" />
+    <PropertyRef Id="WIX_IS_NETFRAMEWORK_462_OR_LATER_INSTALLED" />
+    <Launch
+      Message="LibreNMS Windows Agent requires Microsoft .NET Framework 4.6.2 or later."
+      Condition="Installed OR WIX_IS_NETFRAMEWORK_462_OR_LATER_INSTALLED" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLVENDORFOLDER" Name="LibreNMS">
@@ -39,6 +44,7 @@
             Id="AgentFirewallDomain"
             Name="LibreNMS Windows Agent TCP 6556 (Domain)"
             Description="Allow LibreNMS pollers to reach the LibreNMS Windows Agent."
+            IgnoreFailure="yes"
             Port="6556"
             Protocol="tcp"
             Profile="domain"
@@ -47,6 +53,7 @@
             Id="AgentFirewallPrivate"
             Name="LibreNMS Windows Agent TCP 6556 (Private)"
             Description="Allow LibreNMS pollers to reach the LibreNMS Windows Agent."
+            IgnoreFailure="yes"
             Port="6556"
             Protocol="tcp"
             Profile="private"
@@ -64,9 +71,27 @@
         <ServiceControl
           Id="ServiceControl"
           Name="LibreNMSWindowsAgent"
-          Start="install"
           Stop="both"
           Remove="uninstall"
+          Wait="yes" />
+      </Component>
+
+      <Component
+        Id="StartServiceControl"
+        Directory="INSTALLFOLDER"
+        Guid="{08968B1D-B4B8-466E-B2F0-512D87007E84}"
+        Condition="START_AGENT_SERVICE = 1">
+        <RegistryValue
+          Root="HKLM"
+          Key="Software\LibreNMS\Windows Agent"
+          Name="StartServiceControl"
+          Type="integer"
+          Value="1"
+          KeyPath="yes" />
+        <ServiceControl
+          Id="StartServiceOnInstall"
+          Name="LibreNMSWindowsAgent"
+          Start="install"
           Wait="yes" />
       </Component>
 

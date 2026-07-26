@@ -2,6 +2,26 @@
 
 ## 2026-07-26
 
+- Built Windows agent/MSI 0.6.15 as an installer reliability release. The
+  public bootstrap no longer removes registered packages before replacement;
+  it verifies the MSI and matching versioned config, checks x64 Windows, .NET
+  Framework 4.6.2, listener syntax, and port ownership, prepares the effective
+  configuration before the MSI starts the service, preserves/restores config
+  around failure, and retains a verbose MSI log with nearby failure evidence.
+  The MSI now has a native .NET launch condition, conditional service startup,
+  and non-fatal firewall registration so local firewall policy cannot roll
+  back an otherwise valid service installation.
+- Added installer source/table assertions, administrative extraction and
+  packaged-config validation, an agent-only release path, and an elevated
+  clean-host acceptance suite. The exact promoted MSI passed a real 0.6.14 to
+  0.6.15 upgrade with configuration preservation, fresh installation,
+  same-version repair, occupied-port refusal before MSI changes, reinstall,
+  live TCP payload validation, three clean uninstalls, and final residue
+  checks. Every MSI log returned zero with no `Return value 3` marker. The 59
+  portable .NET tests also passed. MSI SHA-256:
+  `80cd00920000c108d0bbe7a73b96289aca40e07231dda88ecd90312e4d622b20`.
+  Versioned config SHA-256:
+  `79f37b860b2aab30a373fecc7af604b48f0a6d8e416d7057f184544da0816294`.
 - Implemented the overlay 0.6.19 Horizon UI correction. The centralized
   snapshot now carries a bounded sanitized all-machine inventory, and expanded
   pools filter actual rows by all, issues, in-session, ready, or unavailable.

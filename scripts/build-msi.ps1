@@ -19,6 +19,7 @@ $payloadDir = Join-Path $workRoot 'payload'
 $assetsDir = Join-Path $workRoot 'assets'
 $msiOutputDir = Join-Path $workRoot 'msi'
 $targetMsi = Join-Path $ArtifactsDir "librenms-windows-agent-$Version.msi"
+$targetConfig = Join-Path $ArtifactsDir "librenms-windows-agent-config-$Version.json"
 $utf8NoBom = [Text.UTF8Encoding]::new($false)
 
 function Get-MsiProperty {
@@ -84,8 +85,24 @@ function Assert-MsiInstallBehavior {
     }
     $configureScript = Get-MsiTableValue $MsiPath "SELECT ``File`` FROM ``File`` WHERE ``File``='ConfigureAgentScript'"
     if ($configureScript) { throw 'The MSI must not package the legacy PowerShell configuration script.' }
-    $serviceEvents = Get-MsiTableValue $MsiPath "SELECT ``Event`` FROM ``ServiceControl`` WHERE ``Name``='LibreNMSWindowsAgent'"
-    if (-not $serviceEvents -or (([int]$serviceEvents -band 1) -eq 0)) { throw 'Windows Installer is not configured to start the agent service.' }
+    $startServiceEvents = Get-MsiTableValue $MsiPath "SELECT ``Event`` FROM ``ServiceControl`` WHERE ``ServiceControl``='StartServiceOnInstall'"
+    if (-not $startServiceEvents -or (([int]$startServiceEvents -band 1) -eq 0)) {
+        throw 'Windows Installer is not configured to start the agent service.'
+    }
+    $serviceControlEvents = Get-MsiTableValue $MsiPath "SELECT ``Event`` FROM ``ServiceControl`` WHERE ``ServiceControl``='ServiceControl'"
+    if (-not $serviceControlEvents -or (([int]$serviceControlEvents -band 1) -ne 0)) {
+        throw 'The unconditional service-control row must not start the agent.'
+    }
+    $startServiceDefault = Get-MsiTableValue $MsiPath "SELECT ``Value`` FROM ``Property`` WHERE ``Property``='START_AGENT_SERVICE'"
+    if ($startServiceDefault -ne '1') { throw 'Direct MSI installs must start the service by default.' }
+    $startServiceCondition = Get-MsiTableValue $MsiPath "SELECT ``Condition`` FROM ``Component`` WHERE ``Component``='StartServiceControl'"
+    if ($startServiceCondition -ne 'START_AGENT_SERVICE = 1') {
+        throw 'The service-start component is not controlled by START_AGENT_SERVICE.'
+    }
+    $netFrameworkCondition = Get-MsiTableValue $MsiPath "SELECT ``Condition`` FROM ``LaunchCondition`` WHERE ``Description``='LibreNMS Windows Agent requires Microsoft .NET Framework 4.6.2 or later.'"
+    if ($netFrameworkCondition -ne 'Installed OR WIX_IS_NETFRAMEWORK_462_OR_LATER_INSTALLED') {
+        throw 'The MSI does not enforce the .NET Framework 4.6.2 prerequisite.'
+    }
     $configAttributes = Get-MsiTableValue $MsiPath "SELECT ``Attributes`` FROM ``Component`` WHERE ``Component``='AgentConfig'"
     if (-not $configAttributes -or (([int]$configAttributes -band 16) -eq 0) -or (([int]$configAttributes -band 128) -eq 0)) {
         throw 'The MSI-owned default config must be permanent and never overwrite an existing config.'
@@ -96,6 +113,11 @@ function Assert-MsiInstallBehavior {
     $privateFirewallPort = Get-MsiTableValue $MsiPath "SELECT ``Port`` FROM ``Wix5FirewallException`` WHERE ``Wix5FirewallException``='AgentFirewallPrivate'"
     if ($domainFirewallPort -ne '6556' -or $privateFirewallPort -ne '6556') {
         throw 'The MSI does not contain both native TCP 6556 firewall rules.'
+    }
+    $domainFirewallAttributes = Get-MsiTableValue $MsiPath "SELECT ``Attributes`` FROM ``Wix5FirewallException`` WHERE ``Wix5FirewallException``='AgentFirewallDomain'"
+    $privateFirewallAttributes = Get-MsiTableValue $MsiPath "SELECT ``Attributes`` FROM ``Wix5FirewallException`` WHERE ``Wix5FirewallException``='AgentFirewallPrivate'"
+    if ((([int]$domainFirewallAttributes -band 1) -eq 0) -or (([int]$privateFirewallAttributes -band 1) -eq 0)) {
+        throw 'Firewall registration must not roll back an otherwise valid agent installation.'
     }
 }
 
@@ -149,6 +171,8 @@ try {
     Assert-MsiMetadata -MsiPath $builtMsi.FullName -ExpectedVersion $Version
     Assert-MsiInstallBehavior -MsiPath $builtMsi.FullName
     Copy-Item -LiteralPath $builtMsi.FullName -Destination $targetMsi -Force
+    Copy-Item -LiteralPath (Join-Path $assetsDir 'agent.template.json') -Destination $targetConfig -Force
+    Write-Output $targetConfig
     Write-Output $targetMsi
 } finally {
     Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue

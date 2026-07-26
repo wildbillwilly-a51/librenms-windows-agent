@@ -1,2 +1,3 @@
 b1ebee731985199c0c6661b536a76aa5516b952d351d2b4d83be8977df93644b  artifacts/librenms-windows-agent-overlay-0.6.19.tar.gz
-e2dc68edd5b0aaa1f21828e8292d37b7412dcb0353dcf11db0f458859d759b89  artifacts/librenms-windows-agent-0.6.14.msi
+79f37b860b2aab30a373fecc7af604b48f0a6d8e416d7057f184544da0816294  artifacts/librenms-windows-agent-config-0.6.15.json
+80cd00920000c108d0bbe7a73b96289aca40e07231dda88ecd90312e4d622b20  artifacts/librenms-windows-agent-0.6.15.msi

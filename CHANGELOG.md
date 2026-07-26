@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.19 - 2026-07-26
+## Overlay 0.6.19 / Windows agent 0.6.15 - 2026-07-26
 
 - Made the Horizon Operations workspace native to both LibreNMS light and dark
   themes, with responsive metric labels and consistent surfaces, borders,
@@ -11,7 +11,17 @@
 - Replaced generic Connection Server navigation from conditions and platform
   health with in-place server detail, including unhealthy service evidence.
 - Preserved the approved pool policy, 30-day default trend, non-alerting
-  behavior, existing RRD schemas, and Windows agent/MSI version 0.6.14.
+  behavior, and existing RRD schemas.
+- Released Windows agent/MSI 0.6.15 with a rollback-safe bootstrap that no
+  longer uninstalls registered packages before replacement, prepares and
+  validates the final configuration before service startup, checks the .NET
+  Framework prerequisite and listener port before changing the host, and
+  retains actionable verbose MSI failure evidence.
+- Added a matching versioned/checksummed configuration artifact, conditional
+  MSI service startup, a .NET Framework 4.6.2 launch condition, non-fatal
+  firewall registration, portable administrative-extraction validation, and a
+  clean-host elevated acceptance suite covering 0.6.14 upgrade, fresh install,
+  repair, occupied-port refusal, protocol response, uninstall, and cleanup.
 
 ## 0.6.18 - 2026-07-25
 

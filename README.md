@@ -179,19 +179,27 @@ iwr -UseBasicParsing https://raw.githubusercontent.com/wildbillwilly-a51/librenm
 Direct MSI link:
 
 ```text
-https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/artifacts/librenms-windows-agent-0.6.14.msi
+https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/artifacts/librenms-windows-agent-0.6.15.msi
 ```
 
 The default Windows install is normally enough. It installs the
-`LibreNMSWindowsAgent` service, listens on `0.0.0.0:6556`, creates the Windows
-firewall rule, starts the service, and preserves existing config on upgrade.
+`LibreNMSWindowsAgent` service, listens on `0.0.0.0:6556`, reconciles the
+Windows firewall rules, starts the service, and preserves existing config on
+upgrade.
 On FactoryTalk hosts, the MSI also enables the complete bounded FactoryTalk
 feature set, including localhost Counter Monitor snapshots every 15 minutes.
-Release 0.6.14 upgrades prior packages inside the MSI rollback boundary, and setup
-reports success only after the installed Windows service reaches `Running`.
+Release 0.6.15 upgrades prior packages inside the MSI rollback boundary, and
+setup reports success only after the installed Windows service reaches
+`Running` and returns a valid agent payload. The one-command installer checks
+the .NET Framework prerequisite and listener port before changing the host,
+prepares the final configuration before service startup, and retains a verbose
+Windows Installer log under
+`%TEMP%\librenms-windows-agent\install-agent-<version>-<timestamp>.log`.
 The MSI has no agent PowerShell custom actions. Windows Installer installs the
 default configuration, preserves an existing `agent.json`, starts the service,
-and creates program-scoped domain/private firewall rules for TCP 6556.
+and attempts program-scoped domain/private firewall rules for TCP 6556.
+Firewall policy cannot roll back an otherwise valid installation; the wrapper
+reconciles the rules afterward and reports whether they were configured.
 
 `0.0.0.0` is the local bind address on the Windows host. It is not the LibreNMS
 server or poller IP.
@@ -331,13 +339,13 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Interactive install after downloading the MSI:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.14.msi
+msiexec /i librenms-windows-agent-0.6.15.msi /L*V "$env:TEMP\librenms-windows-agent-0.6.15-install.log"
 ```
 
 Silent install after downloading the MSI:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.14.msi /qn
+msiexec /i librenms-windows-agent-0.6.15.msi /qn /L*V "$env:TEMP\librenms-windows-agent-0.6.15-install.log"
 ```
 
 The direct MSI intentionally uses one reliable default path:
@@ -346,17 +354,20 @@ The direct MSI intentionally uses one reliable default path:
 - existing `agent.json` preserved
 - complete FactoryTalk collection enabled, including local Counter Monitor
 - service installed as automatic and started during installation
-- domain/private inbound TCP 6556 firewall rules installed natively
+- domain/private inbound TCP 6556 firewall rules attempted natively without
+  making firewall-policy refusal fatal to service installation
 
 The one-command `install-agent.ps1` wrapper retains its optional listener,
-configuration, service, firewall, and native-counter parameters. Non-default
-choices are applied after the native MSI succeeds; they are not MSI custom
-actions.
+configuration, service, firewall, and native-counter parameters. It downloads
+the MSI and its matching versioned configuration, verifies both checksums,
+backs up and prepares the effective configuration, then lets the MSI perform
+the upgrade and service transition transactionally. It never uninstalls a
+registered MSI before the replacement transaction.
 
 Silent uninstall:
 
 ```powershell
-msiexec /x librenms-windows-agent-0.6.14.msi /qn
+msiexec /x librenms-windows-agent-0.6.15.msi /qn /L*V "$env:TEMP\librenms-windows-agent-0.6.15-uninstall.log"
 ```
 
 ### Collector Expectations

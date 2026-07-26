@@ -25,25 +25,26 @@ and private exports do not belong here.
 
 ## Current Releases
 
-- Overlay version: `0.6.16`
-- Windows agent version: `0.6.14`
-- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.16.tar.gz`
-- Windows MSI: `artifacts/librenms-windows-agent-0.6.14.msi`
+- Overlay version: `0.6.19`
+- Windows agent version: `0.6.15`
+- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.19.tar.gz`
+- Windows MSI: `artifacts/librenms-windows-agent-0.6.15.msi`
+- Versioned agent config: `artifacts/librenms-windows-agent-config-0.6.15.json`
 - Checksums: `SHA256SUMS`
-- Overlay SHA256: `677f40a7a03c1547f5c27ee32bb6a44126e83252d474ac6d4d67300652cd5285`
-- Windows MSI SHA256: `e2dc68edd5b0aaa1f21828e8292d37b7412dcb0353dcf11db0f458859d759b89`
+- Overlay SHA256: `b1ebee731985199c0c6661b536a76aa5516b952d351d2b4d83be8977df93644b`
+- Windows MSI SHA256: `80cd00920000c108d0bbe7a73b96289aca40e07231dda88ecd90312e4d622b20`
+- Versioned config SHA256: `79f37b860b2aab30a373fecc7af604b48f0a6d8e416d7057f184544da0816294`
 - Public overlay installer: `install.sh`
 - Public Windows installer: `install-agent.ps1`
 
-Windows agent release `0.6.14` retains the complete bounded FactoryTalk
-collection set and adds local Horizon process telemetry plus the
-disabled-by-default read-only Horizon API integration. Overlay release `0.6.16`
-adds credential-free Redis poll triggers, a collector-only worker with shared
-locks and cooldown, an independent five-minute fallback, preview-first add-only
-pod discovery, and a generic capability contract. Horizon credentials remain
-only on the collector node, and local Windows telemetry stays independent.
-Existing installations remain rollback-safe, and Windows setup requires the
-service to reach `Running` before it succeeds.
+Windows agent release `0.6.15` retains the 0.6.14 collector behavior while
+repairing the complete install and upgrade path. The bootstrap verifies a
+matching versioned config, checks prerequisites and port ownership, prepares
+configuration before service startup, leaves registered upgrades inside MSI
+rollback, retains verbose diagnostics, and verifies a live protocol response.
+Overlay release `0.6.19` provides the current Horizon operations UI and central
+collector. Horizon credentials remain only on the collector node, and local
+Windows telemetry stays independent.
 
 ## Product Contract
 
@@ -75,6 +76,12 @@ For an intentional release:
 .\scripts\build-release.ps1 -UpdateChecksums
 ```
 
+For an agent-only release that preserves the current overlay:
+
+```powershell
+.\scripts\build-release.ps1 -Version 0.6.15 -AgentOnly -OverlayVersion 0.6.19 -UpdateChecksums
+```
+
 Before publishing, review the full committed snapshot for secrets, private
 environment facts, machine-user paths, and legacy branding. When PHP is
 available, run PHP lint and both overlay fixture runners.
@@ -88,10 +95,9 @@ fixtures.
 
 ## Next Recommended Action
 
-Deployment is intentionally waiting at an explicit approval checkpoint.
-Install overlay 0.6.16 on application nodes only, then configure the protected
-credential, pod registrations, central worker, Redis trigger path, and
-five-minute fallback on the designated collector node. Validate a manual
-device poll, lost-trigger fallback, display-device-down continuity, failover,
-stale retention, and publication before acceptance. The Windows MSI remains at
-0.6.14 and does not require an upgrade for this overlay-only release.
+Deployment is intentionally waiting at an explicit approval checkpoint. After
+publication, install Windows agent 0.6.15 first on the server that exposed the
+0.6.14 failure and confirm the retained verbose log, running service, local
+payload, firewall result, and LibreNMS reachability before any wider rollout.
+The Horizon health-classification implementation remains the next product
+objective after installer rollout is accepted.
