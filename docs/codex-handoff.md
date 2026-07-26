@@ -10,8 +10,9 @@
   conditions and pools; trend ranges are 24 hours, 7 days, and 30 days. Pool
   health treats one unavailable spare as informational when another is ready,
   two unavailable spares as warning, and zero ready spares as critical when
-  the spare set is non-empty. Implementation is paused at the visual-concept
-  gate.
+  the spare set is non-empty. A non-empty pool with every machine in session
+  and no remaining placement capacity is also critical. Implementation is
+  paused at the visual-concept gate.
 - Relevant decisions: Installation alone remains inert. Pollers never receive
   Horizon credentials, protected pod files, or private CA trust. The display
   device is a stable UI/data anchor rather than an availability gate. The
@@ -24,6 +25,5 @@
 - Downstream validation: A full Windows-agent poll on 0.6.17 completed with
   zero PHP errors and zero indirect-modification warnings while preserving the
   central snapshot data.
-- Next action: Resolve the severity of all-machines-in-session capacity
-  exhaustion, then create and approve a complete desktop concept before
-  changing collector or UI code.
+- Next action: Create and approve a complete desktop concept before changing
+  collector or UI code.

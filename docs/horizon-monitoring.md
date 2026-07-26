@@ -168,10 +168,10 @@ minimum sample-size warning:
   case where the pool's only spare is unavailable.
 
 This health classification does not itself enable LibreNMS alert
-notifications. Alert rules remain separately gated. A pool with no unused
-machines because every machine is in session is a distinct capacity-exhaustion
-condition; its final warning/critical policy remains part of the visual-design
-review rather than being conflated with unavailable-spare health.
+notifications. Alert rules remain separately gated. A non-empty pool with no
+unused machines because every machine is in session is a critical
+capacity-exhaustion condition: the machines are healthy, but the pool cannot
+place another session. This remains distinct from unavailable-spare health.
 
 ## Central API Safety and Credential Provisioning
 

@@ -14,6 +14,8 @@
   is informational when another is ready, two is warning, and zero ready is
   critical when the spare set is non-empty. Notification rules remain
   separately gated.
+- Classified a non-empty pool with every machine in session and no remaining
+  placement capacity as critical, independently of unavailable-spare health.
 
 ## 0.6.17 - 2026-07-25
 

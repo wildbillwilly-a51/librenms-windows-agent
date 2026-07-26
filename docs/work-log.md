@@ -16,8 +16,10 @@
   spare informational when another remains ready, two unavailable spares a
   warning, and zero ready spares critical when the spare set is non-empty.
   Added 24-hour, 7-day, and 30-day trend requirements. Notification rules
-  remain separately gated, and all-machines-in-session capacity exhaustion
-  remains an explicit design-policy decision.
+  remain separately gated. Approved a critical capacity-exhaustion state for a
+  non-empty pool when every machine is in session and no machine remains
+  available for another placement; this is distinct from unavailable-spare
+  health.
 
 - Released overlay-only patch 0.6.17 after production validation of 0.6.16
   exposed a redundant Eloquent cast-property mutation. The existing
