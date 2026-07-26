@@ -48,7 +48,7 @@ and statistical samples, and Horizon can also emit those events as Syslog.
 
 Release 0.6.14 implements local process telemetry and the initial disabled
 Windows-side API prototype without changing the existing Horizon RRD schema.
-Overlay release 0.6.19 provides the cluster-safe centralized successor and
+Overlay release 0.6.20 provides the cluster-safe centralized successor and
 operational UI:
 
 1. `windows_agent_horizon_runtime_summary` reports state, process count, CPU,
@@ -117,6 +117,33 @@ operational UI:
 
 The existing FactoryTalk runtime sampler was generalized into a shared role
 process sampler rather than duplicated.
+
+## Health Contract In Overlay 0.6.20
+
+Overlay 0.6.20 replaces equal-weight health scoring with explicit scope,
+severity, stable reason code, impact, and redundancy semantics:
+
+- platform, dependency, capacity, collector, and overall states are independent;
+- disabled members are excluded from Connection Server redundancy;
+- one failed member with two healthy peers is warning, while only one healthy
+  enabled member is critical;
+- `RESTART_REQUIRED` is warning, `UNKNOWN` is incomplete, and
+  `ERROR`/`NOT_RESPONDING` are critical at member scope;
+- CRL Prefetch is optional and grouped as a pod-wide informational
+  observation; gateway monitor/service health is scored only when configured;
+- directory access and service-account failures affect dependency health;
+- pool and collector states cannot contaminate platform health;
+- collector staleness becomes warning at ten minutes and critical at thirty;
+- bounded condition history retains stable IDs, first/last seen, consecutive
+  samples, and recovery timestamps;
+- optional vendor health/system metrics fail soft and expose warning, error,
+  unknown, problem-machine, and derived mismatch totals;
+- a new additive Horizon health RRD records all independent scope states
+  without altering existing RRD schemas.
+
+The UI consumes collector-provided severity, places informational observations
+outside actionable conditions, shows all independent states, and explicitly
+distinguishes embedded gateway roles from the absence of standalone gateways.
 
 ## Implemented In Overlay 0.6.19
 

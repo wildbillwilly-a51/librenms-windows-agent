@@ -2,6 +2,24 @@
 
 ## 2026-07-26
 
+- Implemented and packaged overlay 0.6.20 around an explicit Horizon health
+  contract. Platform, dependency, capacity, collector, and overall health are
+  independent; CRL Prefetch is a grouped informational observation; disabled
+  members are excluded; redundancy is warning with two healthy peers and
+  critical with only one; collector freshness, gateways, domains, service
+  accounts, replication, machines, pools, and active certificates use stable
+  reason codes and impact. Added bounded condition persistence/recovery,
+  fail-soft vendor metrics, and an additive health RRD. The UI consumes the
+  emitted severity and keeps observations outside actionable conditions.
+  Shared PHP/C# fixtures, a sanitized three-member acceptance case, condition
+  recovery, vendor mismatch, and UI contract tests passed. A dedicated rendered
+  sanitized three-member page fixture now locks in five healthy scopes, zero actionable
+  conditions, one grouped CRL Prefetch observation, and no standalone gateway
+  wording. Browser QA in dark mode passed for pool expansion, session and
+  unavailable filters (including the empty state and a real unavailable row),
+  machine drawers, Connection Server drawers, condition-to-server drilldown,
+  page-width containment, and clean browser diagnostics. Overlay SHA-256:
+  `a9971b42f6dd4cc97811ea1694298a0ebf96b036f860de974a5acbfa5e3d6718`.
 - Built the separately versioned Windows agent/MSI 0.6.16 health-policy
   checkpoint. The local Horizon collector now distinguishes required,
   conditional, and optional services by stable component identity, scores

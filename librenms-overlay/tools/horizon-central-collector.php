@@ -29,6 +29,8 @@ final class HorizonCentralRuntime
         'horizon_directory_domains', 'horizon_directory_member_status', 'horizon_gateways',
         'horizon_pools_summary', 'horizon_pools', 'horizon_pool_machine_states',
         'horizon_pool_machines', 'horizon_pool_machine_issues', 'horizon_central_meta',
+        'horizon_health_summary', 'horizon_vendor_metrics', 'horizon_conditions',
+        'horizon_observations', 'horizon_condition_history',
     ];
 
     /** @param array<string,mixed> $options */
@@ -236,6 +238,8 @@ final class HorizonCentralRuntime
         $directory = $snapshot['horizon_directory_summary'] ?? [];
         $pools = $snapshot['horizon_pools_summary'] ?? [];
         $meta = $snapshot['horizon_central_meta'] ?? [];
+        $health = $snapshot['horizon_health_summary'] ?? $api;
+        $vendor = $snapshot['horizon_vendor_metrics'] ?? [];
 
         return [
             'horizon_api_available' => in_array(strtolower((string) ($api['state'] ?? '')), ['ok', 'partial'], true) ? 1 : 0,
@@ -275,7 +279,22 @@ final class HorizonCentralRuntime
             'horizon_central_requests_total' => (int) ($meta['requests_total'] ?? 0),
             'horizon_central_pages_total' => (int) ($meta['pages_total'] ?? 0),
             'horizon_central_inventory_complete' => (int) ($meta['inventory_complete'] ?? 0),
+            'horizon_platform_health_state' => self::stateMetric((string) ($health['platform_health_state'] ?? $pod['state'] ?? 'incomplete')),
+            'horizon_dependency_health_state' => self::stateMetric((string) ($health['dependency_health_state'] ?? 'incomplete')),
+            'horizon_capacity_health_state' => self::stateMetric((string) ($health['capacity_health_state'] ?? $pools['state'] ?? 'incomplete')),
+            'horizon_collector_health_state' => self::stateMetric((string) ($health['collector_health_state'] ?? 'incomplete')),
+            'horizon_overall_health_state' => self::stateMetric((string) ($health['overall_health_state'] ?? $api['health_state'] ?? 'incomplete')),
+            'horizon_vendor_warnings_total' => (int) ($vendor['warnings_total'] ?? 0),
+            'horizon_vendor_errors_total' => (int) ($vendor['errors_total'] ?? 0),
+            'horizon_vendor_unknown_total' => (int) ($vendor['unknown_total'] ?? 0),
+            'horizon_vendor_problem_machines_total' => (int) ($vendor['problem_machines_total'] ?? 0),
+            'horizon_vendor_problem_machine_mismatch' => (int) ($vendor['problem_machine_mismatch'] ?? 0),
         ];
+    }
+
+    private static function stateMetric(string $state): int
+    {
+        return ['ok' => 0, 'disabled' => 0, 'info' => 1, 'incomplete' => 2, 'warning' => 3, 'critical' => 4][strtolower($state)] ?? 2;
     }
 
     /** @param array<string,int|float> $metrics */
@@ -320,6 +339,26 @@ final class HorizonCentralRuntime
             'members' => $m['horizon_pod_members_total'], 'members_bad' => $m['horizon_pod_members_unhealthy'], 'repl_bad' => $m['horizon_pod_replications_unhealthy'], 'domain_bad' => $m['horizon_directory_links_unhealthy'], 'gateways_bad' => $m['horizon_gateways_unhealthy'], 'pools' => $m['horizon_pools_total'], 'pools_warn' => $m['horizon_pools_warning'], 'pools_crit' => $m['horizon_pools_critical'], 'incomplete' => $m['horizon_pools_incomplete'], 'spare_total' => $m['horizon_spare_total'], 'spare_ready' => $m['horizon_spare_ready'], 'spare_unready' => $m['horizon_spare_unready'],
         ]);
         $write('windows-agent-horizon-collector', RrdDefinition::make()->addDataset('duration_ms', 'GAUGE', 0)->addDataset('endpoints', 'GAUGE', 0)->addDataset('requests', 'GAUGE', 0)->addDataset('pages', 'GAUGE', 0)->addDataset('complete', 'GAUGE', 0, 1), $collectorFields);
+        $write('windows-agent-horizon-health', RrdDefinition::make()
+            ->addDataset('platform', 'GAUGE', 0, 4)
+            ->addDataset('dependency', 'GAUGE', 0, 4)
+            ->addDataset('capacity', 'GAUGE', 0, 4)
+            ->addDataset('collector', 'GAUGE', 0, 4)
+            ->addDataset('overall', 'GAUGE', 0, 4)
+            ->addDataset('vendor_warn', 'GAUGE', 0)
+            ->addDataset('vendor_error', 'GAUGE', 0)
+            ->addDataset('vendor_unknown', 'GAUGE', 0)
+            ->addDataset('machine_gap', 'GAUGE', 0), [
+                'platform' => $m['horizon_platform_health_state'],
+                'dependency' => $m['horizon_dependency_health_state'],
+                'capacity' => $m['horizon_capacity_health_state'],
+                'collector' => $m['horizon_collector_health_state'],
+                'overall' => $m['horizon_overall_health_state'],
+                'vendor_warn' => $m['horizon_vendor_warnings_total'],
+                'vendor_error' => $m['horizon_vendor_errors_total'],
+                'vendor_unknown' => $m['horizon_vendor_unknown_total'],
+                'machine_gap' => $m['horizon_vendor_problem_machine_mismatch'],
+            ]);
     }
 
     /** @return array<string,mixed> */

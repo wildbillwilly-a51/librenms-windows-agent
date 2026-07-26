@@ -270,6 +270,30 @@ final class PodCollector
             $stale['horizon_central_meta']['inventory_complete'] = 0;
             $stale['horizon_api_summary']['state'] = 'stale';
             $stale['horizon_api_summary']['reason'] = $reason;
+            $collectorState = $age < 0 ? 'incomplete' : ($age >= 1800 ? 'critical' : ($age >= 600 ? 'warning' : 'info'));
+            $stale['horizon_api_summary']['collector_health_state'] = $collectorState;
+            $stale['horizon_health_summary']['collector_health_state'] = $collectorState;
+            $overallState = self::worstState([
+                (string) ($stale['horizon_api_summary']['platform_health_state'] ?? 'incomplete'),
+                (string) ($stale['horizon_api_summary']['dependency_health_state'] ?? 'incomplete'),
+                (string) ($stale['horizon_api_summary']['capacity_health_state'] ?? 'incomplete'),
+                $collectorState,
+            ]);
+            $stale['horizon_api_summary']['overall_health_state'] = $overallState;
+            $stale['horizon_api_summary']['health_state'] = $overallState;
+            $stale['horizon_health_summary']['overall_health_state'] = $overallState;
+            $stale['horizon_health_summary']['health_state'] = $overallState;
+            $conditions = is_array($stale['horizon_conditions'] ?? null) ? $stale['horizon_conditions'] : [];
+            $conditions = array_values(array_filter($conditions, static fn (array $item): bool => (string) ($item['scope'] ?? '') !== 'collector'));
+            if ($collectorState !== 'info') {
+                $conditions[] = self::condition('collector', $collectorState, 'collector_snapshot_stale', 'central-collector', 'The last-good snapshot is aging because the current collection failed.');
+            }
+            [$conditions, $history] = self::mergeConditionHistory(
+                $conditions,
+                is_array($stale['horizon_condition_history'] ?? null) ? $stale['horizon_condition_history'] : []
+            );
+            $stale['horizon_conditions'] = $conditions;
+            $stale['horizon_condition_history'] = $history;
 
             return $stale;
         }
@@ -412,7 +436,8 @@ final class PodCollector
             $monitorRows,
             $configRows,
             $endpoint,
-            max(1, min(64, (int) ($config['unhealthy_service_limit'] ?? 16)))
+            max(1, min(64, (int) ($config['unhealthy_service_limit'] ?? 16))),
+            is_array($previous['horizon_configuration_replications'] ?? null) ? $previous['horizon_configuration_replications'] : []
         );
         $discovered = [];
         foreach ($members as $member) {
@@ -427,7 +452,14 @@ final class PodCollector
 
         $domainRows = self::rows($this->optional($session, 'rest/monitor/v3/ad-domains', 'horizon_domain_monitor', $failures));
         [$domains, $domainMembers, $directoryTotals] = self::domains($domainRows);
-        $gateways = self::gateways(self::rows($this->optional($session, 'rest/monitor/v3/gateways', 'gateway_monitor', $failures)));
+        $gateways = self::gateways(
+            self::rows($this->optional($session, 'rest/monitor/v3/gateways', 'gateway_monitor', $failures)),
+            is_array($previous['horizon_gateways'] ?? null) ? $previous['horizon_gateways'] : []
+        );
+        $vendorMetrics = self::vendorMetrics(
+            $this->optionalFailSoft($session, 'rest/monitor/v1/health-metrics'),
+            $this->optionalFailSoft($session, 'rest/monitor/v1/system-metrics')
+        );
 
         $pageSize = max(1, min(1000, (int) ($config['page_size'] ?? 500)));
         $maxPages = max(1, min(100, (int) ($config['max_pages'] ?? 20)));
@@ -444,18 +476,29 @@ final class PodCollector
             $failures,
             max(1, min(5000, (int) ($config['machine_detail_limit'] ?? 1000))),
             max(1, min(500, (int) ($config['machine_issue_limit'] ?? 100))),
-            gmdate('c')
+            gmdate('c'),
+            is_array($previous['horizon_pool_machines'] ?? null) ? $previous['horizon_pool_machines'] : []
         );
         [$pools, $poolTotals] = self::scorePools($pools, $sessionsTruncated || $machinesTruncated || in_array('sessions', $failures, true) || in_array('machines', $failures, true), $config);
 
         $state = $failures === [] ? 'ok' : 'partial';
-        $healthState = self::healthState($memberTotals['unhealthy'], $memberTotals['replications_unhealthy'], $directoryTotals['unhealthy'], $gateways['unhealthy'], $poolTotals);
-        if ($state === 'partial' && $healthState === 'ok') {
-            $healthState = 'warning';
-        }
+        $platformState = self::worstState([(string) $memberTotals['platform_state'], (string) $gateways['state']]);
+        $dependencyState = (string) ($directoryTotals['state'] ?? 'incomplete');
+        $capacityState = (string) ($poolTotals['state'] ?? 'incomplete');
+        $collectorState = $state === 'ok' ? 'ok' : 'incomplete';
+        $overallState = self::worstState([$platformState, $dependencyState, $capacityState, $collectorState]);
+        $vendorMetrics['problem_machine_mismatch'] = abs(
+            (int) ($vendorMetrics['problem_machines_total'] ?? 0)
+            - (int) ($poolTotals['issue_machines'] ?? 0)
+        );
         $summary = [
             'state' => $state,
-            'health_state' => $healthState,
+            'platform_health_state' => $platformState,
+            'dependency_health_state' => $dependencyState,
+            'capacity_health_state' => $capacityState,
+            'collector_health_state' => $collectorState,
+            'overall_health_state' => $overallState,
+            'health_state' => $overallState,
             'reason' => $failures === [] ? 'none' : implode(',', array_values(array_unique($failures))),
             'connection_servers_total' => $memberTotals['total'],
             'connection_servers_unhealthy' => $memberTotals['unhealthy'],
@@ -473,6 +516,11 @@ final class PodCollector
             'machine_issues_total' => (int) ($poolTotals['issue_machines'] ?? count($machineIssues)),
             'machine_issues_truncated' => $machineIssuesTruncated ? 1 : 0,
             'service_details_truncated' => (int) ($memberTotals['service_details_truncated'] ?? 0),
+            'vendor_warnings_total' => (int) ($vendorMetrics['warnings_total'] ?? 0),
+            'vendor_errors_total' => (int) ($vendorMetrics['errors_total'] ?? 0),
+            'vendor_unknown_total' => (int) ($vendorMetrics['unknown_total'] ?? 0),
+            'vendor_problem_machines_total' => (int) ($vendorMetrics['problem_machines_total'] ?? 0),
+            'vendor_problem_machine_mismatch' => (int) ($vendorMetrics['problem_machine_mismatch'] ?? 0),
             'source' => 'central',
         ];
         $podName = trim((string) ($environment['local_pod_name'] ?? ''));
@@ -483,13 +531,23 @@ final class PodCollector
             $podName = $identity;
         }
 
-        return [
+        $snapshot = [
             'pod_identity' => $identity,
             'discovered_connection_servers' => $discovered,
             'horizon_api_summary' => $summary,
+            'horizon_health_summary' => [
+                'platform_health_state' => $platformState,
+                'dependency_health_state' => $dependencyState,
+                'capacity_health_state' => $capacityState,
+                'collector_health_state' => $collectorState,
+                'overall_health_state' => $overallState,
+                'health_state' => $overallState,
+            ],
+            'horizon_vendor_metrics' => $vendorMetrics,
             'horizon_api_session_protocols' => $protocols,
             'horizon_pod_summary' => [
-                'state' => $healthState,
+                'state' => $platformState,
+                'reason_code' => (string) ($memberTotals['platform_reason_code'] ?? 'platform_health_aggregated'),
                 'pod_name' => $podName,
                 'cluster_name' => (string) ($environment['cluster_name'] ?? ''),
                 'members_total' => $memberTotals['total'],
@@ -502,9 +560,12 @@ final class PodCollector
             'horizon_pod_members' => $members,
             'horizon_configuration_replications' => $replications,
             'horizon_directory_summary' => [
+                'state' => $dependencyState,
                 'domains_total' => count($domains),
                 'member_links_total' => $directoryTotals['total'],
                 'member_links_unhealthy' => $directoryTotals['unhealthy'],
+                'service_accounts_total' => $directoryTotals['service_accounts_total'],
+                'service_accounts_unhealthy' => $directoryTotals['service_accounts_unhealthy'],
             ],
             'horizon_directory_domains' => $domains,
             'horizon_directory_member_status' => $domainMembers,
@@ -515,6 +576,16 @@ final class PodCollector
             'horizon_pool_machines' => $machineDetails,
             'horizon_pool_machine_issues' => $machineIssues,
         ];
+        [$conditions, $observations] = self::buildHealthEvidence($snapshot, $failures);
+        [$conditions, $history] = self::mergeConditionHistory(
+            $conditions,
+            is_array($previous['horizon_condition_history'] ?? null) ? $previous['horizon_condition_history'] : []
+        );
+        $snapshot['horizon_conditions'] = $conditions;
+        $snapshot['horizon_observations'] = $observations;
+        $snapshot['horizon_condition_history'] = $history;
+
+        return $snapshot;
     }
 
     /** @return array<mixed> */
@@ -535,59 +606,231 @@ final class PodCollector
         }
     }
 
-    /** @param list<array<string,mixed>> $monitor @param list<array<string,mixed>> $configs @return array{0:list<array<string,mixed>>,1:list<array<string,mixed>>,2:array<string,int>} */
-    private static function connectionServers(array $monitor, array $configs, string $endpoint, int $serviceLimit): array
+    /** Optional telemetry never makes the authoritative snapshot partial. @return array<mixed> */
+    private function optionalFailSoft(ApiSession $session, string $path): array
+    {
+        try {
+            return $this->trackedGet($session, $path);
+        } catch (HorizonFailure) {
+            return [];
+        }
+    }
+
+    /** @return array{state:string,reason_code:string,impact:string} */
+    public static function classifyConnectionServerStatus(string $status, bool $enabled = true): array
+    {
+        if (! $enabled) return self::classification('disabled', 'connection_server_disabled', 'none');
+
+        return match (self::status($status)) {
+            'OK' => self::classification('ok', 'connection_server_ok', 'none'),
+            'RESTART_REQUIRED' => self::classification('warning', 'connection_server_restart_required', 'server'),
+            'UNKNOWN', '' => self::classification('incomplete', 'connection_server_status_unknown', 'server'),
+            'ERROR' => self::classification('critical', 'connection_server_error', 'server'),
+            'NOT_RESPONDING' => self::classification('critical', 'connection_server_not_responding', 'server'),
+            default => self::classification('incomplete', 'connection_server_status_unrecognized', 'server'),
+        };
+    }
+
+    /** @return array{state:string,reason_code:string,impact:string} */
+    public static function classifyApiService(string $name, string $status, bool $gatewayExpected = false): array
+    {
+        $normalizedName = strtoupper((string) preg_replace('/[^A-Z0-9]+/', '_', strtoupper(trim($name))));
+        if (self::healthy($status)) return self::classification('ok', 'api_service_running', 'none');
+        if ($normalizedName === 'CRL_PREFETCH' || $normalizedName === 'CRL_PREFETCHER') {
+            return self::classification('info', 'crl_prefetch_not_running', 'observation');
+        }
+        if (in_array($normalizedName, ['PCOIP_SECURE_GATEWAY', 'BLAST_SECURE_GATEWAY', 'SECURITY_GATEWAY_COMPONENT'], true) && ! $gatewayExpected) {
+            return self::classification('info', 'unused_gateway_service_not_running', 'observation');
+        }
+        if (self::status($status) === 'UNKNOWN') {
+            return self::classification('incomplete', 'api_service_status_unknown', 'server');
+        }
+
+        return self::classification('warning', 'expected_api_service_not_running', 'server');
+    }
+
+    /** @param array<string,mixed> $certificate @return array{state:string,reason_code:string,impact:string} */
+    public static function classifyCertificate(array $certificate): array
+    {
+        if (! self::boolean($certificate['valid'] ?? true, true)) {
+            return self::classification('critical', 'active_certificate_invalid', 'server');
+        }
+        $days = isset($certificate['days_remaining']) ? (int) $certificate['days_remaining'] : null;
+        if ($days !== null && $days < 0) return self::classification('critical', 'active_certificate_expired', 'server');
+        if ($days !== null && $days <= 30) return self::classification('warning', 'active_certificate_expires_soon', 'server');
+
+        return self::classification('ok', 'active_certificate_valid', 'none');
+    }
+
+    /** @return array{state:string,reason_code:string,impact:string} */
+    public static function classifyReplication(string $status): array
+    {
+        return match (self::status($status)) {
+            'OK', 'UP', 'RUNNING' => self::classification('ok', 'replication_healthy', 'none'),
+            'UNKNOWN', '' => self::classification('incomplete', 'replication_status_unknown', 'pod'),
+            default => self::classification('warning', 'replication_unhealthy', 'pod'),
+        };
+    }
+
+    /** @return array{state:string,reason_code:string,impact:string} */
+    public static function classifyDomainAccess(string $status): array
+    {
+        return match (self::status($status)) {
+            'OK', 'ACCESSIBLE', 'FULLY_ACCESSIBLE' => self::classification('ok', 'domain_access_healthy', 'none'),
+            'UNKNOWN', '' => self::classification('incomplete', 'domain_access_unknown', 'dependency'),
+            default => self::classification('critical', 'domain_access_unavailable', 'dependency'),
+        };
+    }
+
+    /** @return array{state:string,reason_code:string,impact:string} */
+    public static function classifyServiceAccount(string $status): array
+    {
+        return match (self::status($status)) {
+            'ACTIVE', 'OK' => self::classification('ok', 'service_account_active', 'none'),
+            'UNKNOWN', '' => self::classification('incomplete', 'service_account_status_unknown', 'dependency'),
+            default => self::classification('critical', 'service_account_unhealthy', 'dependency'),
+        };
+    }
+
+    /** @return array{state:string,reason_code:string,impact:string} */
+    public static function classifyGateway(string $status, bool $configured = true): array
+    {
+        if (! $configured) return self::classification('disabled', 'gateway_not_configured', 'none');
+
+        return match (self::status($status)) {
+            'OK', 'UP', 'ONLINE' => self::classification('ok', 'gateway_healthy', 'none'),
+            'STALE', 'NOT_CONTACTED' => self::classification('warning', 'gateway_contact_degraded', 'gateway'),
+            'PROBLEM', 'ERROR', 'DOWN', 'NOT_RESPONDING' => self::classification('critical', 'gateway_unhealthy', 'gateway'),
+            'UNKNOWN', '' => self::classification('incomplete', 'gateway_status_unknown', 'gateway'),
+            default => self::classification('incomplete', 'gateway_status_unrecognized', 'gateway'),
+        };
+    }
+
+    /** @return array{state:string,reason_code:string,impact:string} */
+    public static function classifyMachineState(string $state, bool $hasSession, bool $maintenance, int $consecutiveSamples = 1): array
+    {
+        $status = self::status($state);
+        if ($maintenance) return self::classification('info', 'maintenance_mode', 'capacity');
+        if ($status === 'AVAILABLE' || ($hasSession && in_array($status, ['CONNECTED', 'AVAILABLE'], true))) {
+            return self::classification('ok', 'machine_healthy', 'none');
+        }
+        if (in_array($status, ['PROVISIONING', 'CUSTOMIZING', 'VALIDATING', 'WAITING_FOR_AGENT'], true)) {
+            return $consecutiveSamples >= 7
+                ? self::classification('warning', 'machine_transitional_too_long', 'capacity')
+                : self::classification('info', 'machine_transitional', 'capacity');
+        }
+        if ($status === 'UNKNOWN' || $status === '') return self::classification('incomplete', 'machine_state_unknown', 'capacity');
+
+        return self::classification('warning', self::machineIssueReason($status, false), 'capacity');
+    }
+
+    /**
+     * @param list<array{state:string,enabled?:int|bool}> $members
+     * @return array{state:string,reason_code:string,impact:string}
+     */
+    public static function aggregatePodHealth(array $members): array
+    {
+        $enabled = array_values(array_filter($members, static fn (array $member): bool => (int) ($member['enabled'] ?? 1) === 1));
+        if ($enabled === []) return self::classification('incomplete', 'no_enabled_connection_servers', 'pod');
+        $healthy = count(array_filter($enabled, static fn (array $member): bool => in_array(strtolower((string) ($member['state'] ?? '')), ['ok', 'info'], true)));
+        $critical = count(array_filter($enabled, static fn (array $member): bool => strtolower((string) ($member['state'] ?? '')) === 'critical'));
+        $warning = count(array_filter($enabled, static fn (array $member): bool => strtolower((string) ($member['state'] ?? '')) === 'warning'));
+        $incomplete = count(array_filter($enabled, static fn (array $member): bool => strtolower((string) ($member['state'] ?? '')) === 'incomplete'));
+        if ($healthy <= 1) return self::classification('critical', 'connection_server_redundancy_lost', 'pod');
+        if ($critical > 0 || $warning > 0) return self::classification('warning', 'connection_server_redundancy_degraded', 'pod');
+        if ($incomplete > 0) return self::classification('incomplete', 'connection_server_health_unknown', 'pod');
+
+        return self::classification('ok', 'connection_server_redundancy_healthy', 'none');
+    }
+
+    /** @return array{state:string,reason_code:string,impact:string} */
+    private static function classification(string $state, string $reasonCode, string $impact): array
+    {
+        return ['state' => $state, 'reason_code' => $reasonCode, 'impact' => $impact];
+    }
+
+    private static function stateRank(string $state): int
+    {
+        return ['ok' => 0, 'disabled' => 5, 'info' => 10, 'incomplete' => 20, 'warning' => 30, 'critical' => 40][strtolower($state)] ?? 20;
+    }
+
+    /** @param list<string> $states */
+    private static function worstState(array $states, string $default = 'ok'): string
+    {
+        $worst = $default;
+        foreach ($states as $state) {
+            if (self::stateRank($state) > self::stateRank($worst)) $worst = strtolower($state);
+        }
+
+        return $worst;
+    }
+
+    /** @param list<array<string,mixed>> $monitor @param list<array<string,mixed>> $configs @return array{0:list<array<string,mixed>>,1:list<array<string,mixed>>,2:array<string,int|string>} */
+    private static function connectionServers(array $monitor, array $configs, string $endpoint, int $serviceLimit, array $previousReplications = []): array
     {
         $members = [];
         $replications = [];
-        $totals = ['total' => 0, 'unhealthy' => 0, 'services_unhealthy' => 0, 'service_details_truncated' => 0, 'replications_total' => 0, 'replications_unhealthy' => 0, 'certificates_invalid' => 0];
+        $totals = [
+            'total' => 0, 'enabled' => 0, 'unhealthy' => 0, 'services_unhealthy' => 0,
+            'service_observations' => 0, 'service_details_truncated' => 0,
+            'replications_total' => 0, 'replications_unhealthy' => 0,
+            'certificates_invalid' => 0, 'platform_state' => 'incomplete',
+        ];
         foreach ($monitor as $row) {
             $name = (string) ($row['name'] ?? '');
-            $servicesBad = 0;
-            $unhealthyServices = [];
-            $unhealthyServicesTruncated = false;
+            $serviceRows = [];
             foreach (self::rows($row['services'] ?? []) as $service) {
                 $serviceStatus = self::status((string) ($service['status'] ?? ''));
-                if (self::healthy($serviceStatus)) continue;
-                $servicesBad++;
-                if (count($unhealthyServices) >= $serviceLimit) {
-                    $unhealthyServicesTruncated = true;
-                    continue;
-                }
                 $serviceName = (string) ($service['name'] ?? $service['service_name'] ?? $service['display_name'] ?? 'unknown');
-                $unhealthyServices[] = [
+                $serviceRows[] = [
                     'name' => self::boundedText($serviceName, 96, 'unknown'),
                     'status' => self::boundedText($serviceStatus, 32, 'UNKNOWN'),
                 ];
             }
-            $replBad = 0;
+            $replicationRows = [];
             foreach (self::rows($row['cs_replications'] ?? []) as $replication) {
                 $status = self::status((string) ($replication['status'] ?? ''));
-                $replications[] = ['source' => $name, 'target' => (string) ($replication['server_name'] ?? ''), 'status' => $status];
+                $classification = self::classifyReplication($status);
+                $persisted = count(array_filter($previousReplications, static fn (array $previous): bool =>
+                    strcasecmp((string) ($previous['source'] ?? ''), $name) === 0
+                    && strcasecmp((string) ($previous['target'] ?? ''), (string) ($replication['server_name'] ?? '')) === 0
+                    && self::status((string) ($previous['status'] ?? '')) === $status
+                    && ! self::healthy($status)
+                )) > 0;
+                if (! $persisted && self::stateRank($classification['state']) >= self::stateRank('warning')) {
+                    $classification = self::classification('info', 'replication_unhealthy_transient', 'observation');
+                }
+                $item = [
+                    'source' => $name,
+                    'target' => (string) ($replication['server_name'] ?? ''),
+                    'status' => $status,
+                    ...$classification,
+                ];
+                $replications[] = $item;
+                $replicationRows[] = $item;
                 $totals['replications_total']++;
-                if (! self::healthy($status)) {
-                    $replBad++;
+                if (self::stateRank($classification['state']) >= self::stateRank('warning')) {
                     $totals['replications_unhealthy']++;
                 }
             }
             $certificate = is_array($row['certificate'] ?? null) ? $row['certificate'] : [];
-            $certValid = self::boolean($certificate['valid'] ?? true, true);
+            $certificateClassification = self::classifyCertificate($certificate);
+            $certValid = $certificateClassification['state'] !== 'critical';
             $status = self::status((string) ($row['status'] ?? ''));
             $member = [
                 'id' => (string) ($row['id'] ?? ''), 'name' => $name, 'status' => $status,
                 'server_type' => 'connection_server', 'local_api_target' => strcasecmp($name, $endpoint) === 0 ? 1 : 0,
                 'enabled' => 1, 'gateway_mode' => 'none', 'version' => (string) (($row['details']['version'] ?? '')),
-                'connections' => (int) ($row['connection_count'] ?? 0), 'services_unhealthy' => $servicesBad,
-                'unhealthy_services' => $unhealthyServices,
-                'unhealthy_services_truncated' => $unhealthyServicesTruncated ? 1 : 0,
+                'connections' => (int) ($row['connection_count'] ?? 0), 'services_unhealthy' => 0,
+                'unhealthy_services' => [], 'service_observations' => [], '_service_rows' => $serviceRows,
+                'unhealthy_services_truncated' => 0,
                 'configuration_replications_total' => count(self::rows($row['cs_replications'] ?? [])),
-                'configuration_replications_unhealthy' => $replBad, 'certificate_valid' => $certValid ? 1 : 0,
+                'configuration_replications_unhealthy' => count(array_filter($replicationRows, static fn (array $item): bool => self::stateRank((string) $item['state']) >= self::stateRank('warning'))),
+                'certificate_valid' => $certValid ? 1 : 0,
+                'certificate_state' => $certificateClassification['state'],
+                'certificate_reason_code' => $certificateClassification['reason_code'],
             ];
             $members[] = $member;
-            $totals['services_unhealthy'] += $servicesBad;
-            if ($unhealthyServicesTruncated) {
-                $totals['service_details_truncated'] = 1;
-            }
             if (! $certValid) {
                 $totals['certificates_invalid']++;
             }
@@ -595,7 +838,14 @@ final class PodCollector
         foreach ($configs as $row) {
             $index = self::findMember($members, (string) ($row['id'] ?? ''), (string) ($row['name'] ?? ''));
             if ($index < 0) {
-                $members[] = ['id' => (string) ($row['id'] ?? ''), 'name' => (string) ($row['name'] ?? ''), 'status' => 'UNKNOWN', 'services_unhealthy' => 0, 'unhealthy_services' => [], 'unhealthy_services_truncated' => 0, 'configuration_replications_total' => 0, 'configuration_replications_unhealthy' => 0, 'certificate_valid' => 1, 'connections' => 0];
+                $members[] = [
+                    'id' => (string) ($row['id'] ?? ''), 'name' => (string) ($row['name'] ?? ''),
+                    'status' => 'UNKNOWN', 'services_unhealthy' => 0, 'unhealthy_services' => [],
+                    'service_observations' => [], '_service_rows' => [], 'unhealthy_services_truncated' => 0,
+                    'configuration_replications_total' => 0, 'configuration_replications_unhealthy' => 0,
+                    'certificate_valid' => 1, 'certificate_state' => 'incomplete',
+                    'certificate_reason_code' => 'certificate_status_unavailable', 'connections' => 0,
+                ];
                 $index = count($members) - 1;
             }
             $gatewayModes = [];
@@ -611,60 +861,147 @@ final class PodCollector
             $members[$index]['server_type'] = $gatewayModes === [] ? 'connection_server' : 'connection_server_with_embedded_gateway';
         }
         $totals['total'] = count($members);
-        foreach ($members as $member) {
-            if (! self::healthy((string) ($member['status'] ?? '')) || (int) ($member['services_unhealthy'] ?? 0) > 0 || (int) ($member['configuration_replications_unhealthy'] ?? 0) > 0 || (int) ($member['certificate_valid'] ?? 1) === 0) {
+        foreach ($members as &$member) {
+            $enabled = (int) ($member['enabled'] ?? 1) === 1;
+            if ($enabled) $totals['enabled']++;
+            $gatewayExpected = (string) ($member['gateway_mode'] ?? 'none') !== 'none';
+            foreach ($member['_service_rows'] as $service) {
+                $classification = self::classifyApiService((string) $service['name'], (string) $service['status'], $gatewayExpected);
+                $detail = [...$service, ...$classification];
+                if ($classification['state'] === 'info') {
+                    $member['service_observations'][] = $detail;
+                    $totals['service_observations']++;
+                } elseif (self::stateRank($classification['state']) >= self::stateRank('incomplete')) {
+                    if (count($member['unhealthy_services']) < $serviceLimit) {
+                        $member['unhealthy_services'][] = $detail;
+                    } else {
+                        $member['unhealthy_services_truncated'] = 1;
+                        $totals['service_details_truncated'] = 1;
+                    }
+                    $member['services_unhealthy']++;
+                    $totals['services_unhealthy']++;
+                }
+            }
+            unset($member['_service_rows']);
+            $statusClassification = self::classifyConnectionServerStatus((string) ($member['status'] ?? ''), $enabled);
+            $memberState = self::worstState([
+                $statusClassification['state'],
+                ...array_column($member['unhealthy_services'], 'state'),
+                (string) ($member['certificate_state'] ?? 'ok'),
+                (int) ($member['configuration_replications_unhealthy'] ?? 0) > 0 ? 'warning' : 'ok',
+            ]);
+            if (! $enabled) $memberState = 'disabled';
+            $member['health_state'] = $memberState;
+            $member['reason_code'] = $memberState === $statusClassification['state']
+                ? $statusClassification['reason_code']
+                : ((int) ($member['services_unhealthy'] ?? 0) > 0 ? 'connection_server_service_degraded'
+                    : ((int) ($member['certificate_valid'] ?? 1) === 0 ? 'active_certificate_invalid' : 'replication_unhealthy'));
+            $member['impact'] = in_array($memberState, ['ok', 'info', 'disabled'], true) ? 'none' : 'server';
+            if ($enabled && self::stateRank($memberState) >= self::stateRank('warning')) {
                 $totals['unhealthy']++;
             }
         }
+        unset($member);
+        $pod = self::aggregatePodHealth(array_map(static fn (array $member): array => [
+            'state' => (string) ($member['health_state'] ?? 'incomplete'),
+            'enabled' => (int) ($member['enabled'] ?? 1),
+        ], $members));
+        $totals['platform_state'] = $pod['state'];
+        $totals['platform_reason_code'] = $pod['reason_code'];
 
         return [$members, $replications, $totals];
     }
 
-    /** @param list<array<string,mixed>> $rows @return array{0:list<array<string,mixed>>,1:list<array<string,mixed>>,2:array{total:int,unhealthy:int}} */
+    /** @param list<array<string,mixed>> $rows @return array{0:list<array<string,mixed>>,1:list<array<string,mixed>>,2:array<string,int|string>} */
     private static function domains(array $rows): array
     {
         $domains = [];
         $members = [];
         $total = 0;
         $unhealthy = 0;
+        $serviceAccountsTotal = 0;
+        $serviceAccountsUnhealthy = 0;
+        $states = [];
         foreach ($rows as $row) {
             $domainName = (string) ($row['dns_name'] ?? $row['netbios_name'] ?? '');
             $domainTotal = 0;
             $domainBad = 0;
             foreach (self::rows($row['connection_servers'] ?? []) as $member) {
                 $status = self::status((string) ($member['status'] ?? ''));
+                $classification = self::classifyDomainAccess($status);
                 $domainTotal++;
                 $total++;
-                if (! self::healthy($status)) {
+                $states[] = $classification['state'];
+                if (self::stateRank($classification['state']) >= self::stateRank('warning')) {
                     $domainBad++;
                     $unhealthy++;
                 }
-                $members[] = ['domain' => $domainName, 'member' => (string) ($member['name'] ?? ''), 'status' => $status, 'trust_relationship' => self::status((string) ($member['trust_relationship'] ?? ''))];
+                $members[] = [
+                    'domain' => $domainName, 'member' => (string) ($member['name'] ?? ''),
+                    'status' => $status,
+                    'trust_relationship' => self::status((string) ($member['trust_relationship'] ?? '')),
+                    ...$classification,
+                ];
             }
             $active = 0;
             $accountBad = 0;
             foreach (self::rows($row['service_accounts'] ?? []) as $account) {
-                self::status((string) ($account['status'] ?? '')) === 'ACTIVE' ? $active++ : $accountBad++;
+                $serviceAccountsTotal++;
+                $classification = self::classifyServiceAccount((string) ($account['status'] ?? ''));
+                $states[] = $classification['state'];
+                if ($classification['state'] === 'ok') {
+                    $active++;
+                } else {
+                    $accountBad++;
+                    if (self::stateRank($classification['state']) >= self::stateRank('warning')) $serviceAccountsUnhealthy++;
+                }
             }
             $domains[] = ['dns_name' => (string) ($row['dns_name'] ?? ''), 'netbios_name' => (string) ($row['netbios_name'] ?? ''), 'domain_type' => (string) ($row['domain_type'] ?? ''), 'member_links_total' => $domainTotal, 'member_links_unhealthy' => $domainBad, 'service_accounts_active' => $active, 'service_accounts_unhealthy' => $accountBad];
         }
 
-        return [$domains, $members, ['total' => $total, 'unhealthy' => $unhealthy]];
+        return [$domains, $members, [
+            'total' => $total,
+            'unhealthy' => $unhealthy,
+            'service_accounts_total' => $serviceAccountsTotal,
+            'service_accounts_unhealthy' => $serviceAccountsUnhealthy,
+            'state' => $rows === [] ? 'incomplete' : self::worstState($states),
+        ]];
     }
 
-    /** @param list<array<string,mixed>> $rows @return array{rows:list<array<string,mixed>>,unhealthy:int} */
-    private static function gateways(array $rows): array
+    /** @param list<array<string,mixed>> $rows @return array{rows:list<array<string,mixed>>,unhealthy:int,state:string,reason_code:string} */
+    private static function gateways(array $rows, array $previousRows = []): array
     {
         $result = [];
         $unhealthy = 0;
+        $states = [];
         foreach ($rows as $row) {
             $details = is_array($row['details'] ?? null) ? $row['details'] : [];
             $status = self::status((string) ($row['status'] ?? ''));
-            if (! self::healthy($status)) $unhealthy++;
-            $result[] = ['name' => (string) ($row['name'] ?? ''), 'type' => (string) ($details['type'] ?? ''), 'status' => $status, 'version' => (string) ($details['version'] ?? ''), 'active_connections' => (int) ($row['active_connection_count'] ?? 0)];
+            $classification = self::classifyGateway($status);
+            $persisted = count(array_filter($previousRows, static fn (array $previous): bool =>
+                strcasecmp((string) ($previous['name'] ?? ''), (string) ($row['name'] ?? '')) === 0
+                && self::status((string) ($previous['status'] ?? '')) === $status
+                && ! self::healthy($status)
+            )) > 0;
+            if (! $persisted && self::stateRank($classification['state']) >= self::stateRank('warning')) {
+                $classification = self::classification('info', 'gateway_health_transient', 'observation');
+            }
+            $states[] = $classification['state'];
+            if (self::stateRank($classification['state']) >= self::stateRank('warning')) $unhealthy++;
+            $result[] = [
+                'name' => (string) ($row['name'] ?? ''), 'type' => (string) ($details['type'] ?? ''),
+                'status' => $status, 'version' => (string) ($details['version'] ?? ''),
+                'active_connections' => (int) ($row['active_connection_count'] ?? 0),
+                ...$classification,
+            ];
         }
 
-        return ['rows' => $result, 'unhealthy' => $unhealthy];
+        return [
+            'rows' => $result,
+            'unhealthy' => $unhealthy,
+            'state' => $rows === [] ? 'ok' : self::worstState($states),
+            'reason_code' => $rows === [] ? 'no_standalone_gateways_configured' : ($unhealthy > 0 ? 'gateway_health_degraded' : 'gateways_healthy'),
+        ];
     }
 
     /** @param list<string> $failures @return array{0:array<string,int>,1:list<array<string,mixed>>,2:array<string,true>,3:bool} */
@@ -720,13 +1057,19 @@ final class PodCollector
     }
 
     /** @param list<array<string,mixed>> $pools @param array<string,int> $poolById @param array<string,true> $active @param list<string> $failures @return array{0:list<array<string,mixed>>,1:list<array<string,mixed>>,2:list<array<string,mixed>>,3:list<array<string,mixed>>,4:bool,5:bool,6:bool} */
-    private function machines(ApiSession $session, array $pools, array $poolById, array $active, int $pageSize, int $maxPages, array &$failures, int $detailLimit, int $issueLimit, string $collectedUtc): array
+    private function machines(ApiSession $session, array $pools, array $poolById, array $active, int $pageSize, int $maxPages, array &$failures, int $detailLimit, int $issueLimit, string $collectedUtc, array $previousMachines = []): array
     {
         $truncated = false;
         $detailsTruncated = false;
         $issuesTruncated = false;
         $details = [];
         $issues = [];
+        $previousById = [];
+        foreach ($previousMachines as $previousMachine) {
+            if (! is_array($previousMachine)) continue;
+            $id = (string) ($previousMachine['id'] ?? '');
+            if ($id !== '') $previousById[$id] = $previousMachine;
+        }
         for ($page = 1; $page <= $maxPages; $page++) {
             try {
                 $rows = self::rows($this->trackedGet($session, "rest/inventory/v1/machines?page={$page}&size={$pageSize}", true));
@@ -747,7 +1090,15 @@ final class PodCollector
                 $hasSession = $machineId !== '' && isset($active[$machineId]);
                 $managed = is_array($row['managed_machine_data'] ?? null) ? $row['managed_machine_data'] : [];
                 $maintenance = self::boolean($managed['in_maintenance_mode'] ?? false, false) || $state === 'MAINTENANCE';
-                $isIssue = $maintenance || self::machineStateIsIssue($state, $hasSession);
+                $previousMachine = $previousById[$machineId] ?? [];
+                $sameState = self::status((string) ($previousMachine['state'] ?? '')) === $state
+                    && (int) ($previousMachine['maintenance'] ?? 0) === ($maintenance ? 1 : 0);
+                $stateFirstSeen = $sameState
+                    ? (string) ($previousMachine['state_first_seen_utc'] ?? $previousMachine['collected_utc'] ?? $collectedUtc)
+                    : $collectedUtc;
+                $stateAge = max(0, (int) strtotime($collectedUtc) - (int) strtotime($stateFirstSeen));
+                $machineClassification = self::classifyMachineState($state, $hasSession, $maintenance, $stateAge >= 1800 ? 7 : 1);
+                $isIssue = self::stateRank($machineClassification['state']) >= self::stateRank('incomplete');
                 $detail = [
                     'id' => self::boundedText($machineId, 128, 'unknown'),
                     'name' => self::boundedText((string) ($row['name'] ?? $machineId), 128, 'unknown'),
@@ -759,8 +1110,11 @@ final class PodCollector
                     'maintenance' => $maintenance ? 1 : 0,
                     'has_session' => $hasSession ? 1 : 0,
                     'issue' => $isIssue ? 1 : 0,
-                    'issue_reason' => $isIssue ? self::machineIssueReason($state, $maintenance) : 'none',
+                    'issue_reason' => $machineClassification['reason_code'],
+                    'severity' => $machineClassification['state'],
+                    'impact' => $machineClassification['impact'],
                     'collected_utc' => $collectedUtc,
+                    'state_first_seen_utc' => $stateFirstSeen,
                 ];
                 if (count($details) >= $detailLimit) {
                     $detailsTruncated = true;
@@ -840,17 +1194,232 @@ final class PodCollector
             $totals[$key]++;
         }
         unset($pool);
+        $totals['state'] = $totals['pools_critical'] > 0 ? 'critical'
+            : ($totals['pools_warning'] > 0 ? 'warning'
+                : ($totals['pools_incomplete'] > 0 ? 'incomplete'
+                    : ($totals['pools_informational'] > 0 ? 'info'
+                        : ($totals['pools_total'] > 0 && $totals['pools_disabled'] === $totals['pools_total'] ? 'disabled' : 'ok'))));
+        $totals['reason_code'] = $totals['state'] === 'critical' ? 'pool_capacity_exhausted'
+            : ($totals['state'] === 'warning' ? 'pool_capacity_degraded'
+                : ($totals['state'] === 'incomplete' ? 'pool_inventory_incomplete'
+                    : ($totals['state'] === 'info' ? 'pool_capacity_observation' : 'pool_capacity_healthy')));
 
         return [$pools, $totals];
     }
 
-    /** @param array<string,int> $pools */
-    private static function healthState(int $members, int $replications, int $domains, int $gateways, array $pools): string
+    /** @param array<mixed> $health @param array<mixed> $system @return array<string,int> */
+    private static function vendorMetrics(array $health, array $system): array
     {
-        if ($members > 0 || $replications > 0 || (int) $pools['pools_critical'] > 0) return 'critical';
-        if ($domains > 0 || $gateways > 0 || (int) $pools['pools_warning'] > 0 || (int) $pools['pools_incomplete'] > 0) return 'warning';
+        $totals = ['warnings_total' => 0, 'errors_total' => 0, 'unknown_total' => 0, 'problem_machines_total' => 0];
+        $walk = static function (mixed $value, ?string $key = null) use (&$walk, &$totals): void {
+            if (is_array($value)) {
+                foreach ($value as $childKey => $child) $walk($child, is_string($childKey) ? strtolower($childKey) : $key);
+                return;
+            }
+            if (is_numeric($value) && $key !== null) {
+                $number = max(0, (int) $value);
+                if (str_contains($key, 'warning')) $totals['warnings_total'] += $number;
+                elseif (str_contains($key, 'error')) $totals['errors_total'] += $number;
+                elseif (str_contains($key, 'unknown')) $totals['unknown_total'] += $number;
+                elseif (str_contains($key, 'problem') && str_contains($key, 'machine')) $totals['problem_machines_total'] += $number;
+            }
+        };
+        $walk($health);
+        $walk($system);
 
-        return 'ok';
+        return $totals;
+    }
+
+    /**
+     * @param array<string,mixed> $snapshot
+     * @param list<string> $failures
+     * @return array{0:list<array<string,mixed>>,1:list<array<string,mixed>>}
+     */
+    private static function buildHealthEvidence(array $snapshot, array $failures): array
+    {
+        $conditions = [];
+        $observations = [];
+        foreach ($snapshot['horizon_pod_members'] ?? [] as $member) {
+            if (! is_array($member) || (int) ($member['enabled'] ?? 1) !== 1) continue;
+            $state = strtolower((string) ($member['health_state'] ?? 'incomplete'));
+            if (self::stateRank($state) >= self::stateRank('incomplete')) {
+                $conditions[] = self::condition(
+                    'server',
+                    $state,
+                    (string) ($member['reason_code'] ?? 'connection_server_health_degraded'),
+                    (string) ($member['name'] ?? 'connection-server'),
+                    'Connection Server health or redundancy is degraded.'
+                );
+            }
+            foreach (is_array($member['service_observations'] ?? null) ? $member['service_observations'] : [] as $service) {
+                $observations[] = [
+                    'scope' => 'server',
+                    'state' => 'info',
+                    'reason_code' => (string) ($service['reason_code'] ?? 'service_observation'),
+                    'object_ref' => (string) ($member['name'] ?? ''),
+                    'component' => (string) ($service['name'] ?? 'unknown'),
+                    'evidence' => 'status=' . (string) ($service['status'] ?? 'UNKNOWN'),
+                ];
+            }
+        }
+        foreach ($snapshot['horizon_directory_member_status'] ?? [] as $member) {
+            if (! is_array($member)) continue;
+            $state = strtolower((string) ($member['state'] ?? 'incomplete'));
+            if (self::stateRank($state) >= self::stateRank('incomplete')) {
+                $conditions[] = self::condition(
+                    'dependency',
+                    $state,
+                    (string) ($member['reason_code'] ?? 'domain_access_degraded'),
+                    (string) (($member['domain'] ?? '') . '/' . ($member['member'] ?? '')),
+                    'Horizon cannot fully access the configured directory dependency.'
+                );
+            }
+        }
+        foreach ($snapshot['horizon_directory_domains'] ?? [] as $domain) {
+            if (! is_array($domain) || (int) ($domain['service_accounts_unhealthy'] ?? 0) === 0) continue;
+            $conditions[] = self::condition(
+                'dependency',
+                'critical',
+                'service_account_unhealthy',
+                (string) ($domain['dns_name'] ?? $domain['netbios_name'] ?? 'directory'),
+                (int) ($domain['service_accounts_unhealthy'] ?? 0) . ' Horizon service account(s) are unhealthy.'
+            );
+        }
+        foreach ($snapshot['horizon_configuration_replications'] ?? [] as $replication) {
+            if (! is_array($replication) || (string) ($replication['state'] ?? '') !== 'info') continue;
+            $observations[] = [
+                'scope' => 'pod',
+                'state' => 'info',
+                'reason_code' => (string) ($replication['reason_code'] ?? 'replication_observation'),
+                'object_ref' => (string) (($replication['source'] ?? '') . '/' . ($replication['target'] ?? '')),
+                'component' => 'configuration_replication',
+                'evidence' => 'status=' . (string) ($replication['status'] ?? 'UNKNOWN'),
+            ];
+        }
+        foreach ($snapshot['horizon_gateways'] ?? [] as $gateway) {
+            if (! is_array($gateway)) continue;
+            $state = strtolower((string) ($gateway['state'] ?? 'incomplete'));
+            if (self::stateRank($state) >= self::stateRank('incomplete')) {
+                $conditions[] = self::condition(
+                    'pod',
+                    $state,
+                    (string) ($gateway['reason_code'] ?? 'gateway_health_degraded'),
+                    (string) ($gateway['name'] ?? 'gateway'),
+                    'Gateway connectivity is degraded.'
+                );
+            } elseif ($state === 'info') {
+                $observations[] = [
+                    'scope' => 'pod',
+                    'state' => 'info',
+                    'reason_code' => (string) ($gateway['reason_code'] ?? 'gateway_observation'),
+                    'object_ref' => (string) ($gateway['name'] ?? 'gateway'),
+                    'component' => 'standalone_gateway',
+                    'evidence' => 'status=' . (string) ($gateway['status'] ?? 'UNKNOWN'),
+                ];
+            }
+        }
+        foreach ($snapshot['horizon_pools'] ?? [] as $pool) {
+            if (! is_array($pool)) continue;
+            $state = strtolower((string) ($pool['health_state'] ?? 'incomplete'));
+            $item = [
+                'scope' => 'pool',
+                'state' => $state,
+                'reason_code' => (string) ($pool['health_reason'] ?? 'pool_capacity_degraded'),
+                'object_ref' => (string) ($pool['id'] ?? $pool['name'] ?? 'pool'),
+                'impact' => 'capacity',
+                'evidence' => (int) ($pool['spare_ready'] ?? 0) . ' ready; ' . (int) ($pool['spare_unready'] ?? 0) . ' unavailable',
+            ];
+            if ($state === 'info') $observations[] = $item;
+            elseif (self::stateRank($state) >= self::stateRank('incomplete')) $conditions[] = $item;
+        }
+        foreach ($snapshot['horizon_pool_machines'] ?? [] as $machine) {
+            if (! is_array($machine) || (string) ($machine['issue_reason'] ?? '') !== 'machine_transitional_too_long') continue;
+            $conditions[] = self::condition(
+                'machine',
+                'warning',
+                'machine_transitional_too_long',
+                (string) ($machine['id'] ?? $machine['name'] ?? 'machine'),
+                'Machine has remained in ' . (string) ($machine['state'] ?? 'a transitional state') . ' for at least 30 minutes.'
+            );
+        }
+        if ($failures !== []) {
+            $conditions[] = self::condition(
+                'collector',
+                'incomplete',
+                'collector_endpoint_partial',
+                'central-collector',
+                'One or more optional authoritative inventories could not be collected.'
+            );
+        }
+
+        // Identical informational service observations are grouped pod-wide.
+        $grouped = [];
+        foreach ($observations as $observation) {
+            $key = ($observation['scope'] ?? '') . '|' . ($observation['reason_code'] ?? '') . '|' . ($observation['component'] ?? '');
+            $object = (string) ($observation['object_ref'] ?? '');
+            if (! isset($grouped[$key])) {
+                $grouped[$key] = $observation + ['objects' => []];
+                $grouped[$key]['object_ref'] = 'pod';
+            }
+            if ($object !== '' && ! in_array($object, $grouped[$key]['objects'], true)) $grouped[$key]['objects'][] = $object;
+        }
+        foreach ($grouped as &$observation) {
+            sort($observation['objects'], SORT_NATURAL | SORT_FLAG_CASE);
+            $observation['object_count'] = count($observation['objects']);
+        }
+        unset($observation);
+
+        return [array_slice($conditions, 0, 200), array_values($grouped)];
+    }
+
+    /** @return array<string,mixed> */
+    private static function condition(string $scope, string $state, string $reasonCode, string $objectRef, string $evidence): array
+    {
+        return [
+            'scope' => $scope,
+            'state' => $state,
+            'reason_code' => $reasonCode,
+            'object_ref' => $objectRef,
+            'impact' => $scope,
+            'evidence' => $evidence,
+        ];
+    }
+
+    /**
+     * @param list<array<string,mixed>> $current
+     * @param list<array<string,mixed>> $previous
+     * @return array{0:list<array<string,mixed>>,1:list<array<string,mixed>>}
+     */
+    private static function mergeConditionHistory(array $current, array $previous): array
+    {
+        $now = gmdate('c');
+        $priorById = [];
+        foreach ($previous as $item) {
+            if (is_array($item) && isset($item['condition_id'])) $priorById[(string) $item['condition_id']] = $item;
+        }
+        $activeIds = [];
+        foreach ($current as &$item) {
+            $identity = strtolower((string) ($item['scope'] ?? '') . '|' . (string) ($item['reason_code'] ?? '') . '|' . (string) ($item['object_ref'] ?? ''));
+            $id = substr(hash('sha256', $identity), 0, 24);
+            $prior = $priorById[$id] ?? [];
+            $item['condition_id'] = $id;
+            $item['severity'] = (string) ($item['state'] ?? 'incomplete');
+            $item['first_seen_utc'] = (string) ($prior['first_seen_utc'] ?? $now);
+            $item['last_seen_utc'] = $now;
+            $item['consecutive_samples'] = max(1, (int) ($prior['consecutive_samples'] ?? 0) + 1);
+            unset($item['resolved_utc']);
+            $activeIds[$id] = true;
+            $priorById[$id] = $item;
+        }
+        unset($item);
+        foreach ($priorById as $id => &$item) {
+            if (! isset($activeIds[$id]) && ! isset($item['resolved_utc'])) $item['resolved_utc'] = $now;
+        }
+        unset($item);
+        $history = array_values($priorById);
+        usort($history, static fn (array $left, array $right): int => strcmp((string) ($right['last_seen_utc'] ?? ''), (string) ($left['last_seen_utc'] ?? '')));
+
+        return [$current, array_slice($history, 0, 200)];
     }
 
     /** @param array<mixed> $value @return list<array<string,mixed>> */

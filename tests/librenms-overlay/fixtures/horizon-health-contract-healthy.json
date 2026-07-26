@@ -1,0 +1,299 @@
+{
+  "name": "healthy Horizon health contract with informational CRL observation",
+  "device": {
+    "device_id": 1003,
+    "hostname": "pod-vcs2.example.test"
+  },
+  "app_id": 2003,
+  "agent_data": {
+    "windows_agent": "version=0.6.16.0 protocol=checkmk host=pod-vcs2 utc=2026-07-26T08:00:00Z",
+    "windows_agent_windows_os": "caption=\"Microsoft Windows Server 2022 Standard\"",
+    "windows_agent_pending_reboot": "pending=0 sources=\"\"",
+    "windows_agent_windows_update": "reboot_required=0 service_state=Running",
+    "windows_agent_services": "installed_count=0",
+    "windows_agent_horizon_summary": "state=ok detected=1 services_total=5 services_not_running=0 processes_total=4 ports_total=4 ports_listening=4 certificates_total=1 certificates_expired=0 certificates_expiring=0 health_issues=0",
+    "windows_agent_horizon_api_summary": "state=disabled reason=not_configured connection_servers_total=0 sessions_total=0",
+    "windows_agent_factorytalk_summary": "state=not_detected detected=0",
+    "windows_agent_ad_dc_health_summary": "state=not_applicable dc_detected=0 health_issues=0",
+    "windows_agent_datto_backup_summary": "state=not_detected detected=0 health_issues=0"
+  },
+  "existing_application_data": {
+    "horizon_central_meta": {
+      "source": "central",
+      "site": "example",
+      "source_endpoint": "pod-vcs1.example.test",
+      "last_attempt_utc": "2026-07-26T08:00:00Z",
+      "last_success_utc": "2026-07-26T08:00:00Z",
+      "snapshot_age_seconds": 0,
+      "stale": 0,
+      "reason": "",
+      "outcome": "fresh",
+      "collection_duration_ms": 3263,
+      "endpoints_attempted": 1,
+      "requests_total": 10,
+      "pages_total": 2,
+      "inventory_complete": 1,
+      "snapshot_inventory_complete": 1
+    },
+    "horizon_health_summary": {
+      "health_state": "ok",
+      "overall_health_state": "ok",
+      "platform_health_state": "ok",
+      "dependency_health_state": "ok",
+      "capacity_health_state": "ok",
+      "collector_health_state": "ok",
+      "conditions_count": 0,
+      "observations_count": 1
+    },
+    "horizon_api_summary": {
+      "state": "ok",
+      "health_state": "ok",
+      "overall_health_state": "ok",
+      "platform_health_state": "ok",
+      "dependency_health_state": "ok",
+      "capacity_health_state": "ok",
+      "collector_health_state": "ok",
+      "connection_servers_total": 3,
+      "connection_servers_unhealthy": 0,
+      "services_unhealthy": 0,
+      "replications_unhealthy": 0,
+      "certificates_invalid": 0,
+      "sessions_total": 12,
+      "sessions_connected": 12,
+      "sessions_disconnected": 0,
+      "sessions_other": 0,
+      "sessions_truncated": 0,
+      "machines_truncated": 0,
+      "machine_details_total": 3,
+      "machine_details_truncated": 0,
+      "machine_issues_total": 0,
+      "machine_issues_truncated": 0
+    },
+    "horizon_pod_summary": {
+      "state": "ok",
+      "pod_name": "Example Pod",
+      "members_total": 3,
+      "members_unhealthy": 0,
+      "configuration_replications_total": 6,
+      "configuration_replications_unhealthy": 0,
+      "gateways_total": 0,
+      "gateways_unhealthy": 0
+    },
+    "horizon_pod_members": [
+      {
+        "name": "pod-vcs1.example.test",
+        "status": "OK",
+        "server_type": "connection_server",
+        "enabled": 1,
+        "connections": 10,
+        "certificate_valid": 1,
+        "configuration_replications_unhealthy": 0,
+        "health_state": "ok",
+        "health_reason_code": "server_healthy",
+        "health_evidence": "Enabled member is serving normally.",
+        "unhealthy_services": [],
+        "service_observations": [
+          {
+            "name": "CRL_PREFETCH",
+            "status": "DOWN",
+            "severity": "info",
+            "reason_code": "crl_prefetch_not_running"
+          }
+        ]
+      },
+      {
+        "name": "pod-vcs2.example.test",
+        "status": "OK",
+        "server_type": "connection_server",
+        "enabled": 1,
+        "connections": 2,
+        "certificate_valid": 1,
+        "configuration_replications_unhealthy": 0,
+        "health_state": "ok",
+        "health_reason_code": "server_healthy",
+        "health_evidence": "Enabled member is serving normally.",
+        "unhealthy_services": [],
+        "service_observations": [
+          {
+            "name": "CRL_PREFETCH",
+            "status": "DOWN",
+            "severity": "info",
+            "reason_code": "crl_prefetch_not_running"
+          }
+        ]
+      },
+      {
+        "name": "pod-gateway.example.test",
+        "status": "OK",
+        "server_type": "connection_server",
+        "enabled": 1,
+        "connections": 0,
+        "certificate_valid": 1,
+        "configuration_replications_unhealthy": 0,
+        "health_state": "ok",
+        "health_reason_code": "server_healthy",
+        "health_evidence": "Enabled member is serving normally.",
+        "unhealthy_services": [],
+        "service_observations": [
+          {
+            "name": "CRL_PREFETCH",
+            "status": "DOWN",
+            "severity": "info",
+            "reason_code": "crl_prefetch_not_running"
+          }
+        ]
+      }
+    ],
+    "horizon_conditions": [],
+    "horizon_observations": [
+      {
+        "observation_id": "service-crl-prefetch",
+        "scope": "pod",
+        "severity": "info",
+        "reason_code": "crl_prefetch_not_running",
+        "component": "CRL_PREFETCH",
+        "object_count": 3,
+        "objects": [
+          "pod-vcs1.example.test",
+          "pod-vcs2.example.test",
+          "pod-gateway.example.test"
+        ]
+      }
+    ],
+    "horizon_directory_summary": {
+      "domains_total": 1,
+      "domains_healthy": 1,
+      "member_links_total": 6,
+      "member_links_unhealthy": 0
+    },
+    "horizon_pools_summary": {
+      "pools_total": 1,
+      "pools_healthy": 1,
+      "pools_informational": 0,
+      "pools_warning": 0,
+      "pools_critical": 0,
+      "pools_incomplete": 0,
+      "spare_total": 2,
+      "spare_ready": 2,
+      "spare_unready": 0,
+      "issue_machines": 0
+    },
+    "horizon_pools": [
+      {
+        "id": "pool-a",
+        "name": "floating-a",
+        "display_name": "Floating Desktop Pool",
+        "source": "INSTANT_CLONE",
+        "clone_type": "INSTANT_CLONE",
+        "health_state": "ok",
+        "health_reason": "capacity_available",
+        "machines_total": 3,
+        "machines_with_sessions": 1,
+        "spare_total": 2,
+        "spare_ready": 2,
+        "spare_unready": 0,
+        "spare_unready_percent": 0,
+        "spare_maintenance": 0,
+        "issue_machines": 0,
+        "placement_headroom_percent": 66.7
+      }
+    ],
+    "horizon_pool_machines": [
+      {
+        "id": "machine-001",
+        "name": "desktop-001.example.test",
+        "pool_id": "pool-a",
+        "pool": "floating-a",
+        "pool_display_name": "Floating Desktop Pool",
+        "clone_type": "INSTANT_CLONE",
+        "state": "CONNECTED",
+        "maintenance": 0,
+        "has_session": 1,
+        "issue": 0,
+        "issue_reason": "none",
+        "collected_utc": "2026-07-26T08:00:00Z"
+      },
+      {
+        "id": "machine-002",
+        "name": "desktop-002.example.test",
+        "pool_id": "pool-a",
+        "pool": "floating-a",
+        "pool_display_name": "Floating Desktop Pool",
+        "clone_type": "INSTANT_CLONE",
+        "state": "AVAILABLE",
+        "maintenance": 0,
+        "has_session": 0,
+        "issue": 0,
+        "issue_reason": "none",
+        "collected_utc": "2026-07-26T08:00:00Z"
+      },
+      {
+        "id": "machine-003",
+        "name": "desktop-003.example.test",
+        "pool_id": "pool-a",
+        "pool": "floating-a",
+        "pool_display_name": "Floating Desktop Pool",
+        "clone_type": "INSTANT_CLONE",
+        "state": "AVAILABLE",
+        "maintenance": 0,
+        "has_session": 0,
+        "issue": 0,
+        "issue_reason": "none",
+        "collected_utc": "2026-07-26T08:00:00Z"
+      }
+    ],
+    "horizon_pool_machine_issues": []
+  },
+  "expect": {
+    "status_prefix": "OK:",
+    "status_contains": [
+      "version=0.6.16.0",
+      "horizon_state=ok"
+    ],
+    "fields": {
+      "horizon_api_connection_servers_total": 3,
+      "horizon_api_sessions_total": 12,
+      "horizon_pod_members_total": 3,
+      "horizon_pools_total": 1,
+      "horizon_spare_ready": 2,
+      "horizon_central_stale": 0
+    },
+    "data": {
+      "horizon_health_summary.overall_health_state": "ok",
+      "horizon_health_summary.platform_health_state": "ok",
+      "horizon_health_summary.dependency_health_state": "ok",
+      "horizon_health_summary.capacity_health_state": "ok",
+      "horizon_health_summary.collector_health_state": "ok",
+      "horizon_pod_summary.state": "ok",
+      "horizon_conditions": [],
+      "horizon_observations.0.reason_code": "crl_prefetch_not_running"
+    },
+    "app_page": {
+      "contains": [
+        "VMware Horizon",
+        "Pod Example Pod",
+        "Overall",
+        "Platform",
+        "Dependencies",
+        "Capacity",
+        "Collector",
+        "No actionable Horizon conditions",
+        "Informational observations",
+        "CRL Prefetch is not running",
+        "3 member(s): pod-vcs1.example.test, pod-vcs2.example.test, pod-gateway.example.test",
+        "No standalone gateways configured",
+        "Floating Desktop Pool",
+        "data-pool-open-filter=\"sessions\"",
+        "data-pool-open-filter=\"unavailable\"",
+        "data-member-drawer=",
+        "Collector reliability",
+        "Fresh",
+        "30d"
+      ],
+      "not_contains": [
+        "CRL_PREFETCH unhealthy",
+        "device/device="
+      ]
+    }
+  }
+}

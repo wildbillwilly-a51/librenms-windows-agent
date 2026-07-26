@@ -25,13 +25,13 @@ and private exports do not belong here.
 
 ## Current Releases
 
-- Overlay version: `0.6.19`
+- Overlay version: `0.6.20`
 - Windows agent version: `0.6.16`
-- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.19.tar.gz`
+- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.20.tar.gz`
 - Windows MSI: `artifacts/librenms-windows-agent-0.6.16.msi`
 - Versioned agent config: `artifacts/librenms-windows-agent-config-0.6.16-win.json`
 - Checksums: `SHA256SUMS`
-- Overlay SHA256: `b1ebee731985199c0c6661b536a76aa5516b952d351d2b4d83be8977df93644b`
+- Overlay SHA256: `a9971b42f6dd4cc97811ea1694298a0ebf96b036f860de974a5acbfa5e3d6718`
 - Windows MSI SHA256: `5a40c9965a44179b09c57e4e3951e55982b983bfd1fd83b4e93cbeaaf5811732`
 - Versioned config SHA256: `94fd8b56e0ac2ca15f50dd0ffff1d3f9167032b4717aeecd5b091f336fbe404b`
 - Public overlay installer: `install.sh`
@@ -42,9 +42,10 @@ adds explicit Horizon service expectedness plus active-certificate health. The b
 matching versioned config, checks prerequisites and port ownership, prepares
 configuration before service startup, leaves registered upgrades inside MSI
 rollback, retains verbose diagnostics, and verifies a live protocol response.
-Overlay release `0.6.19` provides the current Horizon operations UI and central
-collector. Horizon credentials remain only on the collector node, and local
-Windows telemetry stays independent.
+Overlay release `0.6.20` provides scope-separated Horizon health, explicit
+redundancy and component semantics, retained condition history, fail-soft
+vendor metrics, and the updated operations UI. Horizon credentials remain only
+on the collector node, and local Windows telemetry stays independent.
 
 ## Product Contract
 
@@ -79,7 +80,7 @@ For an intentional release:
 For an agent-only release that preserves the current overlay:
 
 ```powershell
-.\scripts\build-release.ps1 -Version 0.6.16 -AgentOnly -OverlayVersion 0.6.19 -UpdateChecksums
+.\scripts\build-release.ps1 -Version 0.6.16 -AgentOnly -OverlayVersion 0.6.20 -UpdateChecksums
 ```
 
 Before publishing, review the full committed snapshot for secrets, private

@@ -153,6 +153,39 @@ function successfulResponses(string $identity = 'ABC Pod'): array
 }
 
 $tests = [];
+$tests['shared Horizon health policy fixtures'] = static function (): void {
+    $path = dirname(__DIR__, 2) . '/tests/fixtures/horizon-health-policy.json';
+    $fixture = json_decode((string) file_get_contents($path), true, flags: JSON_THROW_ON_ERROR);
+    foreach ($fixture['connection_server_status'] as $row) {
+        $result = PodCollector::classifyConnectionServerStatus($row['status'], $row['enabled']);
+        expect($result['state'] === $row['state'] && $result['reason_code'] === $row['reason_code'], 'Connection Server policy fixture failed');
+    }
+    foreach ($fixture['api_services'] as $row) {
+        $result = PodCollector::classifyApiService($row['name'], $row['status'], $row['gateway_expected']);
+        expect($result['state'] === $row['state'] && $result['reason_code'] === $row['reason_code'], 'API service policy fixture failed');
+    }
+    foreach ($fixture['replication'] as $row) {
+        $result = PodCollector::classifyReplication($row['status']);
+        expect($result['state'] === $row['state'] && $result['reason_code'] === $row['reason_code'], 'replication policy fixture failed');
+    }
+    foreach ($fixture['domain_access'] as $row) {
+        $result = PodCollector::classifyDomainAccess($row['status']);
+        expect($result['state'] === $row['state'] && $result['reason_code'] === $row['reason_code'], 'domain policy fixture failed');
+    }
+    foreach ($fixture['service_accounts'] as $row) {
+        $result = PodCollector::classifyServiceAccount($row['status']);
+        expect($result['state'] === $row['state'] && $result['reason_code'] === $row['reason_code'], 'service-account policy fixture failed');
+    }
+    foreach ($fixture['gateways'] as $row) {
+        $result = PodCollector::classifyGateway($row['status'], $row['configured']);
+        expect($result['state'] === $row['state'] && $result['reason_code'] === $row['reason_code'], 'gateway policy fixture failed');
+    }
+    foreach ($fixture['pod_aggregation'] as $row) {
+        $members = array_map(static fn (string $state): array => ['state' => $state, 'enabled' => 1], $row['states']);
+        $result = PodCollector::aggregatePodHealth($members);
+        expect($result['state'] === $row['expected_state'] && $result['reason_code'] === $row['reason_code'], 'pod aggregation fixture failed');
+    }
+};
 $tests['seed priority and validation'] = static function (): void {
     $seeds = PodCollector::seedEndpoints(testConfig());
     expect($seeds === ['abc-vcs1.example.test', 'abc-vcs2.example.test'], 'seed priority changed');
@@ -275,10 +308,96 @@ $tests['issue details and unhealthy service evidence are bounded'] = static func
     expect($snapshot['horizon_api_summary']['machine_issues_total'] === 10, 'authoritative issue total was reduced to the detail limit');
     expect($snapshot['horizon_api_summary']['machine_issues_truncated'] === 1, 'machine issue truncation was not disclosed');
     expect(count($snapshot['horizon_pod_members'][0]['unhealthy_services']) === 1, 'service detail limit was not enforced');
-    expect($snapshot['horizon_pod_members'][0]['unhealthy_services'][0]['name'] === 'CRL_PREFETCH', 'unhealthy service name was not retained');
-    expect($snapshot['horizon_pod_members'][0]['unhealthy_services_truncated'] === 1, 'service detail truncation was not disclosed');
-    expect($snapshot['horizon_api_summary']['service_details_truncated'] === 1, 'service detail truncation summary was not disclosed');
+    expect($snapshot['horizon_pod_members'][0]['unhealthy_services'][0]['name'] === 'MESSAGE_BUS', 'actionable unhealthy service name was not retained');
+    expect($snapshot['horizon_pod_members'][0]['service_observations'][0]['name'] === 'CRL_PREFETCH', 'CRL Prefetch observation was not retained');
+    expect($snapshot['horizon_pod_members'][0]['unhealthy_services_truncated'] === 0, 'informational observations incorrectly consumed the actionable service limit');
+    expect($snapshot['horizon_api_summary']['service_details_truncated'] === 0, 'informational observations incorrectly marked actionable service evidence truncated');
     expect($snapshot['horizon_central_meta']['inventory_complete'] === 0, 'truncated issue evidence incorrectly reported complete');
+};
+$tests['sanitized three-member healthy pod keeps CRL Prefetch informational'] = static function (): void {
+    $responses = successfulResponses();
+    foreach ($responses['rest/monitor/v3/connection-servers'] as &$member) {
+        $member['services'] = [['name' => 'CRL_PREFETCH', 'status' => 'DOWN']];
+    }
+    unset($member);
+    $responses['rest/monitor/v3/gateways'] = [];
+    foreach ($responses['rest/inventory/v1/machines?page=1&size=100'] as &$machine) {
+        $machine['state'] = 'AVAILABLE';
+    }
+    unset($machine);
+    $snapshot = (new PodCollector(static fn (): ApiSession => new FakeHorizonSession($responses)))->collect(
+        testConfig(),
+        ['username' => 'reader', 'password' => str_repeat('x', 12)]
+    );
+    expect($snapshot['horizon_health_summary']['platform_health_state'] === 'ok', 'healthy platform was contaminated by CRL Prefetch');
+    expect($snapshot['horizon_health_summary']['dependency_health_state'] === 'ok', 'healthy dependencies were not OK');
+    expect($snapshot['horizon_health_summary']['capacity_health_state'] === 'ok', 'healthy capacity was not OK');
+    expect($snapshot['horizon_health_summary']['collector_health_state'] === 'ok', 'fresh collector was not OK');
+    expect($snapshot['horizon_health_summary']['overall_health_state'] === 'ok', 'healthy pod overall state was not OK');
+    expect($snapshot['horizon_pod_summary']['state'] === 'ok', 'pod summary no longer represents platform only');
+    expect($snapshot['horizon_conditions'] === [], 'informational CRL Prefetch created an actionable condition');
+    expect(count($snapshot['horizon_observations']) === 1, 'pod-wide CRL Prefetch observations were not grouped');
+    expect($snapshot['horizon_observations'][0]['reason_code'] === 'crl_prefetch_not_running', 'CRL Prefetch reason changed');
+    expect($snapshot['horizon_observations'][0]['object_count'] === 3, 'CRL Prefetch pod-wide member count is wrong');
+    expect($snapshot['horizon_pod_summary']['gateways_total'] === 0, 'no-gateway fixture was not retained');
+};
+$tests['condition history persists and records recovery'] = static function (): void {
+    $responses = successfulResponses();
+    $responses['rest/monitor/v3/connection-servers'][0]['services'] = [['name' => 'MESSAGE_BUS', 'status' => 'DOWN']];
+    $credential = ['username' => 'reader', 'password' => str_repeat('x', 12)];
+    $collector = new PodCollector(static fn (): ApiSession => new FakeHorizonSession($responses));
+    $first = $collector->collect(testConfig(), $credential);
+    $second = $collector->collect(testConfig(), $credential, $first);
+    $condition = array_values(array_filter($second['horizon_conditions'], static fn (array $item): bool => ($item['object_ref'] ?? '') === 'abc-vcs1'))[0] ?? [];
+    expect(($condition['consecutive_samples'] ?? 0) === 2, 'condition consecutive sample count did not persist');
+    expect(($condition['first_seen_utc'] ?? '') === ($first['horizon_conditions'][0]['first_seen_utc'] ?? ''), 'condition first-seen timestamp changed');
+
+    $healthyResponses = successfulResponses();
+    $recovered = (new PodCollector(static fn (): ApiSession => new FakeHorizonSession($healthyResponses)))->collect(testConfig(), $credential, $second);
+    $history = array_values(array_filter($recovered['horizon_condition_history'], static fn (array $item): bool => ($item['condition_id'] ?? '') === ($condition['condition_id'] ?? '')))[0] ?? [];
+    expect(isset($history['resolved_utc']), 'recovered condition was not retained with a resolution timestamp');
+};
+$tests['replication and gateway failures require persistence'] = static function (): void {
+    $responses = successfulResponses();
+    $responses['rest/monitor/v3/connection-servers'][0]['cs_replications'][0]['status'] = 'ERROR';
+    $responses['rest/monitor/v3/gateways'][0]['status'] = 'STALE';
+    $credential = ['username' => 'reader', 'password' => str_repeat('x', 12)];
+    $collector = new PodCollector(static fn (): ApiSession => new FakeHorizonSession($responses));
+    $transient = $collector->collect(testConfig(), $credential);
+    expect($transient['horizon_configuration_replications'][0]['state'] === 'info', 'first replication failure was not transient');
+    expect($transient['horizon_gateways'][0]['state'] === 'info', 'first gateway failure was not transient');
+    expect($transient['horizon_health_summary']['platform_health_state'] === 'info', 'transient platform evidence became actionable');
+
+    $sustained = $collector->collect(testConfig(), $credential, $transient);
+    expect($sustained['horizon_configuration_replications'][0]['state'] === 'warning', 'sustained replication failure did not warn');
+    expect($sustained['horizon_gateways'][0]['state'] === 'warning', 'sustained gateway failure did not warn');
+    expect($sustained['horizon_health_summary']['platform_health_state'] === 'warning', 'sustained platform degradation did not warn');
+};
+$tests['optional vendor metrics are fail-soft and expose mismatch'] = static function (): void {
+    $responses = successfulResponses();
+    $responses['rest/monitor/v1/health-metrics'] = ['warning_count' => 2, 'error_count' => 1];
+    $responses['rest/monitor/v1/system-metrics'] = ['unknown_count' => 3, 'problem_machine_count' => 4];
+    $snapshot = (new PodCollector(static fn (): ApiSession => new FakeHorizonSession($responses)))->collect(
+        testConfig(),
+        ['username' => 'reader', 'password' => str_repeat('x', 12)]
+    );
+    expect($snapshot['horizon_vendor_metrics']['warnings_total'] === 2, 'vendor warning count missing');
+    expect($snapshot['horizon_vendor_metrics']['errors_total'] === 1, 'vendor error count missing');
+    expect($snapshot['horizon_vendor_metrics']['unknown_total'] === 3, 'vendor unknown count missing');
+    expect($snapshot['horizon_vendor_metrics']['problem_machines_total'] === 4, 'vendor problem-machine count missing');
+    expect($snapshot['horizon_vendor_metrics']['problem_machine_mismatch'] === 6, 'problem-machine mismatch did not compare vendor and derived totals');
+    expect($snapshot['horizon_api_summary']['state'] === 'ok', 'optional metrics made the authoritative snapshot partial');
+};
+$tests['Horizon UI consumes collector severity and separates observations'] = static function (): void {
+    $source = (string) file_get_contents(dirname(__DIR__, 2) . '/librenms-overlay/includes/html/pages/device/apps/windows-agent.inc.php');
+    expect(str_contains($source, "\$horizon_conditions = \$data['horizon_conditions']"), 'UI does not consume collector conditions');
+    expect(str_contains($source, "\$condition['severity'] ?? \$condition['state']"), 'UI does not consume collector-provided severity');
+    expect(str_contains($source, 'Informational observations'), 'UI does not separate informational observations');
+    expect(str_contains($source, 'No standalone gateways configured'), 'UI does not explain the zero standalone-gateway state');
+    expect(str_contains($source, "'Platform' => \$horizon_health_summary['platform_health_state']"), 'UI does not show independent platform health');
+    expect(str_contains($source, "'Dependencies' => \$horizon_health_summary['dependency_health_state']"), 'UI does not show independent dependency health');
+    expect(str_contains($source, "'Capacity' => \$horizon_health_summary['capacity_health_state']"), 'UI does not show independent capacity health');
+    expect(str_contains($source, "'Collector' => \$horizon_health_summary['collector_health_state']"), 'UI does not show independent collector health');
 };
 $tests['cluster name is used when local pod name is empty'] = static function (): void {
     $responses = successfulResponses();
@@ -443,11 +562,13 @@ $tests['discovery reports TLS auth identity and cross-site ambiguity failures'] 
 $tests['capability manifest advertises the stable private integration contract'] = static function (): void {
     $path = dirname(__DIR__, 2) . '/librenms-overlay/tools/capabilities.json';
     $manifest = json_decode((string) file_get_contents($path), true, flags: JSON_THROW_ON_ERROR);
-    expect($manifest['overlay_version'] === '0.6.19', 'overlay capability version mismatch');
+    expect($manifest['overlay_version'] === '0.6.20', 'overlay capability version mismatch');
     expect($manifest['configuration_schema_version'] === 2, 'configuration schema version mismatch');
     expect($manifest['capabilities']['horizon_trigger_producer'] === 1, 'trigger capability missing');
     expect($manifest['capabilities']['horizon_central_worker'] === 1, 'worker capability missing');
     expect($manifest['capabilities']['horizon_pod_discovery'] === 1, 'discovery capability missing');
+    expect($manifest['capabilities']['horizon_health_contract'] === 1, 'health-contract capability missing');
+    expect($manifest['capabilities']['horizon_condition_history'] === 1, 'condition-history capability missing');
     expect($manifest['private_integration_api'] === ['minimum' => 1, 'maximum' => 1], 'private integration range changed');
 };
 $tests['worker enable creates trigger worker and independent five-minute fallback'] = static function (): void {

@@ -1,22 +1,21 @@
 # Codex Handoff
 
-- Objective: Publish the repaired Windows agent/MSI 0.6.15 while preserving
-  overlay 0.6.19; endpoint deployment remains a separate approval.
-- Current state: The exact 0.6.15 MSI and its versioned config are built and
-  accepted. The bootstrap no longer pre-uninstalls MSI packages, prepares
-  configuration before service startup, checks prerequisites and port
-  conflicts, preserves rollback state, and retains verbose failure evidence.
-  Overlay 0.6.19 is unchanged.
-- Relevant decisions: Windows Installer owns registered upgrades and rollback.
-  Firewall-policy refusal is reported but cannot roll back a functioning
-  service. The public one-command contract remains unchanged. Horizon health
-  classification work waits until this installer release is published and
-  separately approved for endpoint rollout.
-- Validation completed: 59 .NET tests; PowerShell 5.1 parsing; WiX metadata,
-  launch-condition, service-control, rollback, config, and firewall assertions;
-  administrative MSI extraction and packaged-config validation; exact-artifact
-  0.6.14 upgrade with config preservation; fresh install; same-version repair;
-  occupied-port refusal; reinstall; live TCP payload; clean uninstall and
-  residue checks; and byte-for-byte raw GitHub artifact verification. All
-  acceptance MSI logs returned zero with no `Return value 3`. MSI SHA-256:
-  `80cd00920000c108d0bbe7a73b96289aca40e07231dda88ecd90312e4d622b20`.
+- Objective: Publish the Horizon health-contract implementation as Windows
+  agent 0.6.16 and overlay 0.6.20 without deploying either to Horizon servers.
+- Current state: Agent 0.6.16 and overlay 0.6.20 are built. The local agent
+  classifies expected services and only the active Horizon certificate. The
+  central collector publishes independent health scopes, explicit
+  redundancy/component reasons, bounded condition history, fail-soft vendor
+  metrics, and grouped informational observations. The UI consumes those
+  classifications.
+- Relevant decisions: CRL Prefetch, Log Collector, and Script Host are optional
+  observations. Disabled Connection Servers are excluded from redundancy.
+  One failed member with two healthy peers is warning; only one healthy member
+  is critical. Pool and collector state do not affect platform state. No alert
+  rules are enabled.
+- Validation completed: portable .NET tests, shared C#/PHP policy fixtures,
+  central collector and sanitized three-member acceptance tests, parser and rendered
+  page fixtures, dark-mode browser interaction/visual QA, PHP lint, MSI
+  administrative extraction, release packaging, archive/checksum checks, and
+  public-safety scanning. Live Horizon deployment was intentionally not
+  performed.

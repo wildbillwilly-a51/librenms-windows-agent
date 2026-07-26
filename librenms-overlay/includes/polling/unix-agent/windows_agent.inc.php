@@ -450,6 +450,11 @@ $horizon_pools = $parse_rows($horizon_pools_raw, 'name');
 $horizon_pool_machine_states = $parse_rows($horizon_pool_machine_states_raw, 'pool');
 $horizon_pool_machines = [];
 $horizon_pool_machine_issues = [];
+$horizon_health_summary = [];
+$horizon_vendor_metrics = [];
+$horizon_conditions = [];
+$horizon_observations = [];
+$horizon_condition_history = [];
 $horizon_central_meta = is_array($existing_application_data['horizon_central_meta'] ?? null) ? $existing_application_data['horizon_central_meta'] : [];
 $horizon_central_data_keys = [
     'horizon_api_summary', 'horizon_api_session_protocols', 'horizon_pod_summary',
@@ -457,7 +462,8 @@ $horizon_central_data_keys = [
     'horizon_directory_domains', 'horizon_directory_member_status', 'horizon_gateways',
     'horizon_pools_summary', 'horizon_pools', 'horizon_pool_machine_states',
     'horizon_pool_machines', 'horizon_pool_machine_issues',
-    'horizon_central_meta',
+    'horizon_health_summary', 'horizon_vendor_metrics', 'horizon_conditions',
+    'horizon_observations', 'horizon_condition_history', 'horizon_central_meta',
 ];
 if (($horizon_central_meta['source'] ?? '') === 'central') {
     foreach ($horizon_central_data_keys as $central_key) {
@@ -880,6 +886,11 @@ $windows_agent_app->data = [
     'horizon_pool_machine_states' => $horizon_pool_machine_states,
     'horizon_pool_machines' => $horizon_pool_machines,
     'horizon_pool_machine_issues' => $horizon_pool_machine_issues,
+    'horizon_health_summary' => $horizon_health_summary,
+    'horizon_vendor_metrics' => $horizon_vendor_metrics,
+    'horizon_conditions' => $horizon_conditions,
+    'horizon_observations' => $horizon_observations,
+    'horizon_condition_history' => $horizon_condition_history,
     'horizon_central_meta' => $horizon_central_meta,
     'factorytalk_summary' => $factorytalk_summary,
     'factorytalk_products' => $factorytalk_products,

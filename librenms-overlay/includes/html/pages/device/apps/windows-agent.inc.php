@@ -63,6 +63,11 @@ $horizon_pools = $data['horizon_pools'] ?? [];
 $horizon_pool_machine_states = $data['horizon_pool_machine_states'] ?? [];
 $horizon_pool_machines = $data['horizon_pool_machines'] ?? [];
 $horizon_pool_machine_issues = $data['horizon_pool_machine_issues'] ?? [];
+$horizon_health_summary = $data['horizon_health_summary'] ?? [];
+$horizon_vendor_metrics = $data['horizon_vendor_metrics'] ?? [];
+$horizon_conditions = $data['horizon_conditions'] ?? [];
+$horizon_observations = $data['horizon_observations'] ?? [];
+$horizon_condition_history = $data['horizon_condition_history'] ?? [];
 $horizon_central_meta = $data['horizon_central_meta'] ?? [];
 $factorytalk_summary = $data['factorytalk_summary'] ?? [];
 $factorytalk_products = $data['factorytalk_products'] ?? [];
@@ -339,7 +344,9 @@ $humanize_horizon_reason = static function ($value): string {
         'provisioning_error' => 'Provisioning error',
         'machine_state_error' => 'Machine state error',
         'machine_disabled' => 'Machine disabled',
+        'crl_prefetch_not_running' => 'CRL Prefetch is not running',
         'within_threshold' => 'Capacity available',
+        'capacity_available' => 'Capacity available',
     ];
 
     return $labels[$value] ?? ucwords(str_replace('_', ' ', $value === '' ? 'unknown' : $value));
@@ -493,13 +500,17 @@ $horizon_attention = [];
 if ($horizon_detected && $horizon_health_issue_count > 0) {
     foreach ($horizon_services as $service) {
         $start_mode = strtolower((string) ($service['start_mode'] ?? ''));
-        if (in_array($start_mode, ['disabled', 'manual'], true) || strtolower((string) ($service['state'] ?? '')) === 'running') {
+        $serviceSeverity = strtolower((string) ($service['severity'] ?? ''));
+        if ($serviceSeverity !== '') {
+            if (! in_array($serviceSeverity, ['warning', 'critical', 'incomplete'], true)) continue;
+        } elseif (in_array($start_mode, ['disabled', 'manual'], true) || strtolower((string) ($service['state'] ?? '')) === 'running') {
             continue;
         }
 
         $horizon_attention[] = [
+            'state' => $serviceSeverity !== '' ? $serviceSeverity : 'critical',
             'title' => 'Required service is not running: ' . (string) ($service['display'] ?? $service['name'] ?? 'unknown'),
-            'detail' => 'Current state: ' . (string) ($service['state'] ?? 'unknown') . '; startup: ' . (string) ($service['start_mode'] ?? 'unknown'),
+            'detail' => 'Current state: ' . (string) ($service['state'] ?? 'unknown') . '; startup: ' . (string) ($service['start_mode'] ?? 'unknown') . '; reason: ' . (string) ($service['reason'] ?? 'service_not_running'),
             'action' => 'Check the service and related Horizon components.',
         ];
     }
@@ -510,6 +521,7 @@ if ($horizon_detected && $horizon_health_issue_count > 0) {
         }
 
         $horizon_attention[] = [
+            'state' => 'critical',
             'title' => 'Required HTTPS listener is unavailable',
             'detail' => 'TCP 443 is not listening on this Connection Server.',
             'action' => $horizon_reported_next_action !== '' ? $horizon_reported_next_action : 'Check the Connection Server listener and Windows firewall.',
@@ -517,13 +529,17 @@ if ($horizon_detected && $horizon_health_issue_count > 0) {
     }
 
     foreach ($horizon_certificates as $certificate) {
+        $certificateSeverity = strtolower((string) ($certificate['severity'] ?? ''));
         $expired = (int) ($certificate['expired'] ?? 0) === 1;
         $critical = (int) ($certificate['expiring_critical'] ?? 0) === 1;
-        if (! $expired && ! $critical) {
+        if ($certificateSeverity !== '') {
+            if (! in_array($certificateSeverity, ['warning', 'critical', 'incomplete'], true)) continue;
+        } elseif (! $expired && ! $critical) {
             continue;
         }
 
         $horizon_attention[] = [
+            'state' => $certificateSeverity !== '' ? $certificateSeverity : ($expired ? 'critical' : 'warning'),
             'title' => $expired ? 'Horizon server certificate is expired' : 'Horizon server certificate expires soon',
             'detail' => (string) ($certificate['subject'] ?? 'Unknown certificate') . '; ' . (string) ($certificate['days_remaining'] ?? 'unknown') . ' day(s) remaining',
             'action' => 'Review the Horizon server certificate and its binding.',
@@ -532,6 +548,7 @@ if ($horizon_detected && $horizon_health_issue_count > 0) {
 
     if (empty($horizon_attention)) {
         $horizon_attention[] = [
+            'state' => 'warning',
             'title' => 'Horizon health issues were reported',
             'detail' => $horizon_health_issue_count . ' issue(s) were reported by the Horizon health collector.',
             'action' => $horizon_reported_next_action !== '' ? $horizon_reported_next_action : 'Review Horizon service, listener, and certificate evidence.',
@@ -876,6 +893,19 @@ if ($horizon_surface_available) {
             && (int) ($horizon_api_summary['service_details_truncated'] ?? 0) === 0));
     $coverage = $coverageComplete ? 'Complete snapshot' : 'Inventory incomplete';
     $horizon_details .= '<div class="windows-agent-horizon-freshness">Collected ' . $esc($freshness) . ' <span aria-hidden="true">•</span> ' . $esc($coverage) . '</div></div>';
+    $healthScopes = [
+        'Overall' => $horizon_health_summary['overall_health_state'] ?? $horizon_api_summary['overall_health_state'] ?? $horizon_api_summary['health_state'] ?? 'incomplete',
+        'Platform' => $horizon_health_summary['platform_health_state'] ?? $horizon_api_summary['platform_health_state'] ?? $horizon_pod_summary['state'] ?? 'incomplete',
+        'Dependencies' => $horizon_health_summary['dependency_health_state'] ?? $horizon_api_summary['dependency_health_state'] ?? $horizon_directory_summary['state'] ?? 'incomplete',
+        'Capacity' => $horizon_health_summary['capacity_health_state'] ?? $horizon_api_summary['capacity_health_state'] ?? $horizon_pools_summary['state'] ?? 'incomplete',
+        'Collector' => $horizon_health_summary['collector_health_state'] ?? $horizon_api_summary['collector_health_state'] ?? ($horizon_api_stale ? 'warning' : 'ok'),
+    ];
+    $horizon_details .= '<section class="windows-agent-horizon-health-scopes" aria-label="Horizon health by scope">';
+    foreach ($healthScopes as $label => $state) {
+        $normalized = strtolower((string) $state);
+        $horizon_details .= '<div class="windows-agent-horizon-health-scope windows-agent-horizon-health-scope-' . $esc($normalized) . '"><span>' . $esc($label) . '</span><strong>' . $esc($normalized === 'ok' ? 'OK' : ucfirst($normalized)) . '</strong></div>';
+    }
+    $horizon_details .= '</section>';
     if ($horizon_health_issue_count > 0) {
         $horizon_details .= '<p class="sr-only">' . $esc($horizon_health_issue_count) . ' Horizon issue(s) need review.</p>';
     }
@@ -932,9 +962,10 @@ if ($horizon_surface_available) {
         }
     }
     foreach ($horizon_attention as $attention) {
+        $attentionState = strtolower((string) ($attention['state'] ?? 'warning'));
         $conditions[] = [
-            'severity' => 30,
-            'state' => 'warning',
+            'severity' => ['critical' => 40, 'warning' => 30, 'incomplete' => 25][$attentionState] ?? 20,
+            'state' => $attentionState,
             'object' => 'Local Connection Server',
             'reason' => (string) ($attention['title'] ?? 'Horizon health issue'),
             'evidence' => (string) ($attention['detail'] ?? ''),
@@ -942,6 +973,43 @@ if ($horizon_surface_available) {
             'target' => '#windows-agent-horizon-raw',
             'action' => 'disclosure',
         ];
+    }
+    if ($horizon_conditions !== []) {
+        $conditions = [];
+        foreach ($horizon_conditions as $condition) {
+            if (! is_array($condition)) continue;
+            $state = strtolower((string) ($condition['severity'] ?? $condition['state'] ?? 'incomplete'));
+            $scope = strtolower((string) ($condition['scope'] ?? 'pod'));
+            $object = (string) ($condition['object_ref'] ?? ucfirst($scope));
+            $action = 'disclosure';
+            $target = '#windows-agent-horizon-pod-details';
+            $ref = '';
+            $filter = 'all';
+            if ($scope === 'server') {
+                $action = 'member';
+                $ref = substr(hash('sha256', strtolower($object)), 0, 12);
+            } elseif ($scope === 'pool') {
+                $action = 'pool';
+                $ref = substr(hash('sha256', $object), 0, 12);
+                $filter = 'unavailable';
+            } elseif ($scope === 'collector') {
+                $target = '#windows-agent-horizon-collector-trend';
+            } elseif ($scope === 'dependency') {
+                $target = '#windows-agent-horizon-pod-details';
+            }
+            $conditions[] = [
+                'severity' => ['critical' => 40, 'warning' => 30, 'incomplete' => 25][$state] ?? 20,
+                'state' => $state,
+                'object' => $object,
+                'reason' => $humanize_horizon_reason($condition['reason_code'] ?? 'health_condition'),
+                'evidence' => (string) ($condition['evidence'] ?? ''),
+                'next' => $scope === 'collector' ? 'Review collector reliability and endpoint evidence.' : 'Open the related evidence and review the affected Horizon component.',
+                'action' => $action,
+                'target' => $target,
+                'ref' => $ref,
+                'filter' => $filter,
+            ];
+        }
     }
     usort($conditions, static fn (array $left, array $right): int => ($right['severity'] <=> $left['severity']) ?: strcasecmp((string) $left['object'], (string) $right['object']));
 
@@ -967,14 +1035,24 @@ if ($horizon_surface_available) {
         }
     }
     $horizon_details .= '</section>';
+    if ($horizon_observations !== []) {
+        $horizon_details .= '<section class="windows-agent-horizon-section windows-agent-horizon-observations"><div class="windows-agent-horizon-section-heading"><h4>Informational observations</h4><span class="text-muted">' . count($horizon_observations) . ' grouped</span></div>';
+        foreach ($horizon_observations as $observation) {
+            if (! is_array($observation)) continue;
+            $objects = is_array($observation['objects'] ?? null) ? $observation['objects'] : [];
+            $horizon_details .= '<div class="windows-agent-horizon-observation"><span class="glyphicon glyphicon-info-sign" aria-hidden="true"></span><div><strong>' . $esc($humanize_horizon_reason($observation['reason_code'] ?? 'observation')) . '</strong><div class="text-muted">' . $esc($observation['component'] ?? '') . ' • ' . $esc(count($objects)) . ' member(s): ' . $esc(implode(', ', $objects)) . '</div></div></div>';
+        }
+        $horizon_details .= '</section>';
+    }
 
     foreach ($horizon_pod_members as $member) {
         $memberName = (string) ($member['name'] ?? 'Connection Server');
         $memberRef = substr(hash('sha256', strtolower($memberName)), 0, 12);
         $memberServices = is_array($member['unhealthy_services'] ?? null) ? $member['unhealthy_services'] : [];
-        $memberHealthy = $memberServices === []
-            && (int) ($member['configuration_replications_unhealthy'] ?? 0) === 0
-            && (int) ($member['certificate_valid'] ?? 1) === 1;
+        $memberState = strtolower((string) ($member['health_state'] ?? ''));
+        $memberHealthy = $memberState !== ''
+            ? in_array($memberState, ['ok', 'info'], true)
+            : ($memberServices === [] && (int) ($member['configuration_replications_unhealthy'] ?? 0) === 0 && (int) ($member['certificate_valid'] ?? 1) === 1);
         $horizon_details .= '<aside id="windows-agent-horizon-member-drawer-' . $esc($memberRef) . '" class="windows-agent-horizon-detail-drawer" data-horizon-drawer-panel="' . $esc($memberRef) . '" hidden><div class="windows-agent-horizon-drawer-header"><h4>Connection Server details</h4><button type="button" class="close" data-horizon-drawer-close aria-label="Close"><span aria-hidden="true">&times;</span></button></div>';
         $horizon_details .= '<h3>' . $esc($memberName) . '</h3><p class="' . ($memberHealthy ? 'text-success' : 'text-warning') . '"><span class="glyphicon ' . ($memberHealthy ? 'glyphicon-ok-sign' : 'glyphicon-exclamation-sign') . '" aria-hidden="true"></span> ' . ($memberHealthy ? 'Healthy' : 'Attention required') . '</p><dl>';
         foreach ([
@@ -1121,11 +1199,17 @@ if ($horizon_surface_available) {
                 $services[] = (string) ($service['name'] ?? 'Unknown service') . ' ' . (string) ($service['status'] ?? 'UNKNOWN');
             }
             $evidence = $services !== [] ? implode(', ', $services) : ((int) ($member['configuration_replications_unhealthy'] ?? 0) > 0 ? (string) $member['configuration_replications_unhealthy'] . ' replication issue(s)' : 'No reported issues');
-            $memberHealthy = $services === [] && (int) ($member['configuration_replications_unhealthy'] ?? 0) === 0 && (int) ($member['certificate_valid'] ?? 1) === 1;
+            $memberState = strtolower((string) ($member['health_state'] ?? ''));
+            $memberHealthy = $memberState !== ''
+                ? in_array($memberState, ['ok', 'info'], true)
+                : ($services === [] && (int) ($member['configuration_replications_unhealthy'] ?? 0) === 0 && (int) ($member['certificate_valid'] ?? 1) === 1);
             $memberRef = substr(hash('sha256', strtolower((string) ($member['name'] ?? 'Connection Server'))), 0, 12);
             $horizon_details .= '<tr><td><button type="button" class="windows-agent-horizon-table-target" data-member-drawer="' . $esc($memberRef) . '"><strong>' . $esc($member['name'] ?? 'unknown') . '</strong><span class="sr-only"> details</span></button></td><td>' . ($memberHealthy ? '<span class="text-success">Healthy</span>' : '<span class="text-warning">Attention</span>') . '</td><td>' . $esc($member['connections'] ?? 0) . '</td><td>' . $esc($evidence) . '</td></tr>';
         }
-        $horizon_details .= '</tbody></table></div><div class="windows-agent-horizon-platform-summary"><span>Configuration replication <strong>' . $esc(((int) ($horizon_pod_summary['configuration_replications_total'] ?? 0) - (int) ($horizon_pod_summary['configuration_replications_unhealthy'] ?? 0))) . ' of ' . $esc($horizon_pod_summary['configuration_replications_total'] ?? 0) . ' healthy</strong></span><span>AD domain access <strong>' . $esc(((int) ($horizon_directory_summary['member_links_total'] ?? 0) - (int) ($horizon_directory_summary['member_links_unhealthy'] ?? 0))) . ' of ' . $esc($horizon_directory_summary['member_links_total'] ?? 0) . ' healthy</strong></span><span>Gateways <strong>' . $esc(((int) ($horizon_pod_summary['gateways_total'] ?? 0) - (int) ($horizon_pod_summary['gateways_unhealthy'] ?? 0))) . ' healthy</strong></span></div></div></section>';
+        $gatewaySummary = (int) ($horizon_pod_summary['gateways_total'] ?? 0) === 0
+            ? 'No standalone gateways configured'
+            : ((int) ($horizon_pod_summary['gateways_total'] ?? 0) - (int) ($horizon_pod_summary['gateways_unhealthy'] ?? 0)) . ' of ' . (int) ($horizon_pod_summary['gateways_total'] ?? 0) . ' healthy';
+        $horizon_details .= '</tbody></table></div><div class="windows-agent-horizon-platform-summary"><span>Configuration replication <strong>' . $esc(((int) ($horizon_pod_summary['configuration_replications_total'] ?? 0) - (int) ($horizon_pod_summary['configuration_replications_unhealthy'] ?? 0))) . ' of ' . $esc($horizon_pod_summary['configuration_replications_total'] ?? 0) . ' healthy</strong></span><span>AD domain access <strong>' . $esc(((int) ($horizon_directory_summary['member_links_total'] ?? 0) - (int) ($horizon_directory_summary['member_links_unhealthy'] ?? 0))) . ' of ' . $esc($horizon_directory_summary['member_links_total'] ?? 0) . ' healthy</strong></span><span>Standalone gateways <strong>' . $esc($gatewaySummary) . '</strong></span></div></div></section>';
         $horizon_details .= '<section class="col-md-5"><div class="windows-agent-horizon-section"><div class="windows-agent-horizon-section-heading"><h4>Collector reliability</h4><span class="' . ($horizon_api_stale ? 'text-warning' : 'text-success') . '">' . ($horizon_api_stale ? 'Stale' : 'Fresh') . '</span></div><dl class="windows-agent-horizon-collector">';
         foreach ([
             'Last success' => $horizon_central_meta['last_success_utc'] ?? 'unknown',
@@ -1159,6 +1243,9 @@ if ($horizon_surface_available) {
                 return '<td>' . $esc($row['name'] ?? '') . '</td><td>' . $esc($row['type'] ?? '') . '</td><td>' . $state_label($row['status'] ?? 'unknown', ['ok']) . '</td><td>' . $esc($row['version'] ?? '') . '</td><td>' . $esc($row['active_connections'] ?? 0) . '</td>';
             });
         }
+        if (empty($horizon_gateways)) {
+            $podDetails .= '<h4>Standalone Gateways</h4><p class="text-muted">No standalone gateways configured. Embedded gateway roles, when enabled, are shown on their Connection Server members.</p>';
+        }
         $machineStateDetails = $table(['Pool', 'Clone type', 'Machine state', 'Count'], $horizon_pool_machine_states, static function ($row) use ($esc): string {
             return '<td>' . $esc($row['pool'] ?? '') . '</td><td>' . $esc($row['clone_type'] ?? $row['source'] ?? '') . '</td><td>' . $esc($row['machine_state'] ?? $row['state'] ?? '') . '</td><td>' . $esc($row['count'] ?? $row['machines'] ?? 0) . '</td>';
         });
@@ -1171,7 +1258,9 @@ if ($horizon_surface_available) {
 
             return '<td>' . $esc($row['name'] ?? '') . '</td><td>' . $state_label($row['status'] ?? 'unknown', ['ok', 'up', 'running']) . '</td><td>' . $esc(str_replace('_', ' ', (string) ($row['server_type'] ?? ''))) . '</td><td>' . $esc(((int) ($row['local_api_target'] ?? 0) === 1) ? 'Local' : 'Peer') . '</td><td>' . $esc($row['version'] ?? '') . '</td><td>' . $esc($row['connections'] ?? 0) . '</td><td>' . $esc($services === [] ? 'None' : implode(', ', $services)) . '</td><td>' . $esc($row['configuration_replications_unhealthy'] ?? 0) . '</td>';
         });
-        $gatewayDetails = $table(['Gateway', 'Type', 'Status', 'Version', 'Active connections'], $horizon_gateways, static function ($row) use ($esc, $state_label): string {
+        $gatewayDetails = $horizon_gateways === []
+            ? '<p class="text-muted">No standalone gateways configured. Embedded gateway roles are listed with Connection Servers.</p>'
+            : $table(['Gateway', 'Type', 'Status', 'Version', 'Active connections'], $horizon_gateways, static function ($row) use ($esc, $state_label): string {
             return '<td>' . $esc($row['name'] ?? '') . '</td><td>' . $esc($row['type'] ?? '') . '</td><td>' . $state_label($row['status'] ?? 'unknown', ['ok']) . '</td><td>' . $esc($row['version'] ?? '') . '</td><td>' . $esc($row['active_connections'] ?? 0) . '</td>';
         });
         $rawDetails = $render_horizon_local_diagnostics();
@@ -1541,6 +1630,7 @@ if ($horizon_runtime_available) {
     $horizon_graphs[] = ['label' => 'Horizon Runtime I/O', 'key' => 'windows-agent_horizon_runtime_io', 'secondary' => true];
 }
 if ($horizon_api_available) {
+    $horizon_graphs[] = ['label' => 'Horizon Health Contract', 'key' => 'windows-agent_horizon_health_contract'];
     $horizon_graphs[] = ['label' => 'Horizon API Health', 'key' => 'windows-agent_horizon_api_health'];
     $horizon_graphs[] = ['label' => 'Horizon API Sessions', 'key' => 'windows-agent_horizon_api_sessions'];
     $horizon_graphs[] = ['label' => 'Horizon Pod Health', 'key' => 'windows-agent_horizon_pod_health'];
@@ -1677,6 +1767,14 @@ echo '<style>
 .windows-agent-horizon-title-row h3 { margin: 0 0 2px; font-size: 24px; font-weight: 600; }
 .windows-agent-horizon-title-row p { margin: 0; }
 .windows-agent-horizon-freshness { color: var(--horizon-muted); font-size: 12px; white-space: nowrap; }
+.windows-agent-horizon-health-scopes { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 8px; margin: 12px 0; }
+.windows-agent-horizon-health-scope { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; min-height: 46px; padding: 11px 12px; border: 1px solid var(--horizon-border); border-left: 4px solid #8b96a5; border-radius: 4px; background: var(--horizon-surface); color: var(--horizon-text); }
+.windows-agent-horizon-health-scope > span { color: var(--horizon-muted); font-size: 12px; text-transform: uppercase; letter-spacing: .03em; }
+.windows-agent-horizon-health-scope-ok { border-left-color: #5cb85c; }
+.windows-agent-horizon-health-scope-info { border-left-color: #337ab7; }
+.windows-agent-horizon-health-scope-warning,
+.windows-agent-horizon-health-scope-incomplete { border-left-color: #f0ad4e; }
+.windows-agent-horizon-health-scope-critical { border-left-color: #d9534f; }
 .windows-agent-horizon-section,
 .windows-agent-horizon-trend { margin-bottom: 12px; border: 1px solid var(--horizon-border); border-radius: 3px; background: var(--horizon-surface); }
 .windows-agent-horizon-section-heading,
@@ -1695,6 +1793,9 @@ echo '<style>
 .windows-agent-horizon-condition-incomplete > .glyphicon { color: #d58512; }
 .windows-agent-horizon-condition-info > .glyphicon { color: #337ab7; }
 .windows-agent-horizon-condition-ok > .glyphicon { color: #3c9a3c; }
+.windows-agent-horizon-observation { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-top: 1px solid var(--horizon-border); color: var(--horizon-text); }
+.windows-agent-horizon-observation:first-of-type { border-top: 0; }
+.windows-agent-horizon-observation > .glyphicon { color: #337ab7; margin-top: 2px; }
 .windows-agent-horizon-condition-target,
 .windows-agent-horizon-table-target { padding: 0; border: 0; background: transparent; font: inherit; text-align: left; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
 .windows-agent-horizon-condition-target:hover,
@@ -1771,6 +1872,7 @@ echo '<style>
 .windows-agent-horizon-collector dd { margin: 0; }
 .windows-agent-horizon-visibility-note { margin: 12px 4px 0; color: var(--horizon-muted); }
 @media (max-width: 767px) {
+    .windows-agent-horizon-health-scopes { grid-template-columns: 1fr; }
     .windows-agent-role-stat { min-height: 0; border-right: 0; border-bottom: 1px solid rgba(127, 127, 127, 0.15); }
     .windows-agent-role-action,
     .windows-agent-role-collected { display: block; float: none; margin: 4px 0 0; }

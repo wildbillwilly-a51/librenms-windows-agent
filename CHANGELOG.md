@@ -1,5 +1,26 @@
 # Changelog
 
+## Overlay 0.6.20 / Windows agent 0.6.16 - 2026-07-26
+
+- Added an explicit Horizon health contract with independent platform,
+  dependency, capacity, collector, and overall states; stable reason codes;
+  impact; disabled-member exclusion; and Connection Server redundancy rules.
+- Classified CRL Prefetch as an optional informational observation, scored
+  gateway services only when configured, and added state-specific handling for
+  Connection Servers, replication, domains, service accounts, gateways,
+  machines, certificates, collector freshness, and pool capacity.
+- Added bounded condition identity/history with first/last seen, consecutive
+  samples, recovery timestamps, and 30-minute transitional-machine handling.
+- Added fail-soft optional vendor health/system metrics and a new additive
+  health RRD without changing existing schemas.
+- Updated the Horizon workspace to consume collector severity, show all health
+  scopes independently, group informational observations outside actionable
+  conditions, preserve expandable pool/server detail, and explain embedded
+  versus absent standalone gateways.
+- Validated a sanitized three-member healthy pod: CRL Prefetch down on
+  all three members leaves Overall, Platform, Dependencies, Capacity, and
+  Collector OK with no conditions requiring attention.
+
 ## Windows agent 0.6.16 / Overlay 0.6.19 - 2026-07-26
 
 - Added stable Horizon Windows-service expectedness for core, conditional

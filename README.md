@@ -85,12 +85,12 @@ informational while another spare is ready, two or more unavailable spares is
 a warning, zero ready spares is critical, and a non-empty pool with every
 machine in session is critical because it has no placement capacity. This
 visibility does not enable LibreNMS notifications. Release 0.6.14's
-Windows-side API prototype remains disabled by default. Overlay release 0.6.19
+Windows-side API prototype remains disabled by default. Overlay release 0.6.20
 provides the cluster-safe, poll-triggered centralized collector and the new
 operational UI. See
 [Horizon monitoring design](docs/horizon-monitoring.md) for scope and setup.
 
-### Central Horizon API Collector (Overlay 0.6.19)
+### Central Horizon API Collector (Overlay 0.6.20)
 
 Keep the Windows agent on every Horizon server for local
 service/process/listener/certificate telemetry; do not place Horizon API
@@ -162,6 +162,17 @@ issue-machine detail with explicit truncation, collection duration,
 endpoint/request/page counts, returned inventory counts, completeness, and
 outcome. These metrics feed a new additive collector-health RRD family; no
 existing RRD schema changes.
+
+Health is published independently for platform, dependencies, capacity, and
+collector reliability, plus an overall rollup. `horizon_pod_summary.state`
+remains platform-only and the legacy `health_state` field aliases the overall
+state. Disabled Connection Servers are excluded from redundancy; one failed
+member while two healthy peers remain is a warning, while only one healthy
+enabled member remains critical. CRL Prefetch is optional and appears as one
+grouped informational observation when unavailable across the pod. Optional
+vendor health/system metrics are fail-soft and never make an otherwise
+complete snapshot partial. Current conditions retain bounded first/last-seen,
+consecutive-sample, and recovery history.
 
 Use `config status`, `pod list`, and `worker status` for sanitized state.
 `capability show` prints the generic overlay/configuration/private-integration
@@ -325,7 +336,7 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Install a specific overlay version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.19
+curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.20
 ```
 
 Preview without changing the node:
