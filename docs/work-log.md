@@ -23,6 +23,9 @@
   browser exposed stale tab handles, so the documented Playwright fallback
   used Microsoft Edge. Overlay SHA-256:
   `b1ebee731985199c0c6661b536a76aa5516b952d351d2b4d83be8977df93644b`.
+- Confirmed that the published 0.6.19 artifact was accepted by a downstream
+  management updater, deployed from the exact published bytes, and reported
+  current/no-op afterward. No public source change was required.
 
 ## 2026-07-25
 
