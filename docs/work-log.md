@@ -13,6 +13,9 @@
   ShellCheck, the overlay-only release build, archive inspection, checksums,
   and public-safety checks passed. Overlay SHA-256:
   `3909e53f592e148282d6b4ff092a07b43a8184dd1f8f8ef1ed3fee087f7dd187`.
+- Downstream validation completed a full Windows-agent poll on 0.6.17 with
+  zero PHP errors and zero indirect-modification warnings while retaining the
+  central Horizon snapshot.
 
 - Released generic overlay 0.6.16 with a poll-safe, credential-free Redis
   trigger producer shared by normal and explicit application polling; a

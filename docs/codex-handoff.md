@@ -22,7 +22,6 @@
   overlay-only release build, package contents, checksum verification, and Git
   whitespace checks passed. Overlay SHA-256:
   `3909e53f592e148282d6b4ff092a07b43a8184dd1f8f8ef1ed3fee087f7dd187`.
-- Validation remaining: Post-install production poll validation.
-- Next action: Publish 0.6.17, deploy it through the already approved
-  rollback-protected private workflow, and repeat the production poll
-  validation.
+- Downstream validation: A full Windows-agent poll on 0.6.17 completed with
+  zero PHP errors and zero indirect-modification warnings while preserving the
+  central snapshot data.
