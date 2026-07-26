@@ -9,11 +9,13 @@ backup_root="${WINDOWS_AGENT_OVERLAY_BACKUP_ROOT:-/var/backups/librenms-windows-
 state_root="${WINDOWS_AGENT_OVERLAY_STATE_ROOT:-/usr/local/lib/librenms-windows-agent-overlay}"
 reapply_command="${WINDOWS_AGENT_OVERLAY_REAPPLY_COMMAND:-/usr/local/sbin/librenms-windows-agent-overlay-reapply}"
 horizon_cron_path="${WINDOWS_AGENT_HORIZON_CRON_PATH:-/etc/cron.d/librenms-windows-agent-horizon}"
+horizon_unit_dir="${WINDOWS_AGENT_HORIZON_UNIT_DIR:-/etc/systemd/system}"
 backup_dir="${WINDOWS_AGENT_OVERLAY_BACKUP_DIR:-}"
 dry_run=0
 delete_apps=0
 remove_state=0
 central_collector_after_rollback=1
+central_worker_after_rollback=1
 
 usage() {
   cat <<'EOF'
@@ -121,12 +123,31 @@ while IFS= read -r rel || [[ -n "$rel" ]]; do
       central_collector_after_rollback=0
     fi
   fi
+  if [[ "$rel" == "windows-agent-overlay/horizon-central-worker.php" ]]; then
+    if [[ -n "$backup" && -f "$backup" ]]; then
+      central_worker_after_rollback=1
+    else
+      central_worker_after_rollback=0
+    fi
+  fi
 done < "$manifest_file"
 
 if [[ "$central_collector_after_rollback" -eq 0 && -f "$horizon_cron_path" ]] &&
    grep -Fqx '# Managed by LibreNMS Windows Agent overlay; collection is inactive without local pod configuration.' "$horizon_cron_path"; then
   run sudo rm -f "$horizon_cron_path"
   echo "Disabled the managed Horizon schedule because the central collector was removed."
+fi
+
+worker_unit="$horizon_unit_dir/librenms-windows-agent-horizon-worker.service"
+fallback_unit="$horizon_unit_dir/librenms-windows-agent-horizon-fallback.service"
+fallback_timer="$horizon_unit_dir/librenms-windows-agent-horizon-fallback.timer"
+if [[ "$central_worker_after_rollback" -eq 0 && -f "$worker_unit" ]] &&
+   grep -Fq 'horizon-central-worker.php' "$worker_unit"; then
+  run sudo systemctl disable --now librenms-windows-agent-horizon-worker.service || true
+  run sudo systemctl disable --now librenms-windows-agent-horizon-fallback.timer || true
+  run sudo rm -f "$worker_unit" "$fallback_unit" "$fallback_timer"
+  run sudo systemctl daemon-reload
+  echo "Disabled managed Horizon worker units because the central worker was removed."
 fi
 
 if [[ "$dry_run" -eq 1 ]]; then

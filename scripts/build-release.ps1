@@ -2,18 +2,19 @@
 param(
     [string]$Configuration = 'Release',
     [string]$Version = '',
+    [string]$AgentVersion = '',
     [string]$ArtifactsDir = '',
     [switch]$SkipTests,
+    [switch]$OverlayOnly,
     [switch]$UpdateChecksums
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')
 if (-not $ArtifactsDir) { $ArtifactsDir = Join-Path $repoRoot 'artifacts' }
-if (-not $Version) {
-    [xml]$props = Get-Content -LiteralPath (Join-Path $repoRoot 'Directory.Build.props')
-    $Version = $props.Project.PropertyGroup.Version
-}
+[xml]$props = Get-Content -LiteralPath (Join-Path $repoRoot 'Directory.Build.props')
+if (-not $AgentVersion) { $AgentVersion = $props.Project.PropertyGroup.Version }
+if (-not $Version) { $Version = $AgentVersion }
 if (-not $Version) { throw 'Could not determine release version.' }
 
 if (-not $SkipTests) {
@@ -21,9 +22,17 @@ if (-not $SkipTests) {
     if ($LASTEXITCODE -ne 0) { throw 'Windows agent tests failed.' }
 }
 
-$msi = & (Join-Path $PSScriptRoot 'build-msi.ps1') -Configuration $Configuration -Version $Version -ArtifactsDir $ArtifactsDir
-if ($LASTEXITCODE -ne 0) { throw 'MSI build failed.' }
-$msi = ($msi | Select-Object -Last 1).Trim()
+if ($OverlayOnly) {
+    $msi = Join-Path $ArtifactsDir "librenms-windows-agent-$AgentVersion.msi"
+    if (-not (Test-Path -LiteralPath $msi)) {
+        throw "Preserved MSI is missing for overlay-only release: $msi"
+    }
+} else {
+    $msi = & (Join-Path $PSScriptRoot 'build-msi.ps1') -Configuration $Configuration -Version $Version -ArtifactsDir $ArtifactsDir
+    if ($LASTEXITCODE -ne 0) { throw 'MSI build failed.' }
+    $msi = ($msi | Select-Object -Last 1).Trim()
+    $AgentVersion = $Version
+}
 $overlay = & (Join-Path $PSScriptRoot 'build-overlay-package.ps1') -Version $Version -ArtifactsDir $ArtifactsDir
 if ($LASTEXITCODE -ne 0) { throw 'Overlay build failed.' }
 $overlay = ($overlay | Select-Object -Last 1).Trim()
@@ -33,7 +42,7 @@ $overlayHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $overlay).Hash.ToLow
 if ($UpdateChecksums) {
     $manifest = @(
         "$overlayHash  artifacts/librenms-windows-agent-overlay-$Version.tar.gz",
-        "$msiHash  artifacts/librenms-windows-agent-$Version.msi"
+        "$msiHash  artifacts/librenms-windows-agent-$AgentVersion.msi"
     ) -join "`n"
     [IO.File]::WriteAllText((Join-Path $repoRoot 'SHA256SUMS'), ($manifest + "`n"), [Text.UTF8Encoding]::new($false))
 }

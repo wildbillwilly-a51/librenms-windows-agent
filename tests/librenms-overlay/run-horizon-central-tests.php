@@ -3,7 +3,11 @@
 declare(strict_types=1);
 
 use WindowsAgentOverlay\Horizon\ApiSession;
+use WindowsAgentOverlay\Horizon\HorizonCollectionCoordinator;
+use WindowsAgentOverlay\Horizon\HorizonCoordination;
 use WindowsAgentOverlay\Horizon\HorizonFailure;
+use WindowsAgentOverlay\Horizon\HorizonPodDiscovery;
+use WindowsAgentOverlay\Horizon\HorizonTriggerProducer;
 use WindowsAgentOverlay\Horizon\PodCollector;
 
 require_once dirname(__DIR__, 2) . '/librenms-overlay/tools/horizon-central-lib.php';
@@ -27,6 +31,72 @@ final class FakeHorizonSession implements ApiSession
 
     public function close(): void
     {
+    }
+}
+
+final class FakeHorizonCoordination implements HorizonCoordination
+{
+    /** @var array<int,array{site:string,display_device:string,device_id:int}> */
+    public array $registrations = [];
+    /** @var list<string> */
+    public array $pending = [];
+    /** @var array<string,string> */
+    public array $locks = [];
+    /** @var array<string,bool> */
+    public array $cooldowns = [];
+    public bool $failReads = false;
+
+    public function register(array $registration): void
+    {
+        $this->registrations[$registration['device_id']] = $registration;
+    }
+
+    public function unregister(string $site, int $deviceId, string $hostname): void
+    {
+        unset($this->registrations[$deviceId]);
+    }
+
+    public function registrationForDevice(int $deviceId, string $hostname): ?array
+    {
+        if ($this->failReads) throw new RuntimeException('redis unavailable');
+
+        return $this->registrations[$deviceId] ?? null;
+    }
+
+    public function emit(string $site): bool
+    {
+        if (in_array($site, $this->pending, true)) return false;
+        $this->pending[] = $site;
+
+        return true;
+    }
+
+    public function consume(): ?string
+    {
+        return array_shift($this->pending);
+    }
+
+    public function acquire(string $site, int $ttlSeconds): ?string
+    {
+        if (isset($this->locks[$site])) return null;
+        $this->locks[$site] = 'fixture-token';
+
+        return 'fixture-token';
+    }
+
+    public function release(string $site, string $token): void
+    {
+        if (($this->locks[$site] ?? null) === $token) unset($this->locks[$site]);
+    }
+
+    public function cooldownActive(string $site): bool
+    {
+        return $this->cooldowns[$site] ?? false;
+    }
+
+    public function markCooldown(string $site, int $seconds): void
+    {
+        $this->cooldowns[$site] = true;
     }
 }
 
@@ -218,6 +288,173 @@ $tests['atomic env update is idempotent and secret-safe'] = static function (): 
     expect(! is_file($path . '.horizon-backup'), 'temporary credential backup was retained after validation');
     unlink($configPath);
     rmdir($dir);
+};
+$tests['poll trigger is device-scoped deduplicated and poll-safe'] = static function (): void {
+    $coordination = new FakeHorizonCoordination();
+    $coordination->register([
+        'site' => 'abc',
+        'display_device' => 'abc-vcs2.example.test',
+        'device_id' => 42,
+    ]);
+    expect(HorizonTriggerProducer::emitForDevice(42, 'abc-vcs2.example.test', $coordination), 'first display-device trigger was not queued');
+    expect(! HorizonTriggerProducer::emitForDevice(42, 'abc-vcs2.example.test', $coordination), 'duplicate trigger was not deduplicated');
+    expect(! HorizonTriggerProducer::emitForDevice(43, 'abc-vcs1.example.test', $coordination), 'unrelated device emitted a trigger');
+    expect($coordination->consume() === 'abc' && $coordination->consume() === null, 'worker did not consume one deduplicated site');
+    $coordination->failReads = true;
+    expect(! HorizonTriggerProducer::emitForDevice(42, 'abc-vcs2.example.test', $coordination), 'coordination failure escaped the poll-safe producer');
+};
+$tests['distributed lock cooldown and fallback paths deduplicate collection'] = static function (): void {
+    $coordination = new FakeHorizonCoordination();
+    $coordinator = new HorizonCollectionCoordinator($coordination, 60, 60, 10);
+    $collections = 0;
+    $collect = static function () use (&$collections): array {
+        $collections++;
+
+        return ['fresh' => true];
+    };
+    expect($coordinator->collect('abc', false, $collect) === 'fresh', 'initial collection did not run');
+    expect($coordinator->collect('abc', false, $collect) === 'cooldown', 'cooldown did not suppress a duplicate cycle');
+    expect($collections === 1, 'duplicate cycle queried the pod');
+    expect($coordinator->collect('abc', true, $collect) === 'fresh', 'explicit forced diagnostics did not bypass cooldown');
+    $coordination->locks['abc'] = 'other-worker';
+    expect($coordinator->collect('abc', true, $collect) === 'locked', 'shared lock did not exclude a competing worker');
+    unset($coordination->locks['abc']);
+    $coordination->cooldowns['abc'] = false;
+    expect($coordinator->collect('abc', false, $collect) === 'fresh', 'five-minute fallback path could not collect without a trigger');
+    expect($collections === 3, 'unexpected effective collection count');
+};
+$tests['discovery is add-only supports a single seed and preserves existing sites'] = static function (): void {
+    $devices = [
+        ['device_id' => 1, 'hostname' => 'abc-vcs1.example.test', 'status' => 1, 'disabled' => 0, 'has_application' => true, 'horizon_detected' => true],
+        ['device_id' => 2, 'hostname' => 'def-vcs1.example.test', 'status' => 0, 'disabled' => 0, 'has_application' => false, 'horizon_detected' => false],
+        ['device_id' => 3, 'hostname' => 'ghi-vcs2.example.test', 'status' => 1, 'disabled' => 0, 'has_application' => true, 'horizon_detected' => true],
+    ];
+    $existing = [[
+        'site' => 'ghi',
+        'dns_suffix' => 'example.test',
+        'display_device' => 'ghi-vcs2.example.test',
+    ]];
+    $results = HorizonPodDiscovery::discover(
+        $devices,
+        $existing,
+        'example.test',
+        static fn (array $pod, string $seed): array => [
+            'pod_identity' => strtoupper($pod['site']) . ' Pod',
+            'discovered_connection_servers' => [
+                $seed,
+                $pod['site'] . '-vcs2.example.test',
+            ],
+        ]
+    );
+    expect(count($results) === 3, 'discovery did not group all sites');
+    expect($results[0]['state'] === 'ready' && $results[0]['display_device'] === 'abc-vcs1.example.test', 'single-seed ready site was not proposed');
+    expect(count($results[0]['members']) === 2, 'API-discovered additional member was lost');
+    expect($results[1]['state'] === 'waiting-for-agent', 'no-agent site was not deferred');
+    expect($results[2]['state'] === 'existing' && $results[2]['apply'] === false, 'existing pod was not preserved');
+};
+$tests['discovery reports TLS auth identity and cross-site ambiguity failures'] = static function (): void {
+    $base = static fn (int $id, string $host): array => [
+        'device_id' => $id, 'hostname' => $host, 'status' => 1, 'disabled' => 0,
+        'has_application' => true, 'horizon_detected' => true,
+    ];
+    $devices = [
+        $base(1, 'abc-vcs1.example.test'),
+        $base(2, 'def-vcs1.example.test'),
+        $base(3, 'ghi-vcs1.example.test'),
+        $base(4, 'jkl-vcs1.example.test'),
+        $base(5, 'mno-vcs1.example.test'),
+    ];
+    $results = HorizonPodDiscovery::discover(
+        $devices,
+        [],
+        'example.test',
+        static function (array $pod, string $seed): array {
+            return match ($pod['site']) {
+                'abc' => throw new HorizonFailure('tls_failed'),
+                'def' => throw new HorizonFailure('authorization_failed'),
+                'ghi' => throw new HorizonFailure('pod_identity_mismatch'),
+                default => [
+                    'pod_identity' => 'Shared Pod',
+                    'discovered_connection_servers' => [$seed],
+                ],
+            };
+        }
+    );
+    $states = array_column($results, 'state', 'site');
+    expect($states['abc'] === 'tls-invalid', 'TLS failure classification changed');
+    expect($states['def'] === 'unauthorized', 'authorization failure classification changed');
+    expect($states['ghi'] === 'ambiguous', 'identity failure classification changed');
+    expect($states['jkl'] === 'ambiguous' && $states['mno'] === 'ambiguous', 'duplicate pod identity was not blocked across sites');
+};
+$tests['capability manifest advertises the stable private integration contract'] = static function (): void {
+    $path = dirname(__DIR__, 2) . '/librenms-overlay/tools/capabilities.json';
+    $manifest = json_decode((string) file_get_contents($path), true, flags: JSON_THROW_ON_ERROR);
+    expect($manifest['overlay_version'] === '0.6.16', 'overlay capability version mismatch');
+    expect($manifest['configuration_schema_version'] === 2, 'configuration schema version mismatch');
+    expect($manifest['capabilities']['horizon_trigger_producer'] === 1, 'trigger capability missing');
+    expect($manifest['capabilities']['horizon_central_worker'] === 1, 'worker capability missing');
+    expect($manifest['capabilities']['horizon_pod_discovery'] === 1, 'discovery capability missing');
+    expect($manifest['private_integration_api'] === ['minimum' => 1, 'maximum' => 1], 'private integration range changed');
+};
+$tests['worker enable creates trigger worker and independent five-minute fallback'] = static function (): void {
+    $dir = sys_get_temp_dir() . '/horizon-worker-' . bin2hex(random_bytes(5));
+    $root = $dir . '/librenms';
+    $tools = $root . '/windows-agent-overlay';
+    $units = $dir . '/units';
+    mkdir($tools, 0700, true);
+    mkdir($units, 0700, true);
+    file_put_contents($tools . '/horizon-central-worker.php', "<?php\n");
+    file_put_contents($tools . '/horizon-central-collector.php', "<?php\n");
+    $config = $dir . '/pods.json';
+    file_put_contents($config, json_encode(['version' => 2, 'pods' => [testConfig()]], JSON_THROW_ON_ERROR));
+    $cron = $dir . '/legacy-cron';
+    file_put_contents($cron, "# Managed by LibreNMS Windows Agent overlay; collection is inactive without local pod configuration.\n");
+    $base = [
+        'config.php', 'worker', 'enable',
+        '--librenms-root', $root,
+        '--config', $config,
+        '--unit-dir', $units,
+        '--cron-path', $cron,
+        '--no-systemctl',
+    ];
+    expect(HorizonCentralConfiguration::main($base) === 0, 'worker enable failed');
+    $worker = (string) file_get_contents($units . '/librenms-windows-agent-horizon-worker.service');
+    $timer = (string) file_get_contents($units . '/librenms-windows-agent-horizon-fallback.timer');
+    expect(str_contains($worker, 'horizon-central-worker.php'), 'trigger worker unit is incomplete');
+    expect(str_contains($timer, 'OnUnitActiveSec=5min'), 'independent five-minute fallback is missing');
+    expect(! is_file($cron), 'legacy collector cron was not retired');
+    expect(HorizonCentralConfiguration::main([
+        'config.php', 'worker', 'disable',
+        '--unit-dir', $units,
+        '--cron-path', $cron,
+        '--no-systemctl',
+    ]) === 0, 'worker disable failed');
+    expect((glob($units . '/*') ?: []) === [], 'worker disable left unit files');
+    unlink($config);
+    unlink($tools . '/horizon-central-worker.php');
+    unlink($tools . '/horizon-central-collector.php');
+    rmdir($tools);
+    rmdir($root);
+    rmdir($units);
+    rmdir($dir);
+};
+$tests['standard and explicit application polls share one credential-free trigger path'] = static function (): void {
+    $root = dirname(__DIR__, 2);
+    $wrapper = (string) file_get_contents($root . '/librenms-overlay/includes/polling/applications/windows-agent.inc.php');
+    $parser = (string) file_get_contents($root . '/librenms-overlay/includes/polling/unix-agent/windows_agent.inc.php');
+    $producer = (string) file_get_contents($root . '/librenms-overlay/tools/horizon-central-coordination.php');
+    expect(str_contains($wrapper, "includes/polling/unix-agent/windows_agent.inc.php"), 'applications module no longer uses the shared parser');
+    expect(str_contains($parser, 'HorizonTriggerProducer::emitForDevice'), 'shared application parser does not emit the trigger');
+    expect(str_contains($parser, 'trigger failure never fails device polling'), 'poll-safe trigger boundary is missing');
+    expect(! str_contains($producer, 'WINDOWS_AGENT_HORIZON_API_PASSWORD'), 'poller trigger library references the Horizon credential');
+    expect(! str_contains($producer, 'CurlApiSession'), 'poller trigger library can contact Horizon');
+};
+$tests['offline display remains an anchor while missing display or application is bounded'] = static function (): void {
+    $source = (string) file_get_contents(dirname(__DIR__, 2) . '/librenms-overlay/tools/horizon-central-collector.php');
+    expect(str_contains($source, "Device::findByHostname"), 'display anchor lookup is missing');
+    expect(str_contains($source, "display_device_not_found"), 'deleted display device failure is not bounded');
+    expect(str_contains($source, "windows_agent_application_not_found"), 'deleted display application failure is not bounded');
+    expect(! preg_match('/registerPod[\\s\\S]{0,1200}->status/', $source), 'display-device down state incorrectly gates registration or collection');
 };
 
 $failed = 0;

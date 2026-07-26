@@ -9,6 +9,11 @@ Update the version in `Directory.Build.props`, including `Version`,
 `AssemblyVersion`, and `FileVersion`. Use a new MSI version for every public
 agent upgrade.
 
+For an overlay-only release, leave `Directory.Build.props`, the MSI artifact,
+and Windows installer version unchanged. Update only the overlay version in
+`install.sh`, the capability manifest, current public documentation, and the
+overlay checksum entry.
+
 Update current-version references in:
 
 - `install.sh`
@@ -38,6 +43,12 @@ php .\tests\librenms-overlay\run-horizon-central-tests.php
 
 ```powershell
 .\scripts\build-release.ps1 -UpdateChecksums
+```
+
+Overlay-only release while preserving the current MSI:
+
+```powershell
+.\scripts\build-release.ps1 -Version <overlay-version> -OverlayOnly -UpdateChecksums
 ```
 
 This builds:

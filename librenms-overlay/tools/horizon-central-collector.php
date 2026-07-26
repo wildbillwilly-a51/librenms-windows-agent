@@ -10,12 +10,18 @@ use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\DB;
 use LibreNMS\RRD\RrdDefinition;
 use WindowsAgentOverlay\Horizon\HorizonFailure;
+use WindowsAgentOverlay\Horizon\HorizonCollectionCoordinator;
+use WindowsAgentOverlay\Horizon\HorizonCoordination;
 use WindowsAgentOverlay\Horizon\PodCollector;
+use WindowsAgentOverlay\Horizon\RedisHorizonCoordination;
 
 require_once __DIR__ . '/horizon-central-lib.php';
+require_once __DIR__ . '/horizon-central-coordination.php';
 
 final class HorizonCentralRuntime
 {
+    private static bool $booted = false;
+
     /** @var list<string> */
     private const DATA_KEYS = [
         'horizon_api_summary', 'horizon_api_session_protocols', 'horizon_pod_summary',
@@ -25,13 +31,19 @@ final class HorizonCentralRuntime
     ];
 
     /** @param array<string,mixed> $options */
-    public static function run(array $options): int
+    public static function run(
+        array $options,
+        ?HorizonCoordination $coordination = null,
+        ?PodCollector $collector = null
+    ): int
     {
         $root = rtrim((string) ($options['librenms-root'] ?? getenv('LIBRENMS_ROOT') ?: '/opt/librenms'), '/');
         $configPath = (string) ($options['config'] ?? $root . '/.horizon-pods.json');
         $stateDir = (string) ($options['state-dir'] ?? $root . '/storage/app/windows-agent-horizon');
         $siteFilter = strtolower((string) ($options['site'] ?? ''));
         $dryRun = isset($options['dry-run']);
+        $force = isset($options['force']);
+        $cooldownSeconds = max(30, min(300, (int) ($options['cooldown-seconds'] ?? 240)));
 
         if (! is_file($configPath)) {
             return 0; // Overlay may be installed everywhere; collection is opt-in per node.
@@ -50,55 +62,72 @@ final class HorizonCentralRuntime
 
         if (! $dryRun) {
             self::bootLibreNms($root);
+            $coordination ??= new RedisHorizonCoordination();
+            $collector ??= new PodCollector();
         }
         if (! is_dir($stateDir) && ! mkdir($stateDir, 0700, true) && ! is_dir($stateDir)) {
             self::log('state_error', 'state_directory_unavailable');
 
             return 2;
         }
-        $lockPath = $stateDir . '/collector.lock';
-        $lock = fopen($lockPath, 'c');
-        if ($lock === false || ! flock($lock, LOCK_EX | LOCK_NB)) {
-            return 0;
-        }
-
         $failed = 0;
-        try {
-            foreach ($pods as $pod) {
-                if (! is_array($pod) || ! ($pod['enabled'] ?? true)) continue;
-                $site = strtolower((string) ($pod['site'] ?? ''));
-                if ($siteFilter !== '' && $site !== $siteFilter) continue;
-                try {
-                    PodCollector::validateConfig($pod);
-                    if ($dryRun) {
-                        self::log($site, 'configuration_valid');
-                        continue;
-                    }
+        $matched = false;
+        foreach ($pods as $pod) {
+            if (! is_array($pod) || ! ($pod['enabled'] ?? true)) continue;
+            $site = strtolower((string) ($pod['site'] ?? ''));
+            if ($siteFilter !== '' && $site !== $siteFilter) continue;
+            $matched = true;
+            try {
+                PodCollector::validateConfig($pod);
+                if ($dryRun) {
+                    self::log($site, 'configuration_valid');
+                    continue;
+                }
+                self::registerPod($pod, $coordination);
+                $coordinator = new HorizonCollectionCoordinator(
+                    $coordination,
+                    max(60, (int) ($pod['lock_seconds'] ?? 240)),
+                    $cooldownSeconds,
+                    30
+                );
+                $result = $coordinator->collect(
+                    $site,
+                    $force,
+                    static function () use ($stateDir, $site, $pod, $credential, $collector): array {
                     $statePath = $stateDir . '/' . $site . '.json';
                     $previous = is_file($statePath) ? self::readJson($statePath) : [];
-                    $snapshot = (new PodCollector())->collect($pod, $credential, $previous);
+                    $snapshot = $collector->collect($pod, $credential, $previous);
                     self::atomicJson($statePath, $snapshot, 0600);
                     self::publish($pod, $snapshot);
                     $meta = $snapshot['horizon_central_meta'];
                     self::log($site, ((int) ($meta['stale'] ?? 0) === 1 ? 'stale' : 'ok') . ' source=' . ($meta['source_endpoint'] ?? 'none'));
-                } catch (HorizonFailure $failure) {
-                    $failed++;
-                    self::log($site !== '' ? $site : 'configuration_error', $failure->reason);
-                } catch (Throwable) {
-                    $failed++;
-                    self::log($site !== '' ? $site : 'runtime_error', 'internal_error');
+
+                    return ['fresh' => (int) ($meta['stale'] ?? 0) === 0];
                 }
+                );
+                if (in_array($result, ['locked', 'cooldown'], true)) {
+                    self::log($site, 'skipped_' . $result);
+                }
+            } catch (HorizonFailure $failure) {
+                $failed++;
+                self::log($site !== '' ? $site : 'configuration_error', $failure->reason);
+            } catch (Throwable) {
+                $failed++;
+                self::log($site !== '' ? $site : 'runtime_error', 'internal_error');
             }
-        } finally {
-            flock($lock, LOCK_UN);
-            fclose($lock);
+        }
+        if ($siteFilter !== '' && ! $matched) {
+            self::log($siteFilter, 'requested_site_not_configured');
         }
 
         return $failed === 0 ? 0 : 1;
     }
 
-    private static function bootLibreNms(string $root): void
+    public static function bootLibreNms(string $root): void
     {
+        if (self::$booted) {
+            return;
+        }
         $autoload = $root . '/vendor/autoload.php';
         $bootstrap = $root . '/bootstrap/app.php';
         if (! is_file($autoload) || ! is_file($bootstrap)) {
@@ -108,6 +137,30 @@ final class HorizonCentralRuntime
         if (! defined('LARAVEL_START')) define('LARAVEL_START', microtime(true));
         $app = require $bootstrap;
         $app->make(Kernel::class)->bootstrap();
+        self::$booted = true;
+    }
+
+    /** @param array<string,mixed> $pod */
+    public static function registerPod(array $pod, HorizonCoordination $coordination): void
+    {
+        $device = Device::findByHostname((string) ($pod['display_device'] ?? ''));
+        if (! $device) {
+            throw new HorizonFailure('display_device_not_found');
+        }
+        $app = Application::query()
+            ->where('device_id', $device->device_id)
+            ->where('app_type', 'windows-agent')
+            ->where('app_instance', '')
+            ->whereNull('deleted_at')
+            ->first();
+        if (! $app) {
+            throw new HorizonFailure('windows_agent_application_not_found');
+        }
+        $coordination->register([
+            'site' => strtolower((string) $pod['site']),
+            'display_device' => strtolower((string) $pod['display_device']),
+            'device_id' => (int) $device->device_id,
+        ]);
     }
 
     /** @return array{username:string,password:string,domain:string} */
@@ -166,9 +219,12 @@ final class HorizonCentralRuntime
             self::updateMetrics($locked->app_id, self::metrics($snapshot));
         });
 
-        if ((int) ($snapshot['horizon_central_meta']['stale'] ?? 0) === 0) {
-            self::writeRrds($device->toArray(), $app->app_id, self::metrics($snapshot));
-        }
+        self::writeRrds(
+            $device->toArray(),
+            $app->app_id,
+            self::metrics($snapshot),
+            (int) ($snapshot['horizon_central_meta']['stale'] ?? 0) === 1
+        );
     }
 
     /** @param array<string,mixed> $snapshot @return array<string,int|float> */
@@ -230,8 +286,13 @@ final class HorizonCentralRuntime
     }
 
     /** @param array<string,mixed> $device @param array<string,int|float> $m */
-    private static function writeRrds(array $device, int $appId, array $m): void
+    private static function writeRrds(array $device, int $appId, array $m, bool $stale): void
     {
+        if ($stale) {
+            foreach ($m as $name => $_value) {
+                $m[$name] = 'U';
+            }
+        }
         $write = static function (string $name, RrdDefinition $definition, array $fields) use ($device, $appId): void {
             app('Datastore')->put($device, 'app', ['name' => $name, 'app_id' => $appId, 'rrd_name' => ['app', $name, $appId], 'rrd_def' => $definition], $fields);
         };
@@ -276,6 +337,6 @@ final class HorizonCentralRuntime
 }
 
 if (PHP_SAPI === 'cli' && realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
-    $options = getopt('', ['librenms-root:', 'config:', 'state-dir:', 'site:', 'dry-run']);
+    $options = getopt('', ['librenms-root:', 'config:', 'state-dir:', 'site:', 'cooldown-seconds:', 'dry-run', 'fallback', 'force']);
     exit(HorizonCentralRuntime::run(is_array($options) ? $options : []));
 }

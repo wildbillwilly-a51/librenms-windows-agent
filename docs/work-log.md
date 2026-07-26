@@ -2,6 +2,28 @@
 
 ## 2026-07-25
 
+- Released generic overlay 0.6.16 with a poll-safe, credential-free Redis
+  trigger producer shared by normal and explicit application polling; a
+  collector-only worker with per-site distributed locks/cooldowns; an
+  independent five-minute fallback; and single-writer central Horizon RRD
+  publication with last-good stale preservation.
+- Added preview-first, add-only pod discovery with application readiness,
+  strict DNS/TLS/authentication/pod-identity validation, API-member failover,
+  ambiguity handling, existing-choice preservation, and non-secret display
+  registration. Added the generic schema-2 capability/private-integration
+  contract and overlay-only release build support.
+- Expanded generic tests for trigger scoping/deduplication/failure isolation,
+  worker/fallback locking, offline and deleted display boundaries, discovery
+  lifecycle and validation failures, explicit/normal poll path sharing,
+  capability compatibility, and managed worker rollback. All 59 agent tests,
+  ten parser fixtures, ten app-page fixtures, central fixtures, source and
+  packaged PHP lint, Bash syntax, ShellCheck, PowerShell parsing, package
+  inspection, checksums, and safety checks passed. Overlay SHA256:
+  `677f40a7a03c1547f5c27ee32bb6a44126e83252d474ac6d4d67300652cd5285`.
+- Kept the Windows agent/MSI unchanged at 0.6.14. Read-only private-site
+  inspection informed the separate private consumer package only; no private
+  values entered this repository and no live deployment or poll occurred.
+
 - Migrated the managed project workflow from initial V6 to V7 with the installed
   exact-cohort planner. Check-only revalidation reports current format-3/V7
   state; the private compatibility export is ignored, legacy helper files still

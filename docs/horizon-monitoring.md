@@ -47,7 +47,7 @@ and statistical samples, and Horizon can also emit those events as Syslog.
 
 Release 0.6.14 implements local process telemetry and the initial disabled
 Windows-side API prototype without changing the existing Horizon RRD schema.
-Overlay release 0.6.15 adds the centralized successor:
+Overlay release 0.6.16 completes the cluster-safe centralized successor:
 
 1. `windows_agent_horizon_runtime_summary` reports state, process count, CPU,
    working set, private bytes, handles, threads, read/write bytes per second,
@@ -77,8 +77,10 @@ Overlay release 0.6.15 adds the centralized successor:
 10. Additive `windows-agent-horizon-api` and
     `windows-agent-horizon-platform` RRD families supply API/session, pod, and
     aggregate clone-pool graphs.
-11. One LibreNMS-side PHP job now queries each configured pod once per cycle.
-    Windows agents remain installed on every member and remain credential-free.
+11. Every normal or explicit `windows-agent` application poll performs one
+    bounded shared-Redis registration lookup. Only a configured display-device
+    registration can enqueue its site; the poller never reads pod
+    configuration, credentials, or CA material and never contacts Horizon.
 12. Bootstrap priority is always `<site>-vcs1.<suffix>`, then
     `<site>-vcs2.<suffix>`. API-discovered Connection Servers become later
     candidates only after suffix and expected-pod validation. Gateways never
@@ -87,8 +89,18 @@ Overlay release 0.6.15 adds the centralized successor:
     application on a configured display device and takes precedence over the
     Windows-side prototype. The display device is a UI anchor, not the API
     preference or a single point of collection failure.
-14. Failed cycles retain the last good values, mark them stale with source and
-    timestamps, and leave RRD gaps as unknown instead of writing false zeroes.
+14. A credential-bearing management-node worker consumes deduplicated site
+    triggers. A distributed per-site lock and cooldown make simultaneous
+    cluster/manual polls one effective API cycle.
+15. An independent five-minute systemd timer runs the same collector path when
+    no device poll produces a trigger. Display-device status, skipped
+    Applications modules, and lost wake-up hints therefore do not stop
+    collection.
+16. Failed cycles retain the last good values, mark them stale with source and
+    timestamps, and write unknown RRD samples instead of false zeroes. The
+    centralized collector is the sole writer for central Horizon RRD families.
+17. `capabilities.json` exposes overlay version, configuration schema, producer,
+    worker, discovery, fallback, and private-integration API compatibility.
 
 The existing FactoryTalk runtime sampler was generalized into a shared role
 process sampler rather than duplicated.
@@ -111,44 +123,62 @@ the existing protected LibreNMS `.env`; temporary rollback material is mode
 `0600` and removed after validation. Pod configuration contains no secret and
 is written to `.horizon-pods.json` by the same helper.
 
-Generic candidate setup:
+Generic discovery-first setup:
 
 ```bash
 cd /opt/librenms
 sudo -u librenms php windows-agent-overlay/horizon-central-config.php credential set
-sudo -u librenms php windows-agent-overlay/horizon-central-config.php pod add \
-  --site abc --dns-suffix example.test \
-  --display-device abc-vcs2.example.test
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php pod discover \
+  --dns-suffix example.test
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php pod discover \
+  --dns-suffix example.test --apply
 sudo -u librenms php windows-agent-overlay/horizon-central-config.php config validate
 sudo -u librenms php windows-agent-overlay/horizon-central-config.php config status
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php pod list
 sudo -u librenms php windows-agent-overlay/horizon-central-config.php test network --site abc
 ```
 
-`config status` reports only credential presence and non-secret pod topology.
-`test network` performs DNS and strict TLS checks without authenticating. The
-following commands make authenticated read-only requests and therefore belong
-inside an explicitly authorized test window:
+Preview is the default and changes nothing. Discovery considers the generic
+`<site>-vcs<number>.<dns-suffix>` device contract, enabled/down/disabled state,
+the `windows-agent` application, and Horizon-detected metrics. One ready seed
+bootstraps authenticated API validation. The API must return a non-empty pod
+identity and validated members that remain inside the expected site and suffix.
+Apply is add-only and idempotent: existing pod/display choices are retained;
+ambiguous, unauthorized, TLS-invalid, unreachable, disabled, and
+waiting-for-agent candidates are skipped with bounded reasons.
+
+`config status` and `pod list` report only credential presence and non-secret
+pod topology. `test network` performs DNS and strict TLS checks without
+authenticating. Manual diagnostics use the same distributed lock. `--force`
+bypasses only the cooldown, never the lock:
 
 ```bash
 sudo -u librenms php windows-agent-overlay/horizon-central-config.php test api --site abc
-sudo -u librenms php windows-agent-overlay/horizon-central-collector.php --site abc
+sudo -u librenms php windows-agent-overlay/horizon-central-collector.php --site abc --force
 ```
 
-After the manual result and UI are accepted, enable the existing five-minute
-cron path:
+After the manual result and UI are accepted, enable the trigger worker and its
+independent five-minute fallback:
 
 ```bash
-sudo php /opt/librenms/windows-agent-overlay/horizon-central-config.php schedule enable \
+sudo php /opt/librenms/windows-agent-overlay/horizon-central-config.php worker enable \
   --librenms-root /opt/librenms
 ```
 
 Use `credential rotate`, `credential remove`, `pod enable`, `pod disable`,
-`pod remove`, or `schedule disable` for lifecycle operations; no file editing
-is required. Overlay install/reapply/rollback never replaces `.env`,
+`pod remove`, `worker status`, or `worker disable` for lifecycle operations;
+no file editing is required. `schedule enable|disable|status` remains a
+compatibility alias. Overlay install/reapply/rollback never replaces `.env`,
 `.horizon-pods.json`, or last-good state. A rollback that removes the central
-collector also removes only its marker-verified managed cron entry, preventing
-a scheduled missing-file error while retaining credentials, pod definitions,
-and last-good state.
+worker disables and removes only its signature-verified managed units (and the
+legacy marker-verified cron if present) while retaining credentials, pod
+definitions, and last-good state.
+
+The non-secret shared registration maps only a LibreNMS device ID/hostname to
+one site. Worker startup and fallback reconcile it from protected local pod
+configuration. A deleted display device or application blocks that site with
+`display_device_not_found` or `windows_agent_application_not_found`; an
+offline display device remains valid and does not block API collection.
 
 The 0.6.14 Windows-side DPAPI prototype remains disabled for compatibility. It
 is not the mass-deployment path. If both sources exist, central data wins.
@@ -187,12 +217,12 @@ waves do not page the team from one sample.
 
 ## Live Validation and Later Scope
 
-The remaining deployment gate is a non-production pod validation, not more
-local architecture work. Validate exact endpoint/field compatibility, service-account
-authorization, TLS trust, discovered-member names, pool state mix, the chosen
-display device, and simulated VCS1-to-VCS2 failover without stopping services
-or changing firewall/DNS. Only after the manual run and several five-minute
-cycles are accepted should the candidate become a release.
+Release validation covers generic fixtures, while site deployment remains a
+separate approval gate. A live rollout should validate service-account
+authorization, TLS trust, trigger consumption, cooldown/lock behavior,
+five-minute fallback, discovered-member names, pool state mix, the chosen
+display anchor, offline-display continuity, and VCS1-to-VCS2 failover without
+stopping Horizon services or changing firewall/DNS.
 
 Later optional scope may include vCenter/event-database health,
 image-push/provisioning-task state, expected spare targets, farm/RDS health,

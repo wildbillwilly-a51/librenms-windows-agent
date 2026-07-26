@@ -1,46 +1,29 @@
 # Codex Handoff
 
-- Current objective: Publish overlay release 0.6.15, then validate the
-  centralized read-only Horizon pod collector on the non-production pod.
-- Current state: Overlay 0.6.15 contains a complete central PHP collector,
-  configuration helper, package integration, application-data merge, stale
-  handling, unknown-on-stale RRD behavior, compact UI, tests, and documentation.
-  It queries each configured site pod once from LibreNMS, beginning with
-  `<site>-vcs1` and then `<site>-vcs2`, and extends failover with healthy
-  API-discovered Connection Servers. Windows agents remain credential-free and
-  continue reporting local Horizon telemetry independently.
-- Next action: Install overlay 0.6.15 through the unchanged one-command
-  installer on the required LibreNMS nodes, configure the centralized collector
-  only on the designated active node using private site values and the
-  read-only credential prompt, run one manual API test against the
-  non-production pod, and exercise collector failover without changing Horizon
-  services, DNS, firewall, or server configuration. Enable the five-minute cron
-  only after the manual result and LibreNMS presentation are accepted.
-- Blockers: Live credential entry, Horizon authentication, cron enablement,
-  and failover testing remain separate protected actions. GitHub CLI
-  authentication is available for the authorized public fast-forward push. No
-  live deployment action has occurred.
-- Important decisions: There is no new service, vault, database, or Windows
-  credential distribution. Credentials live only in the protected LibreNMS
-  `.env`; pod definitions are non-secret. Windows/Microsoft AD, Horizon AD LDS
-  replication, and Horizon member-to-Microsoft-AD access stay separate. Only
-  instant/linked-clone unused capacity is scored, and incomplete/stale data
-  cannot become a false healthy zero.
-- Branch/commit/sync: `main`; the containing commit is the public 0.6.15 release
-  snapshot. Synchronization target is `origin/main` by verified fast-forward;
-  when that branch matches the containing commit, no bookkeeping-only commit is
-  needed.
-- Validation complete: PHP lint; centralized security, failover, identity,
-  pagination, threshold, stale-retention, absent-config, and atomic-config
-  tests; no-edit pod lifecycle coverage; all ten parser and ten app-page
-  fixtures; all 59 agent tests; shell syntax; candidate overlay build and
-  contents; marker-verified rollback schedule cleanup; Git whitespace checks;
-  and a local browser render with no PHP or browser-console warnings. A
-  pre-publication rebuild also passed the native release assertions and
-  reproduced all 72 overlay files exactly; only archive metadata timestamps
-  differed. Final overlay 0.6.15 SHA256:
-  `295949ee3e3b19a062837d928b9658fbafb05c429fc9e6a6a5b884f20b9cf074`.
-- Validation remaining: Public installer verification after publication,
-  followed by live read-only API behavior, failover, scheduled
-  polling, and LibreNMS display remain the protected non-production validation
-  phase. No MSI is required unless Windows-agent code changes independently.
+- Objective: Release generic overlay 0.6.16 with cluster-safe Horizon poll
+  triggers, central collection, fallback scheduling, pod discovery, and a
+  capability contract; stop before any live deployment.
+- Current state: The release is implemented, packaged, documented, and covered
+  by generic fixtures. Normal and explicit application polls share a
+  credential-free Redis trigger path. A designated collector worker validates
+  local pod registrations, owns central RRD writes, deduplicates collection
+  with distributed locks/cooldowns, retains last-good snapshots, and runs from
+  both triggers and an independent five-minute fallback. Discovery is
+  preview-first, add-only, strict-TLS, identity-validated, and preserves
+  existing choices.
+- Relevant decisions: Installation alone remains inert. Pollers never receive
+  Horizon credentials, protected pod files, or private CA trust. The display
+  device is a stable UI/data anchor rather than an availability gate. The
+  Windows agent/MSI remains 0.6.14 because endpoint behavior did not change.
+- Validation completed: All 59 agent tests, ten parser fixtures, ten app-page
+  fixtures, expanded central trigger/worker/discovery fixtures, PHP lint, Bash
+  syntax, ShellCheck, PowerShell parsing, overlay release build, package
+  contents, checksum verification, and Git whitespace checks passed. Overlay
+  SHA256:
+  `677f40a7a03c1547f5c27ee32bb6a44126e83252d474ac6d4d67300652cd5285`.
+- Validation remaining: Live installation, worker enablement, pod
+  reconciliation, device polling, Redis/DB mutation, authenticated API
+  collection, failover, fallback, and publication validation remain gated on a
+  fresh explicit deployment approval.
+- Next action: Wait at the explicit deployment approval checkpoint; do not
+  change live systems without fresh authorization.

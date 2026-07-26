@@ -81,6 +81,21 @@ while IFS= read -r rel || [[ -n "$rel" ]]; do
   echo "Present: $rel"
 done < "$manifest_file"
 
+capability_manifest="$librenms_root/windows-agent-overlay/capabilities.json"
+# shellcheck disable=SC2016
+php -r '
+$value = json_decode((string) file_get_contents($argv[1]), true, 32, JSON_THROW_ON_ERROR);
+if (($value["product"] ?? "") !== "librenms-windows-agent-overlay"
+    || !isset($value["overlay_version"], $value["configuration_schema_version"])
+    || (int) ($value["capabilities"]["horizon_trigger_producer"] ?? 0) < 1
+    || (int) ($value["capabilities"]["horizon_central_worker"] ?? 0) < 1
+    || (int) ($value["capabilities"]["horizon_pod_discovery"] ?? 0) < 1) {
+    fwrite(STDERR, "Invalid overlay capability manifest\n");
+    exit(1);
+}
+' "$capability_manifest"
+echo "Capability manifest valid"
+
 echo "Running LibreNMS validate.php"
 if ! sudo -u librenms php "$librenms_root/validate.php"; then
   echo "WARNING: LibreNMS validate.php reported issues unrelated to overlay file installation." >&2

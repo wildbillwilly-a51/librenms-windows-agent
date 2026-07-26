@@ -192,7 +192,7 @@ final class PodCollector
         self::validateConfig($config);
         $attemptedAt = gmdate('c');
         $failures = [];
-        foreach (self::candidateEndpoints($config, $previous) as $endpoint) {
+        foreach (array_slice(self::candidateEndpoints($config, $previous), 0, 10) as $endpoint) {
             $session = null;
             try {
                 $session = ($this->sessionFactory)($endpoint, $credential, $config);
@@ -219,7 +219,7 @@ final class PodCollector
             }
         }
 
-        $reason = $failures === [] ? 'no_valid_endpoints' : implode(',', $failures);
+        $reason = $failures === [] ? 'no_valid_endpoints' : substr(implode(',', $failures), 0, 512);
         if ($previous !== [] && isset($previous['horizon_central_meta'])) {
             $stale = $previous;
             $lastSuccess = (string) ($stale['horizon_central_meta']['last_success_utc'] ?? '');
@@ -235,6 +235,60 @@ final class PodCollector
         }
 
         throw new HorizonFailure($reason);
+    }
+
+    /**
+     * Bootstrap one explicitly selected LibreNMS seed during discovery.
+     *
+     * @param array<string,mixed> $config
+     * @param array{username:string,password:string,domain?:string} $credential
+     * @return array<string,mixed>
+     */
+    public function discoverFromEndpoint(array $config, array $credential, string $endpoint): array
+    {
+        self::validateConfig($config);
+        $endpoint = strtolower(rtrim(trim($endpoint), '.'));
+        $site = preg_quote(strtolower((string) $config['site']), '/');
+        $suffix = preg_quote(strtolower((string) $config['dns_suffix']), '/');
+        if (preg_match('/^' . $site . '-vcs[0-9]+\.' . $suffix . '$/', $endpoint) !== 1) {
+            throw new HorizonFailure('discovery_seed_name_mismatch');
+        }
+
+        $session = null;
+        try {
+            $session = ($this->sessionFactory)($endpoint, $credential, $config);
+            $snapshot = $this->collectEndpoint($session, $endpoint, $config, []);
+        } finally {
+            $session?->close();
+        }
+        $identity = trim((string) ($snapshot['pod_identity'] ?? ''));
+        if ($identity === '') {
+            throw new HorizonFailure('pod_identity_missing');
+        }
+        $members = $snapshot['discovered_connection_servers'] ?? [];
+        if (! is_array($members) || $members === []) {
+            throw new HorizonFailure('pod_members_missing');
+        }
+        foreach ($members as $member) {
+            if (! is_string($member) || preg_match('/^' . $site . '-vcs[0-9]+\.' . $suffix . '$/', strtolower($member)) !== 1) {
+                throw new HorizonFailure('pod_member_name_mismatch');
+            }
+        }
+        $snapshot['horizon_central_meta'] = [
+            'source' => 'central',
+            'site' => strtolower((string) $config['site']),
+            'source_endpoint' => $endpoint,
+            'last_attempt_utc' => gmdate('c'),
+            'last_success_utc' => gmdate('c'),
+            'snapshot_age_seconds' => 0,
+            'stale' => 0,
+            'reason' => 'none',
+            'configured_endpoints' => self::seedEndpoints($config),
+            'discovered_endpoints' => array_values($members),
+            'pod_identity' => $identity,
+        ];
+
+        return $snapshot;
     }
 
     /** @param array<string,mixed> $config */
@@ -293,7 +347,7 @@ final class PodCollector
         $failures = [];
         $environment = $this->required($session, 'rest/config/v1/environment-properties');
         $identity = trim((string) ($environment['local_pod_name'] ?? $environment['cluster_name'] ?? ''));
-        $expected = trim((string) ($previous['pod_identity'] ?? $previous['horizon_central_meta']['pod_identity'] ?? ''));
+        $expected = trim((string) ($config['pod_identity'] ?? $previous['pod_identity'] ?? $previous['horizon_central_meta']['pod_identity'] ?? ''));
         if ($expected !== '' && $identity === '') {
             throw new HorizonFailure('pod_identity_missing');
         }

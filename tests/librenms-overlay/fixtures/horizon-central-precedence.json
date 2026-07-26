@@ -82,11 +82,10 @@
       "horizon_central_meta.source_endpoint": "abc-vcs1.example.test",
       "horizon_pools.0.display_name": "Instant A"
     },
-    "datastore": {
-      "windows-agent-horizon-api.sessions": "U",
-      "windows-agent-horizon-platform.members": "U",
-      "windows-agent-horizon-platform.spare_ready": "U"
-    },
+    "datastore_absent": [
+      "windows-agent-horizon-api",
+      "windows-agent-horizon-platform"
+    ],
     "app_page": {
       "contains": [
         "VMware Horizon",

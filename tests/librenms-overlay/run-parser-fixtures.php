@@ -191,6 +191,14 @@ namespace {
         foreach ($expect['datastore'] ?? [] as $lookup => $expected) {
             assertFixtureEqual($expected, datastoreFieldValue($lookup), "datastore $lookup");
         }
+
+        foreach ($expect['datastore_absent'] ?? [] as $name) {
+            foreach (WindowsAgentOverlayParserTestState::$datastoreWrites as $write) {
+                if (($write['tags']['name'] ?? '') === $name) {
+                    throw new RuntimeException("Unexpected datastore write: $name");
+                }
+            }
+        }
     }
 
     $repoRoot = dirname(__DIR__, 2);

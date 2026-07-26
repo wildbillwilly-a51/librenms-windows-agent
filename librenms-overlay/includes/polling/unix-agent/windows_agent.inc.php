@@ -449,13 +449,18 @@ $horizon_pools_summary = $parse_windows_agent_kv($horizon_pools_summary_raw);
 $horizon_pools = $parse_rows($horizon_pools_raw, 'name');
 $horizon_pool_machine_states = $parse_rows($horizon_pool_machine_states_raw, 'pool');
 $horizon_central_meta = is_array($existing_application_data['horizon_central_meta'] ?? null) ? $existing_application_data['horizon_central_meta'] : [];
+$horizon_central_data_keys = [
+    'horizon_api_summary', 'horizon_api_session_protocols', 'horizon_pod_summary',
+    'horizon_pod_members', 'horizon_configuration_replications', 'horizon_directory_summary',
+    'horizon_directory_domains', 'horizon_directory_member_status', 'horizon_gateways',
+    'horizon_pools_summary', 'horizon_pools', 'horizon_pool_machine_states',
+    'horizon_central_meta',
+];
 if (($horizon_central_meta['source'] ?? '') === 'central') {
-    foreach ([
-        'horizon_api_summary', 'horizon_api_session_protocols', 'horizon_pod_summary',
-        'horizon_pod_members', 'horizon_configuration_replications', 'horizon_directory_summary',
-        'horizon_directory_domains', 'horizon_directory_member_status', 'horizon_gateways',
-        'horizon_pools_summary', 'horizon_pools', 'horizon_pool_machine_states',
-    ] as $central_key) {
+    foreach ($horizon_central_data_keys as $central_key) {
+        if ($central_key === 'horizon_central_meta') {
+            continue;
+        }
         if (is_array($existing_application_data[$central_key] ?? null)) {
             ${$central_key} = $existing_application_data[$central_key];
         }
@@ -1146,72 +1151,73 @@ app('Datastore')->put($device, 'app', [
     'io_write_bps' => $fields['horizon_runtime_io_write_bytes_per_sec'],
 ]);
 
-$horizon_api_rrd_def = RrdDefinition::make()
-    ->addDataset('available', 'GAUGE', 0, 1)
-    ->addDataset('cs_total', 'GAUGE', 0)
-    ->addDataset('cs_unhealthy', 'GAUGE', 0)
-    ->addDataset('services_bad', 'GAUGE', 0)
-    ->addDataset('repl_bad', 'GAUGE', 0)
-    ->addDataset('cert_invalid', 'GAUGE', 0)
-    ->addDataset('sessions', 'GAUGE', 0)
-    ->addDataset('connected', 'GAUGE', 0)
-    ->addDataset('disconnected', 'GAUGE', 0)
-    ->addDataset('other', 'GAUGE', 0)
-    ->addDataset('truncated', 'GAUGE', 0, 1);
-$horizon_rrd_value = static fn ($value) => (int) ($horizon_central_meta['stale'] ?? 0) === 1 ? 'U' : $value;
+if (($horizon_central_meta['source'] ?? '') !== 'central') {
+    $horizon_api_rrd_def = RrdDefinition::make()
+        ->addDataset('available', 'GAUGE', 0, 1)
+        ->addDataset('cs_total', 'GAUGE', 0)
+        ->addDataset('cs_unhealthy', 'GAUGE', 0)
+        ->addDataset('services_bad', 'GAUGE', 0)
+        ->addDataset('repl_bad', 'GAUGE', 0)
+        ->addDataset('cert_invalid', 'GAUGE', 0)
+        ->addDataset('sessions', 'GAUGE', 0)
+        ->addDataset('connected', 'GAUGE', 0)
+        ->addDataset('disconnected', 'GAUGE', 0)
+        ->addDataset('other', 'GAUGE', 0)
+        ->addDataset('truncated', 'GAUGE', 0, 1);
 
-app('Datastore')->put($device, 'app', [
-    'name' => 'windows-agent-horizon-api',
-    'app_id' => $windows_agent_app->app_id,
-    'rrd_name' => ['app', 'windows-agent-horizon-api', $windows_agent_app->app_id],
-    'rrd_def' => $horizon_api_rrd_def,
-], [
-    'available' => $horizon_rrd_value($fields['horizon_api_available']),
-    'cs_total' => $horizon_rrd_value($fields['horizon_api_connection_servers_total']),
-    'cs_unhealthy' => $horizon_rrd_value($fields['horizon_api_connection_servers_unhealthy']),
-    'services_bad' => $horizon_rrd_value($fields['horizon_api_services_unhealthy']),
-    'repl_bad' => $horizon_rrd_value($fields['horizon_api_replications_unhealthy']),
-    'cert_invalid' => $horizon_rrd_value($fields['horizon_api_certificates_invalid']),
-    'sessions' => $horizon_rrd_value($fields['horizon_api_sessions_total']),
-    'connected' => $horizon_rrd_value($fields['horizon_api_sessions_connected']),
-    'disconnected' => $horizon_rrd_value($fields['horizon_api_sessions_disconnected']),
-    'other' => $horizon_rrd_value($fields['horizon_api_sessions_other']),
-    'truncated' => $horizon_rrd_value($fields['horizon_api_sessions_truncated']),
-]);
+    app('Datastore')->put($device, 'app', [
+        'name' => 'windows-agent-horizon-api',
+        'app_id' => $windows_agent_app->app_id,
+        'rrd_name' => ['app', 'windows-agent-horizon-api', $windows_agent_app->app_id],
+        'rrd_def' => $horizon_api_rrd_def,
+    ], [
+        'available' => $fields['horizon_api_available'],
+        'cs_total' => $fields['horizon_api_connection_servers_total'],
+        'cs_unhealthy' => $fields['horizon_api_connection_servers_unhealthy'],
+        'services_bad' => $fields['horizon_api_services_unhealthy'],
+        'repl_bad' => $fields['horizon_api_replications_unhealthy'],
+        'cert_invalid' => $fields['horizon_api_certificates_invalid'],
+        'sessions' => $fields['horizon_api_sessions_total'],
+        'connected' => $fields['horizon_api_sessions_connected'],
+        'disconnected' => $fields['horizon_api_sessions_disconnected'],
+        'other' => $fields['horizon_api_sessions_other'],
+        'truncated' => $fields['horizon_api_sessions_truncated'],
+    ]);
 
-$horizon_platform_rrd_def = RrdDefinition::make()
-    ->addDataset('members', 'GAUGE', 0)
-    ->addDataset('members_bad', 'GAUGE', 0)
-    ->addDataset('repl_bad', 'GAUGE', 0)
-    ->addDataset('domain_bad', 'GAUGE', 0)
-    ->addDataset('gateways_bad', 'GAUGE', 0)
-    ->addDataset('pools', 'GAUGE', 0)
-    ->addDataset('pools_warn', 'GAUGE', 0)
-    ->addDataset('pools_crit', 'GAUGE', 0)
-    ->addDataset('incomplete', 'GAUGE', 0)
-    ->addDataset('spare_total', 'GAUGE', 0)
-    ->addDataset('spare_ready', 'GAUGE', 0)
-    ->addDataset('spare_unready', 'GAUGE', 0);
+    $horizon_platform_rrd_def = RrdDefinition::make()
+        ->addDataset('members', 'GAUGE', 0)
+        ->addDataset('members_bad', 'GAUGE', 0)
+        ->addDataset('repl_bad', 'GAUGE', 0)
+        ->addDataset('domain_bad', 'GAUGE', 0)
+        ->addDataset('gateways_bad', 'GAUGE', 0)
+        ->addDataset('pools', 'GAUGE', 0)
+        ->addDataset('pools_warn', 'GAUGE', 0)
+        ->addDataset('pools_crit', 'GAUGE', 0)
+        ->addDataset('incomplete', 'GAUGE', 0)
+        ->addDataset('spare_total', 'GAUGE', 0)
+        ->addDataset('spare_ready', 'GAUGE', 0)
+        ->addDataset('spare_unready', 'GAUGE', 0);
 
-app('Datastore')->put($device, 'app', [
-    'name' => 'windows-agent-horizon-platform',
-    'app_id' => $windows_agent_app->app_id,
-    'rrd_name' => ['app', 'windows-agent-horizon-platform', $windows_agent_app->app_id],
-    'rrd_def' => $horizon_platform_rrd_def,
-], [
-    'members' => $horizon_rrd_value($fields['horizon_pod_members_total']),
-    'members_bad' => $horizon_rrd_value($fields['horizon_pod_members_unhealthy']),
-    'repl_bad' => $horizon_rrd_value($fields['horizon_pod_replications_unhealthy']),
-    'domain_bad' => $horizon_rrd_value($fields['horizon_directory_links_unhealthy']),
-    'gateways_bad' => $horizon_rrd_value($fields['horizon_gateways_unhealthy']),
-    'pools' => $horizon_rrd_value($fields['horizon_pools_total']),
-    'pools_warn' => $horizon_rrd_value($fields['horizon_pools_warning']),
-    'pools_crit' => $horizon_rrd_value($fields['horizon_pools_critical']),
-    'incomplete' => $horizon_rrd_value($fields['horizon_pools_incomplete']),
-    'spare_total' => $horizon_rrd_value($fields['horizon_spare_total']),
-    'spare_ready' => $horizon_rrd_value($fields['horizon_spare_ready']),
-    'spare_unready' => $horizon_rrd_value($fields['horizon_spare_unready']),
-]);
+    app('Datastore')->put($device, 'app', [
+        'name' => 'windows-agent-horizon-platform',
+        'app_id' => $windows_agent_app->app_id,
+        'rrd_name' => ['app', 'windows-agent-horizon-platform', $windows_agent_app->app_id],
+        'rrd_def' => $horizon_platform_rrd_def,
+    ], [
+        'members' => $fields['horizon_pod_members_total'],
+        'members_bad' => $fields['horizon_pod_members_unhealthy'],
+        'repl_bad' => $fields['horizon_pod_replications_unhealthy'],
+        'domain_bad' => $fields['horizon_directory_links_unhealthy'],
+        'gateways_bad' => $fields['horizon_gateways_unhealthy'],
+        'pools' => $fields['horizon_pools_total'],
+        'pools_warn' => $fields['horizon_pools_warning'],
+        'pools_crit' => $fields['horizon_pools_critical'],
+        'incomplete' => $fields['horizon_pools_incomplete'],
+        'spare_total' => $fields['horizon_spare_total'],
+        'spare_ready' => $fields['horizon_spare_ready'],
+        'spare_unready' => $fields['horizon_spare_unready'],
+    ]);
+}
 
 $factorytalk_rrd_def = RrdDefinition::make()
     ->addDataset('detected', 'GAUGE', 0, 1)
@@ -1401,4 +1407,31 @@ app('Datastore')->put($device, 'app', [
     'health_issues' => $fields['datto_backup_health_issues'],
 ]);
 
+$latest_windows_agent_app = Application::find($windows_agent_app->app_id);
+$latest_application_data = is_array($latest_windows_agent_app?->data ?? null)
+    ? $latest_windows_agent_app->data
+    : [];
+if (($latest_application_data['horizon_central_meta']['source'] ?? '') === 'central') {
+    foreach ($horizon_central_data_keys as $central_key) {
+        if (array_key_exists($central_key, $latest_application_data)) {
+            $windows_agent_app->data[$central_key] = $latest_application_data[$central_key];
+        }
+    }
+}
+
 update_application($windows_agent_app, $response, $fields, $response);
+
+if (function_exists('base_path')) {
+    $horizon_trigger_path = base_path('windows-agent-overlay/horizon-central-coordination.php');
+    if (is_file($horizon_trigger_path)) {
+        try {
+            require_once $horizon_trigger_path;
+            \WindowsAgentOverlay\Horizon\HorizonTriggerProducer::emitForDevice(
+                (int) ($device['device_id'] ?? 0),
+                (string) ($device['hostname'] ?? '')
+            );
+        } catch (Throwable) {
+            // Central collection is optional; trigger failure never fails device polling.
+        }
+    }
+}

@@ -38,8 +38,12 @@ try {
         'validate-app.php',
         'delete-apps.php',
         'horizon-central-lib.php',
+        'horizon-central-coordination.php',
+        'horizon-central-discovery.php',
         'horizon-central-collector.php',
-        'horizon-central-config.php'
+        'horizon-central-config.php',
+        'horizon-central-worker.php',
+        'capabilities.json'
     )) {
         Copy-Item -LiteralPath (Join-Path $overlayRoot "tools\$tool") -Destination $supportRoot -Force
     }

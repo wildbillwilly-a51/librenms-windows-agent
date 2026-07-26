@@ -80,18 +80,26 @@ critical at 90%, and critical whenever no unused machine is ready. Full pod,
 pool, and machine-state counts remain in compact disclosures. Release 0.6.14's
 Windows-side API prototype is disabled by default and uses a one-time
 machine-protected credential file rather than a password in configuration.
-Overlay release 0.6.15 adds its centralized, credential-free-on-Windows
-successor, which runs once per pod from LibreNMS. See
+Overlay release 0.6.16 adds a cluster-safe, poll-triggered centralized
+successor, which runs once per effective pod cycle from LibreNMS. See
 [Horizon monitoring design](docs/horizon-monitoring.md) for scope and setup.
 
-### Central Horizon API Collector (Overlay 0.6.15)
+### Central Horizon API Collector (Overlay 0.6.16)
 
 Keep the Windows agent on every Horizon server for local
 service/process/listener/certificate telemetry; do not place Horizon API
-credentials on those servers. On exactly one LibreNMS management node, the
-overlay helper stores one read-only service credential in LibreNMS' protected
-`.env`, stores non-secret pod definitions in `.horizon-pods.json`, and runs one
-bounded collection per pod every five minutes.
+credentials on those servers or on distributed LibreNMS pollers. On exactly one
+LibreNMS management node, the overlay helper stores one read-only service
+credential in LibreNMS' protected `.env` and protected pod definitions in
+`.horizon-pods.json`.
+
+Every normal `windows-agent` application poll, including an explicit
+`lnms device:poll ... --modules="unix-agent,applications"` run, performs a fast
+non-secret Redis registration lookup. Only the configured display device can
+enqueue its site. A management-node worker consumes those deduplicated hints,
+uses a Redis-backed per-site lock and cooldown, and performs the API collection.
+An independent five-minute systemd timer provides fallback collection when no
+poll emits a trigger. Redis failure never fails a device poll.
 
 The site code and DNS suffix derive the only bootstrap targets, in fixed order:
 `abc-vcs1.example.test`, then `abc-vcs2.example.test`. Healthy Connection
@@ -100,34 +108,52 @@ pod-identity validation. Gateways are displayed but never used as API targets.
 The configured display device is only the LibreNMS page where pod data appears;
 it is not the preferred API endpoint or a monitoring dependency.
 
-Setup after the overlay has been installed:
+Installing the overlay alone does not enable discovery, contact Horizon, start
+the worker, or create the fallback timer. Setup on the management node:
 
 ```bash
 cd /opt/librenms
 sudo -u librenms php windows-agent-overlay/horizon-central-config.php credential set
-sudo -u librenms php windows-agent-overlay/horizon-central-config.php pod add \
-  --site abc \
-  --dns-suffix example.test \
-  --display-device abc-vcs2.example.test
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php pod discover \
+  --dns-suffix example.test
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php pod discover \
+  --dns-suffix example.test --apply
 sudo -u librenms php windows-agent-overlay/horizon-central-config.php config validate
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php pod list
 sudo -u librenms php windows-agent-overlay/horizon-central-config.php test network --site abc
 ```
 
+Discovery is preview-only unless `--apply` is present. It groups existing
+LibreNMS devices named `<site>-vcs<number>.<dns-suffix>`, requires an enabled
+`windows-agent` application, performs strict DNS/TLS/authentication/pod-identity
+validation through one seed, accepts API-discovered members, and proposes only
+additive enrollment. Existing pod and display-device choices are preserved.
+Ambiguous, unreachable, unauthorized, TLS-invalid, and waiting-for-agent sites
+are explained and skipped.
+
 The password is entered through a hidden prompt and is never accepted on the
 command line. `test network` performs DNS and strict TLS checks without a
-credential. Run the authenticated API test and enable the schedule only during
-an explicitly authorized test window:
+credential. Run the authenticated API test and enable the worker/fallback only
+during an explicitly authorized setup window:
 
 ```bash
 sudo -u librenms php windows-agent-overlay/horizon-central-config.php test api --site abc
-sudo -u librenms php windows-agent-overlay/horizon-central-collector.php --site abc
-sudo php /opt/librenms/windows-agent-overlay/horizon-central-config.php schedule enable \
+sudo -u librenms php windows-agent-overlay/horizon-central-collector.php --site abc --force
+sudo php /opt/librenms/windows-agent-overlay/horizon-central-config.php worker enable \
   --librenms-root /opt/librenms
 ```
 
 Overlay upgrades do not replace `.env`, `.horizon-pods.json`, or the collector's
-last-good state. Use `config status` for a sanitized summary; it reports only
-whether a credential exists.
+last-good state. The display device is only a stable LibreNMS application/data
+anchor: its down state does not stop API collection, while deletion of the
+device or application produces a bounded reassignment error. Central collection
+owns the Horizon API/platform RRD writes, so pollers cannot create duplicate or
+conflicting central samples. Failed refreshes retain the last good application
+snapshot and write unknown RRD samples.
+
+Use `config status`, `pod list`, and `worker status` for sanitized state.
+`capability show` prints the generic overlay/configuration/private-integration
+contract without credentials or site-specific knowledge.
 
 ### 4. Install Or Update The Windows Agent
 
@@ -279,7 +305,7 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Install a specific overlay version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.15
+curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.16
 ```
 
 Preview without changing the node:

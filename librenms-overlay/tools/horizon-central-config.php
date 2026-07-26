@@ -5,9 +5,15 @@ declare(strict_types=1);
 
 use WindowsAgentOverlay\Horizon\CurlApiSession;
 use WindowsAgentOverlay\Horizon\HorizonFailure;
+use WindowsAgentOverlay\Horizon\HorizonPodDiscovery;
 use WindowsAgentOverlay\Horizon\PodCollector;
+use WindowsAgentOverlay\Horizon\RedisHorizonCoordination;
+use Illuminate\Support\Facades\DB;
 
 require_once __DIR__ . '/horizon-central-lib.php';
+require_once __DIR__ . '/horizon-central-coordination.php';
+require_once __DIR__ . '/horizon-central-discovery.php';
+require_once __DIR__ . '/horizon-central-collector.php';
 
 final class HorizonCentralConfiguration
 {
@@ -26,12 +32,16 @@ final class HorizonCentralConfiguration
                 'pod:remove' => self::changePod($configPath, $options, 'remove'),
                 'pod:enable' => self::changePod($configPath, $options, 'enable'),
                 'pod:disable' => self::changePod($configPath, $options, 'disable'),
+                'pod:discover' => self::discoverPods($root, $configPath, $envPath, $options),
+                'pod:list' => self::status($configPath, $envPath),
                 'config:validate' => self::validate($configPath, $envPath),
                 'config:status' => self::status($configPath, $envPath),
                 'test:network' => self::testNetwork($configPath, $options),
                 'test:api' => self::testApi($configPath, $envPath, $options),
-                'schedule:enable' => self::enableSchedule($root, $options),
-                'schedule:disable' => self::disableSchedule($options),
+                'worker:enable', 'schedule:enable' => self::enableWorker($root, $configPath, $options),
+                'worker:disable', 'schedule:disable' => self::disableWorker($options),
+                'worker:status', 'schedule:status' => self::workerStatus($options),
+                'capability:show' => self::showCapability(),
                 default => self::usage(),
             };
         } catch (HorizonFailure $failure) {
@@ -127,7 +137,7 @@ final class HorizonCentralConfiguration
             }
         }
         if (! $replaced) $pods[] = $pod;
-        $config['version'] = 1;
+        $config['version'] = 2;
         $config['pods'] = array_values($pods);
         self::writeConfig($path, $config);
         fwrite(STDOUT, 'Pod ' . $pod['site'] . ($replaced ? " updated.\n" : " added.\n"));
@@ -136,7 +146,11 @@ final class HorizonCentralConfiguration
     }
 
     /** @param array<string,string|bool> $options */
-    private static function changePod(string $path, array $options, string $operation): int
+    private static function changePod(
+        string $path,
+        array $options,
+        string $operation
+    ): int
     {
         $site = strtolower(trim((string) ($options['site'] ?? '')));
         if ($site === '') throw new HorizonFailure('missing_site');
@@ -151,10 +165,139 @@ final class HorizonCentralConfiguration
         }
         unset($pod);
         if (! $found) throw new HorizonFailure('site_not_found');
-        $config['version'] = 1;
+        $config['version'] = 2;
         $config['pods'] = array_values($pods);
         self::writeConfig($path, $config);
         fwrite(STDOUT, "Pod {$site} {$operation}d.\n");
+
+        return 0;
+    }
+
+    /** @param array<string,string|bool> $options */
+    private static function discoverPods(
+        string $root,
+        string $configPath,
+        string $envPath,
+        array $options
+    ): int {
+        $dnsSuffix = strtolower(rtrim(trim((string) ($options['dns-suffix'] ?? '')), '.'));
+        if ($dnsSuffix === '') {
+            throw new HorizonFailure('missing_dns_suffix');
+        }
+        $env = self::readEnv($envPath);
+        $credential = [
+            'username' => (string) ($env['WINDOWS_AGENT_HORIZON_API_USERNAME'] ?? ''),
+            'password' => (string) ($env['WINDOWS_AGENT_HORIZON_API_PASSWORD'] ?? ''),
+            'domain' => (string) ($env['WINDOWS_AGENT_HORIZON_API_DOMAIN'] ?? ''),
+        ];
+        if ($credential['username'] === '' || $credential['password'] === '') {
+            throw new HorizonFailure('credentials_missing');
+        }
+
+        HorizonCentralRuntime::bootLibreNms($root);
+        $rows = DB::select(
+            <<<'SQL'
+SELECT
+    d.device_id,
+    d.hostname,
+    d.status,
+    d.disabled,
+    MAX(CASE WHEN a.app_id IS NULL THEN 0 ELSE 1 END) AS has_application,
+    MAX(CASE WHEN am.metric = 'horizon_detected' AND am.value > 0 THEN 1 ELSE 0 END) AS horizon_detected
+FROM devices AS d
+LEFT JOIN applications AS a
+    ON a.device_id = d.device_id
+    AND a.app_type = 'windows-agent'
+    AND a.app_instance = ''
+    AND a.deleted_at IS NULL
+LEFT JOIN application_metrics AS am
+    ON am.app_id = a.app_id
+WHERE LOWER(d.hostname) LIKE ?
+GROUP BY d.device_id, d.hostname, d.status, d.disabled
+ORDER BY d.hostname
+SQL,
+            ['%-vcs%.' . $dnsSuffix]
+        );
+        $devices = array_map(
+            static fn (object $row): array => [
+                'device_id' => (int) $row->device_id,
+                'hostname' => (string) $row->hostname,
+                'status' => (int) $row->status,
+                'disabled' => (int) $row->disabled,
+                'has_application' => (int) $row->has_application === 1,
+                'horizon_detected' => (int) $row->horizon_detected === 1,
+            ],
+            $rows
+        );
+        $config = self::readConfig($configPath);
+        $collector = new PodCollector();
+        $results = HorizonPodDiscovery::discover(
+            $devices,
+            is_array($config['pods'] ?? null) ? $config['pods'] : [],
+            $dnsSuffix,
+            static fn (array $pod, string $seed): array => $collector->discoverFromEndpoint(
+                $pod,
+                $credential,
+                $seed
+            )
+        );
+
+        foreach ($results as $result) {
+            $parts = [
+                'site=' . ($result['site'] ?? 'unknown'),
+                'state=' . ($result['state'] ?? 'unknown'),
+                'reason=' . ($result['reason'] ?? 'unknown'),
+            ];
+            foreach (['seed', 'display_device'] as $key) {
+                if (! empty($result[$key])) {
+                    $parts[] = str_replace('_', '-', $key) . '=' . $result[$key];
+                }
+            }
+            if (is_array($result['members'] ?? null)) {
+                $parts[] = 'members=' . count($result['members']);
+            }
+            fwrite(STDOUT, implode(' ', $parts) . PHP_EOL);
+        }
+
+        if (! isset($options['apply'])) {
+            fwrite(STDOUT, "Preview only; no configuration or shared registration changed.\n");
+
+            return 0;
+        }
+
+        $newPods = [];
+        foreach ($results as $result) {
+            if (($result['state'] ?? '') !== 'ready' || ! is_array($result['pod'] ?? null)) {
+                continue;
+            }
+            $pod = $result['pod'];
+            $pod['display_device_id'] = (int) ($result['display_device_id'] ?? 0);
+            $newPods[] = $pod;
+        }
+        if ($newPods === []) {
+            fwrite(STDOUT, "No validated new pods to add.\n");
+
+            return 0;
+        }
+
+        $original = is_file($configPath) ? (string) file_get_contents($configPath) : null;
+        $config['version'] = 2;
+        $config['pods'] = array_values(array_merge($config['pods'] ?? [], $newPods));
+        self::writeConfig($configPath, $config);
+        try {
+            $coordination = new RedisHorizonCoordination();
+            foreach ($newPods as $pod) {
+                HorizonCentralRuntime::registerPod($pod, $coordination);
+            }
+        } catch (Throwable $failure) {
+            if ($original === null) {
+                @unlink($configPath);
+            } else {
+                self::atomicWrite($configPath, $original, 0600, false);
+            }
+            throw $failure;
+        }
+        fwrite(STDOUT, 'Added ' . count($newPods) . " validated pod(s); existing pods were unchanged.\n");
 
         return 0;
     }
@@ -166,9 +309,11 @@ final class HorizonCentralConfiguration
             if (! is_array($pod)) throw new HorizonFailure('invalid_pod');
             PodCollector::validateConfig($pod);
         }
+        $version = (int) ($config['version'] ?? 1);
+        if ($version < 1 || $version > 2) throw new HorizonFailure('unsupported_configuration_schema');
         $env = self::readEnv($envPath);
         $credential = isset($env['WINDOWS_AGENT_HORIZON_API_USERNAME'], $env['WINDOWS_AGENT_HORIZON_API_PASSWORD']) && $env['WINDOWS_AGENT_HORIZON_API_USERNAME'] !== '' && $env['WINDOWS_AGENT_HORIZON_API_PASSWORD'] !== '';
-        fwrite(STDOUT, 'Configuration valid. pods=' . count($config['pods'] ?? []) . ' credential=' . ($credential ? 'present' : 'absent') . PHP_EOL);
+        fwrite(STDOUT, 'Configuration valid. schema=' . $version . ' pods=' . count($config['pods'] ?? []) . ' credential=' . ($credential ? 'present' : 'absent') . PHP_EOL);
 
         return 0;
     }
@@ -178,6 +323,7 @@ final class HorizonCentralConfiguration
         $config = self::readConfig($configPath);
         $env = self::readEnv($envPath);
         $credential = ($env['WINDOWS_AGENT_HORIZON_API_USERNAME'] ?? '') !== '' && ($env['WINDOWS_AGENT_HORIZON_API_PASSWORD'] ?? '') !== '';
+        echo 'schema=' . (int) ($config['version'] ?? 1) . PHP_EOL;
         echo 'credential=' . ($credential ? 'present' : 'absent') . PHP_EOL;
         foreach (($config['pods'] ?? []) as $pod) {
             if (! is_array($pod)) continue;
@@ -226,27 +372,158 @@ final class HorizonCentralConfiguration
     }
 
     /** @param array<string,string|bool> $options */
-    private static function enableSchedule(string $root, array $options): int
-    {
-        $cronPath = (string) ($options['cron-path'] ?? '/etc/cron.d/librenms-windows-agent-horizon');
-        if (function_exists('posix_geteuid') && posix_geteuid() !== 0) throw new HorizonFailure('schedule_requires_root');
+    private static function enableWorker(
+        string $root,
+        string $configPath,
+        array $options
+    ): int {
+        $unitDir = rtrim((string) ($options['unit-dir'] ?? '/etc/systemd/system'), '/');
+        $localWriteOnly = isset($options['no-systemctl']) && $unitDir !== '/etc/systemd/system';
+        if (function_exists('posix_geteuid') && posix_geteuid() !== 0 && ! $localWriteOnly) {
+            throw new HorizonFailure('worker_enable_requires_root');
+        }
+        if (! is_file($configPath)) {
+            throw new HorizonFailure('configuration_missing');
+        }
+        $config = self::readConfig($configPath);
+        if (($config['pods'] ?? []) === []) {
+            throw new HorizonFailure('no_pods_configured');
+        }
+        $worker = $root . '/windows-agent-overlay/horizon-central-worker.php';
         $collector = $root . '/windows-agent-overlay/horizon-central-collector.php';
-        if (! is_file($collector)) throw new HorizonFailure('collector_not_installed');
-        $line = "# Managed by LibreNMS Windows Agent overlay; collection is inactive without local pod configuration.\n";
-        $line .= "*/5 * * * * librenms /usr/bin/php " . escapeshellarg($collector) . " >/dev/null\n";
-        self::atomicWrite($cronPath, $line, 0644, true);
-        fwrite(STDOUT, "Five-minute schedule enabled.\n");
+        if (! is_file($worker) || ! is_file($collector)) {
+            throw new HorizonFailure('central_worker_not_installed');
+        }
+
+        $workerUnit = <<<'UNIT'
+[Unit]
+Description=LibreNMS Windows Agent Horizon central trigger worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=librenms
+Group=librenms
+ExecStart=/usr/bin/php __WORKER__ --librenms-root __ROOT__
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+UNIT;
+        $fallbackUnit = <<<'UNIT'
+[Unit]
+Description=LibreNMS Windows Agent Horizon five-minute fallback
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=librenms
+Group=librenms
+ExecStart=/usr/bin/php __COLLECTOR__ --librenms-root __ROOT__ --fallback
+NoNewPrivileges=true
+PrivateTmp=true
+UNIT;
+        $timerUnit = <<<'UNIT'
+[Unit]
+Description=LibreNMS Windows Agent Horizon five-minute fallback timer
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+AccuracySec=15s
+Persistent=true
+Unit=librenms-windows-agent-horizon-fallback.service
+
+[Install]
+WantedBy=timers.target
+UNIT;
+        $replace = [
+            '__WORKER__' => self::systemdEscape($worker),
+            '__COLLECTOR__' => self::systemdEscape($collector),
+            '__ROOT__' => self::systemdEscape($root),
+        ];
+        self::atomicWrite(
+            $unitDir . '/librenms-windows-agent-horizon-worker.service',
+            strtr($workerUnit, $replace) . PHP_EOL,
+            0644,
+            true
+        );
+        self::atomicWrite(
+            $unitDir . '/librenms-windows-agent-horizon-fallback.service',
+            strtr($fallbackUnit, $replace) . PHP_EOL,
+            0644,
+            true
+        );
+        self::atomicWrite(
+            $unitDir . '/librenms-windows-agent-horizon-fallback.timer',
+            $timerUnit . PHP_EOL,
+            0644,
+            true
+        );
+
+        $cronPath = (string) ($options['cron-path'] ?? '/etc/cron.d/librenms-windows-agent-horizon');
+        if (self::isManagedLegacyCron($cronPath)) {
+            @unlink($cronPath);
+        }
+        if (! isset($options['no-systemctl'])) {
+            self::systemctl(['daemon-reload']);
+            self::systemctl(['enable', '--now', 'librenms-windows-agent-horizon-worker.service']);
+            self::systemctl(['enable', '--now', 'librenms-windows-agent-horizon-fallback.timer']);
+        }
+        fwrite(STDOUT, "Central trigger worker and five-minute fallback enabled.\n");
 
         return 0;
     }
 
     /** @param array<string,string|bool> $options */
-    private static function disableSchedule(array $options): int
+    private static function disableWorker(array $options): int
     {
+        $unitDir = rtrim((string) ($options['unit-dir'] ?? '/etc/systemd/system'), '/');
+        $localWriteOnly = isset($options['no-systemctl']) && $unitDir !== '/etc/systemd/system';
+        if (function_exists('posix_geteuid') && posix_geteuid() !== 0 && ! $localWriteOnly) {
+            throw new HorizonFailure('worker_disable_requires_root');
+        }
+        if (! isset($options['no-systemctl'])) {
+            self::systemctl(['disable', '--now', 'librenms-windows-agent-horizon-worker.service'], true);
+            self::systemctl(['disable', '--now', 'librenms-windows-agent-horizon-fallback.timer'], true);
+        }
+        foreach ([
+            'librenms-windows-agent-horizon-worker.service',
+            'librenms-windows-agent-horizon-fallback.service',
+            'librenms-windows-agent-horizon-fallback.timer',
+        ] as $unit) {
+            $path = $unitDir . '/' . $unit;
+            if (is_file($path) && ! unlink($path)) {
+                throw new HorizonFailure('worker_unit_remove_failed');
+            }
+        }
         $cronPath = (string) ($options['cron-path'] ?? '/etc/cron.d/librenms-windows-agent-horizon');
-        if (function_exists('posix_geteuid') && posix_geteuid() !== 0) throw new HorizonFailure('schedule_requires_root');
-        if (is_file($cronPath) && ! unlink($cronPath)) throw new HorizonFailure('schedule_remove_failed');
-        fwrite(STDOUT, "Schedule disabled.\n");
+        if (self::isManagedLegacyCron($cronPath)) {
+            @unlink($cronPath);
+        }
+        if (! isset($options['no-systemctl'])) {
+            self::systemctl(['daemon-reload']);
+        }
+        fwrite(STDOUT, "Central trigger worker and fallback disabled.\n");
+
+        return 0;
+    }
+
+    /** @param array<string,string|bool> $options */
+    private static function workerStatus(array $options): int
+    {
+        $unitDir = rtrim((string) ($options['unit-dir'] ?? '/etc/systemd/system'), '/');
+        foreach ([
+            'worker' => 'librenms-windows-agent-horizon-worker.service',
+            'fallback' => 'librenms-windows-agent-horizon-fallback.service',
+            'timer' => 'librenms-windows-agent-horizon-fallback.timer',
+        ] as $name => $unit) {
+            fwrite(STDOUT, $name . '=' . (is_file($unitDir . '/' . $unit) ? 'installed' : 'absent') . PHP_EOL);
+        }
 
         return 0;
     }
@@ -366,6 +643,50 @@ final class HorizonCentralConfiguration
         }
     }
 
+    private static function showCapability(): int
+    {
+        $path = __DIR__ . '/capabilities.json';
+        if (! is_file($path)) {
+            throw new HorizonFailure('capability_manifest_missing');
+        }
+        fwrite(STDOUT, (string) file_get_contents($path));
+
+        return 0;
+    }
+
+    private static function isManagedLegacyCron(string $path): bool
+    {
+        if (! is_file($path)) {
+            return false;
+        }
+        $marker = '# Managed by LibreNMS Windows Agent overlay; collection is inactive without local pod configuration.';
+
+        return str_contains((string) file_get_contents($path), $marker);
+    }
+
+    private static function systemdEscape(string $value): string
+    {
+        return '"' . str_replace(['\\', '"'], ['\\\\', '\\"'], $value) . '"';
+    }
+
+    /** @param list<string> $arguments */
+    private static function systemctl(array $arguments, bool $allowFailure = false): void
+    {
+        $command = array_merge(['/usr/bin/systemctl'], $arguments);
+        $process = proc_open($command, [
+            0 => ['file', '/dev/null', 'r'],
+            1 => ['file', 'php://stdout', 'w'],
+            2 => ['file', 'php://stderr', 'w'],
+        ], $pipes);
+        if (! is_resource($process)) {
+            throw new HorizonFailure('systemctl_start_failed');
+        }
+        $exit = proc_close($process);
+        if ($exit !== 0 && ! $allowFailure) {
+            throw new HorizonFailure('systemctl_failed');
+        }
+    }
+
     private static function prompt(string $label, bool $secret): string
     {
         fwrite(STDOUT, $label);
@@ -389,10 +710,14 @@ Horizon central collector configuration
 
   credential set|rotate|remove
   pod add --site abc --dns-suffix example.test --display-device abc-vcs2.example.test
+  pod discover --dns-suffix example.test [--apply]
+  pod list
   pod enable|disable|remove --site abc
   config validate|status
   test network|api --site abc
-  schedule enable|disable
+  worker enable|disable|status
+  schedule enable|disable|status  (compatibility alias)
+  capability show
 
 Credentials are prompted securely and are never accepted as command-line values.
 HELP

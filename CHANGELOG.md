@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.6.16 - 2026-07-25
+
+- Added a credential-free Redis trigger producer to the shared
+  `windows-agent` application polling path, so normal distributed polling and
+  explicit device polling enqueue only the registered display device's site
+  without contacting Horizon or failing the device poll.
+- Added a collector-node trigger worker, per-site distributed lock and
+  cooldown, and an independent five-minute systemd fallback. Triggered,
+  fallback, and forced manual diagnostics now share one collection path.
+- Made the centralized collector the sole writer for central Horizon RRD
+  families. Application polls preserve the latest central snapshot without
+  duplicate writes; failed refreshes retain last-good data and write unknown
+  samples.
+- Added generic preview-first, add-only pod discovery for
+  `<site>-vcs<number>.<dns-suffix>` devices with application readiness,
+  DNS/TLS/authentication, pod-identity, API-member, ambiguity, and existing-pod
+  safeguards.
+- Added the generic `capabilities.json` overlay/configuration/private-
+  integration contract, worker lifecycle/status commands, legacy schedule
+  aliases, unit-aware rollback, overlay-only release building, and expanded
+  generic fixture coverage. Windows agent/MSI remains at 0.6.14.
+
 ## Workflow maintenance - 2026-07-25
 
 - Migrated the managed Codex project workflow from the exact initial V6 cohort

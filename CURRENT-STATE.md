@@ -25,23 +25,25 @@ and private exports do not belong here.
 
 ## Current Releases
 
-- Overlay version: `0.6.15`
+- Overlay version: `0.6.16`
 - Windows agent version: `0.6.14`
-- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.15.tar.gz`
+- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.16.tar.gz`
 - Windows MSI: `artifacts/librenms-windows-agent-0.6.14.msi`
 - Checksums: `SHA256SUMS`
-- Overlay SHA256: `295949ee3e3b19a062837d928b9658fbafb05c429fc9e6a6a5b884f20b9cf074`
+- Overlay SHA256: `677f40a7a03c1547f5c27ee32bb6a44126e83252d474ac6d4d67300652cd5285`
 - Windows MSI SHA256: `e2dc68edd5b0aaa1f21828e8292d37b7412dcb0353dcf11db0f458859d759b89`
 - Public overlay installer: `install.sh`
 - Public Windows installer: `install-agent.ps1`
 
 Windows agent release `0.6.14` retains the complete bounded FactoryTalk
 collection set and adds local Horizon process telemetry plus the
-disabled-by-default read-only Horizon API integration. Overlay release `0.6.15`
-adds the centralized Horizon pod collector, keeps API credentials off Windows
-hosts, and preserves local agent telemetry independently. Existing
-installations remain rollback-safe, and Windows setup requires the service to
-reach `Running` before it succeeds.
+disabled-by-default read-only Horizon API integration. Overlay release `0.6.16`
+adds credential-free Redis poll triggers, a collector-only worker with shared
+locks and cooldown, an independent five-minute fallback, preview-first add-only
+pod discovery, and a generic capability contract. Horizon credentials remain
+only on the collector node, and local Windows telemetry stays independent.
+Existing installations remain rollback-safe, and Windows setup requires the
+service to reach `Running` before it succeeds.
 
 ## Product Contract
 
@@ -86,9 +88,10 @@ fixtures.
 
 ## Next Recommended Action
 
-Install overlay 0.6.15 on the required LibreNMS nodes. On the designated active
-node only, provision a dedicated read-only Horizon credential through the
-protected prompt, validate one non-production pod manually, and verify
-failover, polling, and LibreNMS presentation before enabling the managed
-five-minute schedule. The Windows MSI remains at 0.6.14 and does not require an
-upgrade for this overlay-only release.
+Deployment is intentionally waiting at an explicit approval checkpoint.
+Install overlay 0.6.16 on application nodes only, then configure the protected
+credential, pod registrations, central worker, Redis trigger path, and
+five-minute fallback on the designated collector node. Validate a manual
+device poll, lost-trigger fallback, display-device-down continuity, failover,
+stale retention, and publication before acceptance. The Windows MSI remains at
+0.6.14 and does not require an upgrade for this overlay-only release.
