@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.19 - 2026-07-26
+
+- Made the Horizon Operations workspace native to both LibreNMS light and dark
+  themes, with responsive metric labels and consistent surfaces, borders,
+  controls, tables, and detail drawers.
+- Added a bounded, sanitized all-machine inventory so each expanded pool can
+  filter real rows by all, issue, in-session, ready, or unavailable state.
+  Every machine row now opens focused in-place detail.
+- Replaced generic Connection Server navigation from conditions and platform
+  health with in-place server detail, including unhealthy service evidence.
+- Preserved the approved pool policy, 30-day default trend, non-alerting
+  behavior, existing RRD schemas, and Windows agent/MSI version 0.6.14.
+
 ## 0.6.18 - 2026-07-25
 
 - Added bounded unhealthy Connection Server service evidence, bounded

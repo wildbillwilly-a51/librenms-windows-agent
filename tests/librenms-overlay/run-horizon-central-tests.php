@@ -111,7 +111,7 @@ function testConfig(): array
     return [
         'site' => 'abc', 'dns_suffix' => 'example.test', 'display_device' => 'abc-vcs2.example.test',
         'enabled' => true, 'pool_warning_percent' => 50, 'pool_critical_percent' => 90,
-        'pool_minimum_spares' => 2, 'machine_issue_limit' => 100, 'page_size' => 100, 'max_pages' => 2,
+        'pool_minimum_spares' => 2, 'machine_detail_limit' => 1000, 'machine_issue_limit' => 100, 'page_size' => 100, 'max_pages' => 2,
     ];
 }
 
@@ -177,6 +177,8 @@ $tests['failover discovery gateway exclusion and scoring'] = static function ():
     expect($snapshot['horizon_pools'][1]['health_state'] === 'warning', 'two or more unavailable spares should warn while ready capacity remains');
     expect($snapshot['horizon_pools_summary']['pools_informational'] === 1, 'informational pool total missing');
     expect($snapshot['horizon_pools_summary']['pools_warning'] === 1, 'warning pool total missing');
+    expect(count($snapshot['horizon_pool_machines']) === 12, 'bounded all-machine inventory was not retained');
+    expect($snapshot['horizon_pool_machines'][0]['issue'] === 1, 'issue-first machine ordering changed');
     expect($snapshot['horizon_pool_machine_issues'][0]['name'] === 'abc-desktop-002', 'bounded issue-machine identity was not retained');
     expect(! str_contains(json_encode($snapshot, JSON_THROW_ON_ERROR), $fixtureValue), 'credential leaked into snapshot');
     expect(! str_contains(json_encode($snapshot, JSON_THROW_ON_ERROR), 'must-not-persist'), 'user or client identity leaked into snapshot');
@@ -249,7 +251,9 @@ $tests['active machines with bad Horizon state remain selectable evidence'] = st
     ];
     $snapshot = (new PodCollector(static fn (): ApiSession => new FakeHorizonSession($responses)))->collect(testConfig(), ['username' => 'reader', 'password' => str_repeat('x', 12)]);
     $issue = array_values(array_filter($snapshot['horizon_pool_machine_issues'], static fn (array $row): bool => ($row['id'] ?? '') === 'a2'))[0] ?? [];
+    $detail = array_values(array_filter($snapshot['horizon_pool_machines'], static fn (array $row): bool => ($row['id'] ?? '') === 'a2'))[0] ?? [];
     expect(($issue['has_session'] ?? 0) === 1, 'active issue machine did not retain session-presence evidence');
+    expect(($detail['has_session'] ?? 0) === 1, 'all-machine inventory lost session-presence evidence');
     expect(($issue['issue_reason'] ?? '') === 'machine_state_error', 'active issue machine reason changed');
     expect(! str_contains(json_encode($snapshot, JSON_THROW_ON_ERROR), 'must-not-persist'), 'session user identity leaked into issue evidence');
 };
@@ -260,9 +264,13 @@ $tests['issue details and unhealthy service evidence are bounded'] = static func
         ['name' => 'MESSAGE_BUS', 'status' => 'STOPPED'],
     ];
     $config = testConfig();
+    $config['machine_detail_limit'] = 1;
     $config['machine_issue_limit'] = 1;
     $config['unhealthy_service_limit'] = 1;
     $snapshot = (new PodCollector(static fn (): ApiSession => new FakeHorizonSession($responses)))->collect($config, ['username' => 'reader', 'password' => str_repeat('x', 12)]);
+    expect(count($snapshot['horizon_pool_machines']) === 1, 'machine detail limit was not enforced');
+    expect($snapshot['horizon_api_summary']['machine_details_total'] === 12, 'authoritative machine total was reduced to the detail limit');
+    expect($snapshot['horizon_api_summary']['machine_details_truncated'] === 1, 'machine detail truncation was not disclosed');
     expect(count($snapshot['horizon_pool_machine_issues']) === 1, 'machine issue detail limit was not enforced');
     expect($snapshot['horizon_api_summary']['machine_issues_total'] === 10, 'authoritative issue total was reduced to the detail limit');
     expect($snapshot['horizon_api_summary']['machine_issues_truncated'] === 1, 'machine issue truncation was not disclosed');
@@ -435,7 +443,7 @@ $tests['discovery reports TLS auth identity and cross-site ambiguity failures'] 
 $tests['capability manifest advertises the stable private integration contract'] = static function (): void {
     $path = dirname(__DIR__, 2) . '/librenms-overlay/tools/capabilities.json';
     $manifest = json_decode((string) file_get_contents($path), true, flags: JSON_THROW_ON_ERROR);
-    expect($manifest['overlay_version'] === '0.6.18', 'overlay capability version mismatch');
+    expect($manifest['overlay_version'] === '0.6.19', 'overlay capability version mismatch');
     expect($manifest['configuration_schema_version'] === 2, 'configuration schema version mismatch');
     expect($manifest['capabilities']['horizon_trigger_producer'] === 1, 'trigger capability missing');
     expect($manifest['capabilities']['horizon_central_worker'] === 1, 'worker capability missing');

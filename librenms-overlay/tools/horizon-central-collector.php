@@ -28,7 +28,7 @@ final class HorizonCentralRuntime
         'horizon_pod_members', 'horizon_configuration_replications', 'horizon_directory_summary',
         'horizon_directory_domains', 'horizon_directory_member_status', 'horizon_gateways',
         'horizon_pools_summary', 'horizon_pools', 'horizon_pool_machine_states',
-        'horizon_pool_machine_issues', 'horizon_central_meta',
+        'horizon_pool_machines', 'horizon_pool_machine_issues', 'horizon_central_meta',
     ];
 
     /** @param array<string,mixed> $options */

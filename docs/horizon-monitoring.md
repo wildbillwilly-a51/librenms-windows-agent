@@ -48,7 +48,7 @@ and statistical samples, and Horizon can also emit those events as Syslog.
 
 Release 0.6.14 implements local process telemetry and the initial disabled
 Windows-side API prototype without changing the existing Horizon RRD schema.
-Overlay release 0.6.18 provides the cluster-safe centralized successor and
+Overlay release 0.6.19 provides the cluster-safe centralized successor and
 operational UI:
 
 1. `windows_agent_horizon_runtime_summary` reports state, process count, CPU,
@@ -110,13 +110,17 @@ operational UI:
     root-cause drill-down without retaining user or client identity.
 19. An additive collector-health RRD and combined sessions/headroom graph add
     reliability and demand trends without changing existing RRD schemas.
+20. A bounded, sanitized all-machine inventory supports real in-place pool
+    filtering by issue, in-session, ready, and unavailable state. Connection
+    Server targets open local detail, and the workspace follows LibreNMS light
+    and dark themes.
 
 The existing FactoryTalk runtime sampler was generalized into a shared role
 process sampler rather than duplicated.
 
-## Implemented In Overlay 0.6.18
+## Implemented In Overlay 0.6.19
 
-Overlay 0.6.18 implements the approved collector and UI requirements:
+Overlay 0.6.19 implements the approved collector and UI requirements:
 
 1. Retain a bounded, sanitized list of unhealthy service names and statuses
    for each Connection Server instead of publishing only a count.
@@ -143,9 +147,15 @@ The UI is a first-class part of this work. The implemented redesign:
 - allow every pool row to expand in place into its machine inventory, with
   issue machines sorted first and visibly distinguished from healthy,
   in-session, maintenance, and unavailable machines;
-- make each issue machine selectable so an operator can inspect its state,
+- make each machine selectable so an operator can inspect its state,
   pool, maintenance and session context, issue reason, collection time, and
   next action without losing the expanded pool context;
+- make pool counts direct filters for the real all-machine inventory and show
+  unavailable machines as explicit rows whenever present;
+- open Connection Server conditions and platform members as in-place detail
+  instead of routing operators to a generic device dashboard;
+- use theme-native light/dark surfaces, readable contrast, and explicit mobile
+  pool metric labels;
 - preserve complete pod, directory, gateway, replication, protocol, and raw
   diagnostics below the operational summary without crowding the first
   viewport;
@@ -167,14 +177,13 @@ generic score or an equal-weight metric-card grid. The primary order is:
 6. directory, gateway, replication, protocol, machine-state, and raw
    diagnostics.
 
-The central snapshot must therefore add a bounded, sanitized per-machine issue
-inventory suitable for the expanded pool view. Each issue row must carry only
+The central snapshot therefore includes a bounded, sanitized per-machine
+inventory suitable for the expanded pool view. Each machine row carries only
 the stable machine identifier/name, pool association, current state,
 maintenance flag, session-presence flag, normalized issue reason, and
-collection timestamp needed by the UI. Healthy-machine detail may remain
-summary-oriented to keep snapshots bounded, but the pool expansion must still
-communicate total, in-session, ready, unavailable, maintenance, and issue
-counts. Truncation must be explicit.
+collection timestamp needed by the UI. The separate issue inventory remains
+available for issue-first evidence and compatibility. Both inventories are
+bounded and truncation is explicit.
 
 Pool health uses observed ready and unavailable spare counts rather than a
 minimum sample-size warning:

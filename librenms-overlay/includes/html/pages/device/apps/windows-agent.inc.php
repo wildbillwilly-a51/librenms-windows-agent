@@ -61,6 +61,7 @@ $horizon_gateways = $data['horizon_gateways'] ?? [];
 $horizon_pools_summary = $data['horizon_pools_summary'] ?? [];
 $horizon_pools = $data['horizon_pools'] ?? [];
 $horizon_pool_machine_states = $data['horizon_pool_machine_states'] ?? [];
+$horizon_pool_machines = $data['horizon_pool_machines'] ?? [];
 $horizon_pool_machine_issues = $data['horizon_pool_machine_issues'] ?? [];
 $horizon_central_meta = $data['horizon_central_meta'] ?? [];
 $factorytalk_summary = $data['factorytalk_summary'] ?? [];
@@ -870,6 +871,7 @@ if ($horizon_surface_available) {
         ? (int) $horizon_central_meta['inventory_complete'] === 1
         : ((int) ($horizon_api_summary['sessions_truncated'] ?? 0) === 0
             && (int) ($horizon_api_summary['machines_truncated'] ?? 0) === 0
+            && (int) ($horizon_api_summary['machine_details_truncated'] ?? 0) === 0
             && (int) ($horizon_api_summary['machine_issues_truncated'] ?? 0) === 0
             && (int) ($horizon_api_summary['service_details_truncated'] ?? 0) === 0));
     $coverage = $coverageComplete ? 'Complete snapshot' : 'Inventory incomplete';
@@ -888,6 +890,7 @@ if ($horizon_surface_available) {
             'evidence' => 'Last success ' . (string) ($horizon_central_meta['last_success_utc'] ?? 'unknown') . ' • reason ' . (string) ($horizon_central_meta['reason'] ?? 'unknown'),
             'next' => 'Review collector reliability and endpoint evidence.',
             'target' => '#windows-agent-horizon-collector-trend',
+            'action' => 'disclosure',
         ];
     }
     foreach ($horizon_pools as $pool) {
@@ -909,7 +912,9 @@ if ($horizon_surface_available) {
             'reason' => $humanize_horizon_reason($reason),
             'evidence' => (string) ($pool['machines_with_sessions'] ?? 0) . ' of ' . (string) ($pool['machines_total'] ?? 0) . ' in session • ' . (string) ($pool['spare_ready'] ?? 0) . ' ready • ' . (string) ($pool['spare_unready'] ?? 0) . ' unavailable',
             'next' => $next,
-            'target' => '#windows-agent-horizon-pool-workspace',
+            'action' => 'pool',
+            'ref' => substr(hash('sha256', (string) ($pool['id'] ?? $pool['name'] ?? '')), 0, 12),
+            'filter' => (int) ($pool['spare_unready'] ?? 0) > 0 ? 'unavailable' : 'all',
         ];
     }
     foreach ($horizon_pod_members as $member) {
@@ -921,7 +926,8 @@ if ($horizon_surface_available) {
                 'reason' => (string) ($service['name'] ?? 'Unknown service') . ' unhealthy',
                 'evidence' => 'Service status ' . (string) ($service['status'] ?? 'UNKNOWN'),
                 'next' => 'Review the service and related Horizon components.',
-                'target' => '#windows-agent-horizon-connection-servers',
+                'action' => 'member',
+                'ref' => substr(hash('sha256', strtolower((string) ($member['name'] ?? 'Connection Server'))), 0, 12),
             ];
         }
     }
@@ -934,6 +940,7 @@ if ($horizon_surface_available) {
             'evidence' => (string) ($attention['detail'] ?? ''),
             'next' => (string) ($attention['action'] ?? 'Review Horizon diagnostics.'),
             'target' => '#windows-agent-horizon-raw',
+            'action' => 'disclosure',
         ];
     }
     usort($conditions, static fn (array $left, array $right): int => ($right['severity'] <=> $left['severity']) ?: strcasecmp((string) $left['object'], (string) $right['object']));
@@ -947,17 +954,68 @@ if ($horizon_surface_available) {
             $label = $state === 'info' ? 'Informational' : ($state === 'incomplete' ? 'Incomplete' : ucfirst($state));
             $icon = $state === 'critical' ? 'glyphicon-remove-sign' : ($state === 'info' ? 'glyphicon-info-sign' : 'glyphicon-exclamation-sign');
             $horizon_details .= '<div class="windows-agent-horizon-condition windows-agent-horizon-condition-' . $esc($state) . '"><span class="glyphicon ' . $icon . '" aria-hidden="true"></span>';
-            $horizon_details .= '<div class="windows-agent-horizon-condition-severity"><strong>' . $esc($label) . '</strong></div><div><a href="' . $esc($condition['target'] ?? '#windows-agent-horizon-pool-workspace') . '"><strong>' . $esc($condition['object']) . '</strong></a></div>';
+            $horizon_details .= '<div class="windows-agent-horizon-condition-severity"><strong>' . $esc($label) . '</strong></div><div>';
+            if (($condition['action'] ?? '') === 'member') {
+                $horizon_details .= '<button type="button" class="windows-agent-horizon-condition-target" data-member-drawer="' . $esc($condition['ref'] ?? '') . '"><strong>' . $esc($condition['object']) . '</strong><span class="sr-only"> details</span></button>';
+            } elseif (($condition['action'] ?? '') === 'pool') {
+                $horizon_details .= '<button type="button" class="windows-agent-horizon-condition-target" data-pool-open-filter="' . $esc($condition['filter'] ?? 'all') . '" data-pool="' . $esc($condition['ref'] ?? '') . '"><strong>' . $esc($condition['object']) . '</strong><span class="sr-only"> pool details</span></button>';
+            } else {
+                $horizon_details .= '<a class="windows-agent-horizon-condition-target" href="' . $esc($condition['target'] ?? '#windows-agent-horizon-pool-workspace') . '"><strong>' . $esc($condition['object']) . '</strong></a>';
+            }
+            $horizon_details .= '</div>';
             $horizon_details .= '<div><strong>' . $esc($condition['reason']) . '</strong><div class="text-muted">' . $esc($condition['evidence']) . '</div></div><div><span class="text-muted">Next:</span> ' . $esc($condition['next']) . '</div></div>';
         }
     }
     $horizon_details .= '</section>';
 
+    foreach ($horizon_pod_members as $member) {
+        $memberName = (string) ($member['name'] ?? 'Connection Server');
+        $memberRef = substr(hash('sha256', strtolower($memberName)), 0, 12);
+        $memberServices = is_array($member['unhealthy_services'] ?? null) ? $member['unhealthy_services'] : [];
+        $memberHealthy = $memberServices === []
+            && (int) ($member['configuration_replications_unhealthy'] ?? 0) === 0
+            && (int) ($member['certificate_valid'] ?? 1) === 1;
+        $horizon_details .= '<aside id="windows-agent-horizon-member-drawer-' . $esc($memberRef) . '" class="windows-agent-horizon-detail-drawer" data-horizon-drawer-panel="' . $esc($memberRef) . '" hidden><div class="windows-agent-horizon-drawer-header"><h4>Connection Server details</h4><button type="button" class="close" data-horizon-drawer-close aria-label="Close"><span aria-hidden="true">&times;</span></button></div>';
+        $horizon_details .= '<h3>' . $esc($memberName) . '</h3><p class="' . ($memberHealthy ? 'text-success' : 'text-warning') . '"><span class="glyphicon ' . ($memberHealthy ? 'glyphicon-ok-sign' : 'glyphicon-exclamation-sign') . '" aria-hidden="true"></span> ' . ($memberHealthy ? 'Healthy' : 'Attention required') . '</p><dl>';
+        foreach ([
+            'Horizon status' => $member['status'] ?? 'unknown',
+            'Type' => str_replace('_', ' ', (string) ($member['server_type'] ?? 'connection_server')),
+            'Version' => $member['version'] ?? 'unknown',
+            'Connections' => $member['connections'] ?? 0,
+            'API role' => ((int) ($member['local_api_target'] ?? 0) === 1) ? 'Current API target' : 'Peer',
+            'Certificate' => ((int) ($member['certificate_valid'] ?? 1) === 1) ? 'Valid' : 'Invalid',
+            'Replication issues' => $member['configuration_replications_unhealthy'] ?? 0,
+        ] as $label => $value) {
+            $horizon_details .= '<dt>' . $esc($label) . '</dt><dd>' . $esc($value) . '</dd>';
+        }
+        $horizon_details .= '</dl><div class="windows-agent-horizon-drawer-evidence"><h4>Unhealthy services</h4>';
+        if ($memberServices === []) {
+            $horizon_details .= '<p class="text-success">No unhealthy services reported.</p>';
+        } else {
+            $horizon_details .= '<ul class="windows-agent-horizon-service-list">';
+            foreach ($memberServices as $service) {
+                $horizon_details .= '<li><strong>' . $esc($service['name'] ?? 'Unknown service') . '</strong><span class="text-warning">' . $esc($service['status'] ?? 'UNKNOWN') . '</span></li>';
+            }
+            $horizon_details .= '</ul>';
+        }
+        if ((int) ($member['unhealthy_services_truncated'] ?? 0) === 1) {
+            $horizon_details .= '<p class="text-warning">Additional unhealthy services were truncated.</p>';
+        }
+        $horizon_details .= '</div><div class="windows-agent-horizon-drawer-next"><h4>Next action</h4><p>' . ($memberHealthy ? 'No action required.' : 'Review the listed Horizon service and related Connection Server components.') . '</p></div></aside>';
+    }
+    $horizon_details .= '<button type="button" class="windows-agent-horizon-drawer-backdrop" data-horizon-drawer-backdrop hidden aria-label="Close details"></button>';
+
     if ($horizon_api_available) {
-        $issuesByPool = [];
-        foreach ($horizon_pool_machine_issues as $issue) {
-            $poolKey = (string) ($issue['pool_id'] ?? $issue['pool'] ?? '');
-            $issuesByPool[$poolKey][] = $issue;
+        $machinesByPool = [];
+        foreach ($horizon_pool_machines as $machine) {
+            $poolKey = (string) ($machine['pool_id'] ?? $machine['pool'] ?? '');
+            $machinesByPool[$poolKey][] = $machine;
+        }
+        if ($machinesByPool === []) {
+            foreach ($horizon_pool_machine_issues as $machine) {
+                $poolKey = (string) ($machine['pool_id'] ?? $machine['pool'] ?? '');
+                $machinesByPool[$poolKey][] = $machine;
+            }
         }
         $sortedPools = $issue_first($horizon_pools, static function (array $row): int {
             return ['critical' => 50, 'warning' => 40, 'incomplete' => 30, 'info' => 20, 'disabled' => 10, 'ok' => 0][strtolower((string) ($row['health_state'] ?? 'incomplete'))] ?? 30;
@@ -966,7 +1024,7 @@ if ($horizon_surface_available) {
         $horizon_details .= '<div class="windows-agent-horizon-pool-head" aria-hidden="true"><span>Pool</span><span>State</span><span>Machines</span><span>In session</span><span>Ready</span><span>Unavailable</span><span>Placement headroom</span><span>Demand</span></div>';
         foreach ($sortedPools as $pool) {
             $poolKey = (string) ($pool['id'] ?? $pool['name'] ?? '');
-            $poolIssues = $issuesByPool[$poolKey] ?? $issuesByPool[(string) ($pool['name'] ?? '')] ?? [];
+            $poolMachines = $machinesByPool[$poolKey] ?? $machinesByPool[(string) ($pool['name'] ?? '')] ?? [];
             $poolRef = substr(hash('sha256', $poolKey), 0, 12);
             $state = strtolower((string) ($pool['health_state'] ?? 'incomplete'));
             $machines = max(0, (int) ($pool['machines_total'] ?? 0));
@@ -977,18 +1035,27 @@ if ($horizon_surface_available) {
             $occupancy = $machines > 0 ? ($sessions / $machines) * 100 : 0;
             $demand = $headroom <= 0 ? 'High' : ($occupancy >= 75 ? 'Moderate' : 'Low');
             $horizon_details .= '<div class="windows-agent-horizon-pool windows-agent-horizon-pool-' . $esc($state) . '">';
-            $horizon_details .= '<button type="button" class="windows-agent-horizon-pool-toggle" aria-expanded="false" aria-controls="windows-agent-horizon-pool-' . $esc($poolRef) . '" data-pool-toggle="' . $esc($poolRef) . '"><span class="glyphicon glyphicon-chevron-right windows-agent-horizon-pool-chevron" aria-hidden="true"></span>';
-            $horizon_details .= '<span class="windows-agent-horizon-pool-name"><strong>' . $esc($pool['display_name'] ?? $pool['name'] ?? 'Unknown pool') . '</strong><small>' . $esc($humanize_horizon_reason($pool['health_reason'] ?? 'unknown')) . '</small></span>';
             $stateLabel = $state === 'info' ? 'Capacity available' : ucfirst($state);
-            $horizon_details .= '<span><strong>' . $esc($stateLabel) . '</strong></span><span>' . $esc($machines) . '</span><span>' . $esc($sessions) . '</span><span>' . $esc($pool['spare_ready'] ?? 0) . '</span><span>' . $esc($pool['spare_unready'] ?? 0) . '</span>';
-            $horizon_details .= '<span class="windows-agent-horizon-headroom"><strong>' . $esc(number_format($headroom, 1)) . '%</strong><i><b style="width:' . $esc($headroom) . '%"></b></i></span><span>' . $esc($demand) . '</span></button>';
+            $horizon_details .= '<div class="windows-agent-horizon-pool-summary">';
+            $horizon_details .= '<button type="button" class="windows-agent-horizon-pool-toggle" aria-expanded="false" aria-controls="windows-agent-horizon-pool-' . $esc($poolRef) . '" data-pool-toggle="' . $esc($poolRef) . '"><span class="glyphicon glyphicon-chevron-right windows-agent-horizon-pool-chevron" aria-hidden="true"></span><span class="windows-agent-horizon-pool-name"><strong>' . $esc($pool['display_name'] ?? $pool['name'] ?? 'Unknown pool') . '</strong><small>' . $esc($humanize_horizon_reason($pool['health_reason'] ?? 'unknown')) . '</small></span></button>';
+            $horizon_details .= '<span class="windows-agent-horizon-pool-state" data-metric-label="State"><strong>' . $esc($stateLabel) . '</strong></span>';
+            foreach ([
+                'all' => ['value' => $machines, 'label' => 'all machines', 'metric' => 'Machines'],
+                'sessions' => ['value' => $sessions, 'label' => 'in-session machines', 'metric' => 'In session'],
+                'ready' => ['value' => (int) ($pool['spare_ready'] ?? 0), 'label' => 'ready machines', 'metric' => 'Ready'],
+                'unavailable' => ['value' => (int) ($pool['spare_unready'] ?? 0), 'label' => 'unavailable machines', 'metric' => 'Unavailable'],
+            ] as $filter => $count) {
+                $horizon_details .= '<button type="button" class="windows-agent-horizon-pool-count" data-metric-label="' . $esc($count['metric']) . '" data-pool-open-filter="' . $esc($filter) . '" data-pool="' . $esc($poolRef) . '" aria-label="Show ' . $esc($count['value']) . ' ' . $esc($count['label']) . '">' . $esc($count['value']) . '</button>';
+            }
+            $horizon_details .= '<span class="windows-agent-horizon-headroom" data-metric-label="Headroom"><strong>' . $esc(number_format($headroom, 1)) . '%</strong><i><b style="width:' . $esc($headroom) . '%"></b></i></span><span class="windows-agent-horizon-demand" data-metric-label="Demand">' . $esc($demand) . '</span></div>';
             $horizon_details .= '<div id="windows-agent-horizon-pool-' . $esc($poolRef) . '" class="windows-agent-horizon-machine-region" data-pool-region="' . $esc($poolRef) . '" hidden>';
-            $horizon_details .= '<div class="windows-agent-horizon-machine-toolbar"><strong>Machines in ' . $esc($pool['display_name'] ?? $pool['name'] ?? 'pool') . '</strong><span class="text-muted">Issue first</span><div class="btn-group btn-group-xs" role="group" aria-label="Machine filter">';
+            $horizon_details .= '<div class="windows-agent-horizon-machine-toolbar"><div><strong>Machine inventory</strong><span class="text-muted"> ' . $esc($pool['display_name'] ?? $pool['name'] ?? 'pool') . '</span></div><div class="btn-group btn-group-xs" role="group" aria-label="Machine filter">';
             $filters = [
                 'all' => 'All ' . $machines,
-                'issues' => 'Issues ' . (int) ($pool['issue_machines'] ?? count($poolIssues)),
-                'ready' => 'Ready ' . (int) ($pool['spare_ready'] ?? 0),
+                'issues' => 'Issues ' . (int) ($pool['issue_machines'] ?? 0),
                 'sessions' => 'In session ' . $sessions,
+                'ready' => 'Ready ' . (int) ($pool['spare_ready'] ?? 0),
+                'unavailable' => 'Unavailable ' . (int) ($pool['spare_unready'] ?? 0),
             ];
             foreach ($filters as $filter => $label) {
                 $active = $filter === 'all';
@@ -996,32 +1063,47 @@ if ($horizon_surface_available) {
             }
             $horizon_details .= '</div></div>';
             $horizon_details .= '<div class="windows-agent-horizon-machine-head"><span>Machine</span><span>State</span><span>Session</span><span>Maintenance</span><span>Issue</span><span>Collected</span></div>';
-            foreach ($poolIssues as $issueIndex => $issue) {
-                $drawerRef = $poolRef . '-' . $issueIndex;
-                $reason = $humanize_horizon_reason($issue['issue_reason'] ?? 'unknown');
-                $next = match ((string) ($issue['issue_reason'] ?? '')) {
+            foreach ($poolMachines as $machineIndex => $machine) {
+                $drawerRef = $poolRef . '-' . $machineIndex;
+                $hasSession = (int) ($machine['has_session'] ?? 0) === 1;
+                $maintenance = (int) ($machine['maintenance'] ?? 0) === 1;
+                $isIssue = (int) ($machine['issue'] ?? (($machine['issue_reason'] ?? 'none') !== 'none' ? 1 : 0)) === 1;
+                $ready = ! $hasSession && ! $maintenance && strtoupper((string) ($machine['state'] ?? '')) === 'AVAILABLE';
+                $categories = ['all'];
+                if ($isIssue) $categories[] = 'issues';
+                if ($hasSession) $categories[] = 'sessions';
+                elseif ($ready) $categories[] = 'ready';
+                else $categories[] = 'unavailable';
+                $reason = $isIssue ? $humanize_horizon_reason($machine['issue_reason'] ?? 'unknown') : 'None';
+                $next = match ((string) ($machine['issue_reason'] ?? 'none')) {
                     'agent_unreachable' => 'Verify the Horizon Agent service and machine network connectivity.',
                     'maintenance_mode' => 'Confirm that maintenance mode is intentional and restore capacity when ready.',
                     'provisioning_error' => 'Review image, provisioning, and clone-operation evidence.',
-                    default => 'Review the machine state and related Horizon evidence.',
+                    'none' => 'No action required.',
+                    default => $isIssue ? 'Review the machine state and related Horizon evidence.' : 'No action required.',
                 };
-                $horizon_details .= '<button type="button" class="windows-agent-horizon-machine-row windows-agent-horizon-machine-issue" data-machine-category="issues" data-machine-drawer="' . $esc($drawerRef) . '" aria-controls="windows-agent-horizon-machine-drawer-' . $esc($drawerRef) . '"><span><span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span> <strong>' . $esc($issue['name'] ?? $issue['id'] ?? 'unknown') . '</strong></span><span>' . $esc($humanize_horizon_reason($issue['state'] ?? 'unknown')) . '</span><span>' . (((int) ($issue['has_session'] ?? 0) === 1) ? 'Present' : 'None') . '</span><span>' . (((int) ($issue['maintenance'] ?? 0) === 1) ? 'Yes' : 'No') . '</span><span>' . $esc($reason) . '</span><span>' . $esc($issue['collected_utc'] ?? 'unknown') . ' <span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span></span></button>';
-                $horizon_details .= '<aside id="windows-agent-horizon-machine-drawer-' . $esc($drawerRef) . '" class="windows-agent-horizon-machine-drawer" data-machine-drawer-panel="' . $esc($drawerRef) . '" hidden><div class="windows-agent-horizon-drawer-header"><h4>Machine details</h4><button type="button" class="close" data-machine-drawer-close aria-label="Close"><span aria-hidden="true">&times;</span></button></div>';
-                $horizon_details .= '<h3>' . $esc($issue['name'] ?? $issue['id'] ?? 'unknown') . '</h3><p class="text-warning"><span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span> ' . $esc($humanize_horizon_reason($issue['state'] ?? 'unknown')) . '</p><dl>';
+                $horizon_details .= '<button type="button" class="windows-agent-horizon-machine-row' . ($isIssue ? ' windows-agent-horizon-machine-issue' : '') . '" data-machine-category="' . $esc(implode(' ', $categories)) . '" data-machine-drawer="' . $esc($drawerRef) . '" aria-controls="windows-agent-horizon-machine-drawer-' . $esc($drawerRef) . '"><span>' . ($isIssue ? '<span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span> ' : '') . '<strong>' . $esc($machine['name'] ?? $machine['id'] ?? 'unknown') . '</strong></span><span>' . $esc($humanize_horizon_reason($machine['state'] ?? 'unknown')) . '</span><span>' . ($hasSession ? 'Present' : 'None') . '</span><span>' . ($maintenance ? 'Yes' : 'No') . '</span><span>' . $esc($reason) . '</span><span>' . $esc($machine['collected_utc'] ?? 'unknown') . ' <span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span></span></button>';
+                $horizon_details .= '<aside id="windows-agent-horizon-machine-drawer-' . $esc($drawerRef) . '" class="windows-agent-horizon-detail-drawer" data-horizon-drawer-panel="' . $esc($drawerRef) . '" hidden><div class="windows-agent-horizon-drawer-header"><h4>Machine details</h4><button type="button" class="close" data-horizon-drawer-close aria-label="Close"><span aria-hidden="true">&times;</span></button></div>';
+                $horizon_details .= '<h3>' . $esc($machine['name'] ?? $machine['id'] ?? 'unknown') . '</h3><p class="' . ($isIssue ? 'text-warning' : 'text-success') . '"><span class="glyphicon ' . ($isIssue ? 'glyphicon-exclamation-sign' : 'glyphicon-ok-sign') . '" aria-hidden="true"></span> ' . $esc($humanize_horizon_reason($machine['state'] ?? 'unknown')) . '</p><dl>';
                 foreach ([
-                    'Pool' => $issue['pool_display_name'] ?? $issue['pool'] ?? '',
+                    'Pool' => $machine['pool_display_name'] ?? $machine['pool'] ?? '',
                     'Issue' => $reason,
-                    'Session' => ((int) ($issue['has_session'] ?? 0) === 1) ? 'Present' : 'None',
-                    'Maintenance mode' => ((int) ($issue['maintenance'] ?? 0) === 1) ? 'Yes' : 'No',
-                    'Last known state' => $issue['state'] ?? 'unknown',
-                    'Collected' => $issue['collected_utc'] ?? 'unknown',
+                    'Session' => $hasSession ? 'Present' : 'None',
+                    'Maintenance mode' => $maintenance ? 'Yes' : 'No',
+                    'Last known state' => $machine['state'] ?? 'unknown',
+                    'Collected' => $machine['collected_utc'] ?? 'unknown',
                 ] as $label => $value) {
                     $horizon_details .= '<dt>' . $esc($label) . '</dt><dd>' . $esc($value) . '</dd>';
                 }
-                $horizon_details .= '</dl><div class="windows-agent-horizon-drawer-evidence"><h4>Evidence</h4><p><strong>' . $esc($reason) . '</strong></p><p class="text-muted">The machine is not contributing ready placement capacity.</p></div><div class="windows-agent-horizon-drawer-next"><h4>Next action</h4><p>' . $esc($next) . '</p></div></aside>';
+                $horizon_details .= '</dl><div class="windows-agent-horizon-drawer-evidence"><h4>Capacity role</h4><p><strong>' . ($hasSession ? 'Hosting a session' : ($ready ? 'Ready for placement' : 'Not ready for placement')) . '</strong></p><p class="text-muted">' . ($isIssue ? 'This machine needs review in Horizon.' : 'No machine issue is reported in this snapshot.') . '</p></div><div class="windows-agent-horizon-drawer-next"><h4>Next action</h4><p>' . $esc($next) . '</p></div></aside>';
             }
-            $horizon_details .= '<button type="button" class="windows-agent-horizon-machine-summary" data-machine-category="ready"><span>Ready machines</span><strong>' . $esc($pool['spare_ready'] ?? 0) . '</strong><small>Machines available for new sessions</small></button>';
-            $horizon_details .= '<button type="button" class="windows-agent-horizon-machine-summary" data-machine-category="sessions"><span>In-session machines</span><strong>' . $esc($sessions) . '</strong><small>Machines currently hosting sessions</small></button>';
+            $horizon_details .= '<div class="windows-agent-horizon-machine-empty" data-machine-empty hidden>No machines match this filter.</div>';
+            if ($poolMachines === []) {
+                $horizon_details .= '<div class="windows-agent-horizon-machine-empty windows-agent-horizon-machine-empty-static">Per-machine inventory is not available in this snapshot. Aggregate counts remain authoritative.</div>';
+            }
+            if ((int) ($horizon_api_summary['machine_details_truncated'] ?? 0) === 1) {
+                $horizon_details .= '<p class="text-warning windows-agent-horizon-truncation"><span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span> Machine detail is truncated; aggregate counts remain authoritative.</p>';
+            }
             if ((int) ($horizon_api_summary['machine_issues_truncated'] ?? 0) === 1) {
                 $horizon_details .= '<p class="text-warning windows-agent-horizon-truncation"><span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span> Issue-machine detail is truncated; aggregate counts remain authoritative.</p>';
             }
@@ -1040,7 +1122,8 @@ if ($horizon_surface_available) {
             }
             $evidence = $services !== [] ? implode(', ', $services) : ((int) ($member['configuration_replications_unhealthy'] ?? 0) > 0 ? (string) $member['configuration_replications_unhealthy'] . ' replication issue(s)' : 'No reported issues');
             $memberHealthy = $services === [] && (int) ($member['configuration_replications_unhealthy'] ?? 0) === 0 && (int) ($member['certificate_valid'] ?? 1) === 1;
-            $horizon_details .= '<tr><td><strong>' . $esc($member['name'] ?? 'unknown') . '</strong></td><td>' . ($memberHealthy ? '<span class="text-success">Healthy</span>' : '<span class="text-warning">Attention</span>') . '</td><td>' . $esc($member['connections'] ?? 0) . '</td><td>' . $esc($evidence) . '</td></tr>';
+            $memberRef = substr(hash('sha256', strtolower((string) ($member['name'] ?? 'Connection Server'))), 0, 12);
+            $horizon_details .= '<tr><td><button type="button" class="windows-agent-horizon-table-target" data-member-drawer="' . $esc($memberRef) . '"><strong>' . $esc($member['name'] ?? 'unknown') . '</strong><span class="sr-only"> details</span></button></td><td>' . ($memberHealthy ? '<span class="text-success">Healthy</span>' : '<span class="text-warning">Attention</span>') . '</td><td>' . $esc($member['connections'] ?? 0) . '</td><td>' . $esc($evidence) . '</td></tr>';
         }
         $horizon_details .= '</tbody></table></div><div class="windows-agent-horizon-platform-summary"><span>Configuration replication <strong>' . $esc(((int) ($horizon_pod_summary['configuration_replications_total'] ?? 0) - (int) ($horizon_pod_summary['configuration_replications_unhealthy'] ?? 0))) . ' of ' . $esc($horizon_pod_summary['configuration_replications_total'] ?? 0) . ' healthy</strong></span><span>AD domain access <strong>' . $esc(((int) ($horizon_directory_summary['member_links_total'] ?? 0) - (int) ($horizon_directory_summary['member_links_unhealthy'] ?? 0))) . ' of ' . $esc($horizon_directory_summary['member_links_total'] ?? 0) . ' healthy</strong></span><span>Gateways <strong>' . $esc(((int) ($horizon_pod_summary['gateways_total'] ?? 0) - (int) ($horizon_pod_summary['gateways_unhealthy'] ?? 0))) . ' healthy</strong></span></div></div></section>';
         $horizon_details .= '<section class="col-md-5"><div class="windows-agent-horizon-section"><div class="windows-agent-horizon-section-heading"><h4>Collector reliability</h4><span class="' . ($horizon_api_stale ? 'text-warning' : 'text-success') . '">' . ($horizon_api_stale ? 'Stale' : 'Fresh') . '</span></div><dl class="windows-agent-horizon-collector">';
@@ -1053,7 +1136,7 @@ if ($horizon_surface_available) {
             'Pages' => $horizon_central_meta['pages_total'] ?? 0,
             'Snapshot coverage' => $coverage,
             'Current attempt' => (int) ($horizon_central_meta['inventory_complete'] ?? 0) === 1 ? 'Complete' : 'Incomplete',
-            'Truncation' => ((int) ($horizon_api_summary['sessions_truncated'] ?? 0) + (int) ($horizon_api_summary['machines_truncated'] ?? 0) + (int) ($horizon_api_summary['machine_issues_truncated'] ?? 0) + (int) ($horizon_api_summary['service_details_truncated'] ?? 0)) > 0 ? 'Present' : 'None',
+            'Truncation' => ((int) ($horizon_api_summary['sessions_truncated'] ?? 0) + (int) ($horizon_api_summary['machines_truncated'] ?? 0) + (int) ($horizon_api_summary['machine_details_truncated'] ?? 0) + (int) ($horizon_api_summary['machine_issues_truncated'] ?? 0) + (int) ($horizon_api_summary['service_details_truncated'] ?? 0)) > 0 ? 'Present' : 'None',
             'Outcome' => $horizon_central_meta['outcome'] ?? ($horizon_api_stale ? 'stale' : 'fresh'),
         ] as $label => $value) {
             $horizon_details .= '<dt>' . $esc($label) . '</dt><dd>' . $esc($value) . '</dd>';
@@ -1551,7 +1634,42 @@ echo '<style>
 .windows-agent-role-attention ul { margin: 0; padding: 0; list-style: none; }
 .windows-agent-role-attention li { padding: 6px 0; border-top: 1px solid rgba(127, 127, 127, 0.2); }
 .windows-agent-role-attention-action { margin-top: 2px; }
-.windows-agent-horizon-operations { --horizon-blue: #1769d2; --horizon-border: #cfd6df; --horizon-muted: #66717f; color: #202630; }
+.windows-agent-horizon-operations {
+    --horizon-blue: #1769d2;
+    --horizon-link: #1769d2;
+    --horizon-border: #cfd6df;
+    --horizon-muted: #66717f;
+    --horizon-text: #202630;
+    --horizon-surface: #fff;
+    --horizon-surface-raised: #fff;
+    --horizon-surface-subtle: #f5f8fc;
+    --horizon-progress-track: #eef1f4;
+    --horizon-progress-border: #c7ced8;
+    --horizon-shadow: rgba(20, 31, 45, 0.18);
+    color: var(--horizon-text);
+}
+.dark .windows-agent-horizon-operations {
+    --horizon-blue: #4d9cff;
+    --horizon-link: #79b8ff;
+    --horizon-border: #4b5563;
+    --horizon-muted: #a7b2bf;
+    --horizon-text: #e6edf3;
+    --horizon-surface: #2d333a;
+    --horizon-surface-raised: #343b43;
+    --horizon-surface-subtle: #39424c;
+    --horizon-progress-track: #242a30;
+    --horizon-progress-border: #5b6673;
+    --horizon-shadow: rgba(0, 0, 0, 0.45);
+}
+.windows-agent-horizon-operations a,
+.windows-agent-horizon-condition-target,
+.windows-agent-horizon-table-target { color: var(--horizon-link); }
+.windows-agent-horizon-operations .text-muted { color: var(--horizon-muted) !important; }
+.windows-agent-horizon-operations .table > thead > tr > th,
+.windows-agent-horizon-operations .table > tbody > tr > td { border-color: var(--horizon-border); color: var(--horizon-text); }
+.dark .windows-agent-horizon-operations .btn-default { border-color: var(--horizon-border); background: var(--horizon-surface-raised); color: var(--horizon-text); }
+.dark .windows-agent-horizon-operations .btn-default:hover,
+.dark .windows-agent-horizon-operations .btn-default:focus { border-color: #6b7785; background: var(--horizon-surface-subtle); color: #fff; }
 .windows-agent-horizon-title-row,
 .windows-agent-horizon-section-heading,
 .windows-agent-horizon-trend-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
@@ -1560,7 +1678,7 @@ echo '<style>
 .windows-agent-horizon-title-row p { margin: 0; }
 .windows-agent-horizon-freshness { color: var(--horizon-muted); font-size: 12px; white-space: nowrap; }
 .windows-agent-horizon-section,
-.windows-agent-horizon-trend { margin-bottom: 12px; border: 1px solid var(--horizon-border); border-radius: 3px; background: #fff; }
+.windows-agent-horizon-trend { margin-bottom: 12px; border: 1px solid var(--horizon-border); border-radius: 3px; background: var(--horizon-surface); }
 .windows-agent-horizon-section-heading,
 .windows-agent-horizon-trend-header { min-height: 40px; padding: 8px 12px; border-bottom: 1px solid var(--horizon-border); }
 .windows-agent-horizon-section-heading h4,
@@ -1577,13 +1695,19 @@ echo '<style>
 .windows-agent-horizon-condition-incomplete > .glyphicon { color: #d58512; }
 .windows-agent-horizon-condition-info > .glyphicon { color: #337ab7; }
 .windows-agent-horizon-condition-ok > .glyphicon { color: #3c9a3c; }
+.windows-agent-horizon-condition-target,
+.windows-agent-horizon-table-target { padding: 0; border: 0; background: transparent; font: inherit; text-align: left; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.windows-agent-horizon-condition-target:hover,
+.windows-agent-horizon-condition-target:focus,
+.windows-agent-horizon-table-target:hover,
+.windows-agent-horizon-table-target:focus { color: var(--horizon-link); outline: 2px solid rgba(77, 156, 255, 0.55); outline-offset: 3px; }
 .windows-agent-horizon-policy { color: var(--horizon-muted); font-size: 11px; }
 .windows-agent-horizon-dot { display: inline-block; width: 7px; height: 7px; margin: 0 4px 0 10px; border-radius: 50%; }
 .windows-agent-horizon-dot-info { background: #337ab7; }
 .windows-agent-horizon-dot-warning { background: #f0ad4e; }
 .windows-agent-horizon-dot-critical { background: #d9534f; }
 .windows-agent-horizon-pool-head,
-.windows-agent-horizon-pool-toggle { display: grid; grid-template-columns: minmax(230px, 2fr) minmax(120px, 1fr) 72px 90px 68px 88px minmax(150px, 1.2fr) 76px; gap: 8px; align-items: center; }
+.windows-agent-horizon-pool-summary { display: grid; grid-template-columns: minmax(230px, 2fr) minmax(120px, 1fr) 72px 90px 68px 88px minmax(150px, 1.2fr) 76px; gap: 8px; align-items: center; }
 .windows-agent-horizon-pool-head { min-height: 30px; padding: 5px 12px 5px 36px; border-bottom: 1px solid var(--horizon-border); color: var(--horizon-muted); font-size: 11px; font-weight: 600; }
 .windows-agent-horizon-pool { border-bottom: 1px solid var(--horizon-border); border-left: 4px solid transparent; }
 .windows-agent-horizon-pool:last-child { border-bottom: 0; }
@@ -1591,41 +1715,48 @@ echo '<style>
 .windows-agent-horizon-pool-warning,
 .windows-agent-horizon-pool-incomplete { border-left-color: #f0ad4e; }
 .windows-agent-horizon-pool-info { border-left-color: #337ab7; }
-.windows-agent-horizon-pool-toggle { position: relative; width: 100%; min-height: 58px; padding: 8px 12px 8px 32px; border: 0; background: #fff; color: inherit; text-align: left; }
+.windows-agent-horizon-pool-summary { min-height: 58px; padding: 0 12px 0 0; background: var(--horizon-surface); }
+.windows-agent-horizon-pool-toggle { position: relative; width: 100%; min-height: 58px; padding: 8px 8px 8px 32px; border: 0; background: transparent; color: inherit; text-align: left; }
 .windows-agent-horizon-pool-toggle:hover,
-.windows-agent-horizon-pool-toggle:focus { background: #f5f8fc; outline: 2px solid transparent; box-shadow: inset 0 0 0 2px rgba(23, 105, 210, 0.35); }
+.windows-agent-horizon-pool-toggle:focus,
+.windows-agent-horizon-pool-count:hover,
+.windows-agent-horizon-pool-count:focus { background: var(--horizon-surface-subtle); outline: 2px solid transparent; box-shadow: inset 0 0 0 2px rgba(77, 156, 255, 0.5); }
+.windows-agent-horizon-pool-count { min-width: 36px; min-height: 34px; padding: 4px 7px; border: 1px solid transparent; border-radius: 3px; background: transparent; color: var(--horizon-link); font-weight: 600; text-align: center; }
+.windows-agent-horizon-pool-summary [data-metric-label]::before { display: none; content: attr(data-metric-label); }
+.windows-agent-horizon-pool-state,
+.windows-agent-horizon-demand { color: var(--horizon-text); }
 .windows-agent-horizon-pool-chevron { position: absolute; left: 10px; top: 22px; color: #4e5968; transition: transform 140ms ease; }
 .windows-agent-horizon-pool-toggle[aria-expanded="true"] .windows-agent-horizon-pool-chevron { transform: rotate(90deg); }
 .windows-agent-horizon-pool-name small { display: block; margin-top: 2px; color: var(--horizon-muted); font-weight: 400; }
-.windows-agent-horizon-headroom i { display: block; height: 6px; margin-top: 5px; overflow: hidden; border: 1px solid #c7ced8; border-radius: 3px; background: #eef1f4; }
+.windows-agent-horizon-headroom i { display: block; height: 6px; margin-top: 5px; overflow: hidden; border: 1px solid var(--horizon-progress-border); border-radius: 3px; background: var(--horizon-progress-track); }
 .windows-agent-horizon-headroom b { display: block; height: 100%; background: #4cae4c; }
-.windows-agent-horizon-machine-region { margin: 0 8px 8px; border: 1px solid #86afe5; border-radius: 3px; background: #fff; }
+.windows-agent-horizon-machine-region { margin: 0 8px 8px; border: 1px solid #5793df; border-radius: 3px; background: var(--horizon-surface-raised); }
 .windows-agent-horizon-machine-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 40px; padding: 6px 10px; border-bottom: 1px solid var(--horizon-border); }
-.windows-agent-horizon-machine-toolbar > .text-muted { margin-left: auto; font-size: 11px; }
+.windows-agent-horizon-machine-toolbar > div:first-child .text-muted { margin-left: 4px; font-size: 11px; }
 .windows-agent-horizon-machine-head,
 .windows-agent-horizon-machine-row { display: grid; grid-template-columns: minmax(190px, 1.4fr) 110px 95px 110px minmax(170px, 1.2fr) minmax(160px, 1fr); gap: 8px; align-items: center; }
 .windows-agent-horizon-machine-head { min-height: 30px; padding: 5px 12px; border-bottom: 1px solid var(--horizon-border); color: var(--horizon-muted); font-size: 11px; font-weight: 600; }
-.windows-agent-horizon-machine-row,
-.windows-agent-horizon-machine-summary { width: 100%; min-height: 42px; padding: 7px 12px; border: 0; border-bottom: 1px solid var(--horizon-border); background: #fff; color: inherit; text-align: left; }
-.windows-agent-horizon-machine-row[hidden],
-.windows-agent-horizon-machine-summary[hidden] { display: none !important; }
+.windows-agent-horizon-machine-row { width: 100%; min-height: 42px; padding: 7px 12px; border: 0; border-bottom: 1px solid var(--horizon-border); background: var(--horizon-surface-raised); color: inherit; text-align: left; }
+.windows-agent-horizon-machine-row[hidden] { display: none !important; }
 .windows-agent-horizon-machine-row:hover,
-.windows-agent-horizon-machine-row:focus,
-.windows-agent-horizon-machine-summary:hover,
-.windows-agent-horizon-machine-summary:focus { background: #f5f8fc; box-shadow: inset 0 0 0 2px rgba(23, 105, 210, 0.35); outline: 0; }
-.windows-agent-horizon-machine-issue { border-left: 4px solid #f0ad4e; color: #8a4b08; }
-.windows-agent-horizon-machine-summary { display: grid; grid-template-columns: minmax(180px, 1fr) 60px 2fr; align-items: center; gap: 12px; color: #344050; }
-.windows-agent-horizon-machine-summary small { color: var(--horizon-muted); }
+.windows-agent-horizon-machine-row:focus { background: var(--horizon-surface-subtle); box-shadow: inset 0 0 0 2px rgba(77, 156, 255, 0.5); outline: 0; }
+.windows-agent-horizon-machine-issue { border-left: 4px solid #f0ad4e; }
+.windows-agent-horizon-machine-empty { padding: 18px 12px; color: var(--horizon-muted); text-align: center; }
+.windows-agent-horizon-machine-empty-static { border-top: 1px solid var(--horizon-border); }
 .windows-agent-horizon-truncation { margin: 8px 12px; }
-.windows-agent-horizon-machine-drawer { position: fixed; z-index: 1060; top: 50px; right: 0; bottom: 0; width: min(390px, 100vw); overflow-y: auto; padding: 16px 22px; border-left: 1px solid var(--horizon-border); background: #fff; box-shadow: -8px 0 24px rgba(20, 31, 45, 0.18); }
+.windows-agent-horizon-detail-drawer { position: fixed; z-index: 1061; top: 50px; right: 0; bottom: 0; width: min(420px, 100vw); overflow-y: auto; padding: 16px 22px; border-left: 1px solid var(--horizon-border); background: var(--horizon-surface-raised); color: var(--horizon-text); box-shadow: -8px 0 24px var(--horizon-shadow); }
+.windows-agent-horizon-drawer-backdrop { position: fixed; z-index: 1060; inset: 0; border: 0; background: rgba(0, 0, 0, 0.35); }
 .windows-agent-horizon-drawer-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--horizon-border); }
 .windows-agent-horizon-drawer-header h4 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
-.windows-agent-horizon-machine-drawer h3 { margin: 18px 0 4px; }
-.windows-agent-horizon-machine-drawer dl { display: grid; grid-template-columns: 130px 1fr; gap: 10px; margin-top: 24px; }
-.windows-agent-horizon-machine-drawer dt,
-.windows-agent-horizon-machine-drawer dd { margin: 0; }
+.windows-agent-horizon-detail-drawer h3 { margin: 18px 0 4px; }
+.windows-agent-horizon-detail-drawer dl { display: grid; grid-template-columns: 140px 1fr; gap: 10px; margin-top: 24px; }
+.windows-agent-horizon-detail-drawer dt,
+.windows-agent-horizon-detail-drawer dd { margin: 0; }
+.windows-agent-horizon-detail-drawer .close { color: var(--horizon-text); opacity: 0.8; text-shadow: none; }
 .windows-agent-horizon-drawer-evidence,
 .windows-agent-horizon-drawer-next { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--horizon-border); }
+.windows-agent-horizon-service-list { margin: 0; padding: 0; list-style: none; }
+.windows-agent-horizon-service-list li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--horizon-border); }
 .windows-agent-horizon-trend { padding-bottom: 8px; }
 .windows-agent-horizon-trend-header .btn.active,
 .windows-agent-horizon-machine-toolbar .btn.active { color: #fff; background: var(--horizon-blue); border-color: #0f57b6; }
@@ -1633,6 +1764,7 @@ echo '<style>
 .windows-agent-horizon-evidence-row { margin-left: -6px; margin-right: -6px; }
 .windows-agent-horizon-evidence-row > section { padding-left: 6px; padding-right: 6px; }
 .windows-agent-horizon-platform-table { margin-bottom: 0; }
+.windows-agent-horizon-platform-table > thead > tr > th { background: var(--horizon-surface-subtle); }
 .windows-agent-horizon-platform-summary { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 10px 12px; border-top: 1px solid var(--horizon-border); }
 .windows-agent-horizon-collector { display: grid; grid-template-columns: minmax(135px, 1fr) 1fr; gap: 7px 12px; padding: 12px; }
 .windows-agent-horizon-collector dt,
@@ -1651,12 +1783,19 @@ echo '<style>
     .windows-agent-horizon-condition { grid-template-columns: 24px 1fr; }
     .windows-agent-horizon-condition > div:nth-child(n+3) { grid-column: 2; }
     .windows-agent-horizon-pool-head { display: none; }
-    .windows-agent-horizon-pool-toggle { grid-template-columns: minmax(160px, 1fr) 1fr; padding-left: 32px; }
+    .windows-agent-horizon-pool-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 6px 8px; }
+    .windows-agent-horizon-pool-toggle { grid-column: 1 / -1; min-height: 50px; }
+    .windows-agent-horizon-pool-state,
+    .windows-agent-horizon-headroom,
+    .windows-agent-horizon-demand { grid-column: span 1; padding: 4px 7px; }
+    .windows-agent-horizon-pool-summary [data-metric-label] { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 34px; text-align: right; }
+    .windows-agent-horizon-pool-summary [data-metric-label]::before { display: inline; color: var(--horizon-muted); font-size: 10px; font-weight: 600; text-align: left; text-transform: uppercase; }
+    .windows-agent-horizon-headroom { flex-wrap: wrap; }
+    .windows-agent-horizon-headroom i { flex-basis: 100%; }
     .windows-agent-horizon-machine-head { display: none; }
     .windows-agent-horizon-machine-row { grid-template-columns: 1fr 1fr; }
     .windows-agent-horizon-machine-row > span:nth-child(n+3) { font-size: 11px; }
-    .windows-agent-horizon-machine-summary { grid-template-columns: 1fr 48px; }
-    .windows-agent-horizon-machine-summary small { grid-column: 1 / -1; }
+    .windows-agent-horizon-machine-toolbar .btn-group { display: flex; flex-wrap: wrap; }
 }
 </style>';
 echo '<ul class="nav nav-tabs" role="tablist">';
@@ -1702,46 +1841,90 @@ echo '</div>';
 echo '<script>
 (function () {
     "use strict";
+    var lastDrawerTrigger = null;
+    function setPoolOpen(poolRef, open) {
+        var toggle = document.querySelector("[data-pool-toggle=\"" + poolRef + "\"]");
+        var region = document.querySelector("[data-pool-region=\"" + poolRef + "\"]");
+        if (!toggle || !region) return null;
+        toggle.setAttribute("aria-expanded", open ? "true" : "false");
+        region.hidden = !open;
+        return region;
+    }
+    function applyMachineFilter(poolRef, category) {
+        var region = document.querySelector("[data-pool-region=\"" + poolRef + "\"]");
+        if (!region) return;
+        region.querySelectorAll("[data-machine-filter]").forEach(function (button) {
+            var active = button.getAttribute("data-machine-filter") === category;
+            button.classList.toggle("active", active);
+            button.setAttribute("aria-pressed", active ? "true" : "false");
+        });
+        var shown = 0;
+        region.querySelectorAll("[data-machine-category]").forEach(function (row) {
+            var categories = (row.getAttribute("data-machine-category") || "").split(/\s+/);
+            var visible = category === "all" || categories.indexOf(category) !== -1;
+            row.hidden = !visible;
+            if (visible) shown++;
+        });
+        var empty = region.querySelector("[data-machine-empty]");
+        if (empty) {
+            empty.hidden = shown !== 0;
+            empty.textContent = shown === 0 ? "No " + (category === "all" ? "" : category + " ") + "machines match this filter." : "";
+        }
+    }
+    function closeDrawers(restoreFocus) {
+        document.querySelectorAll("[data-horizon-drawer-panel]").forEach(function (panel) { panel.hidden = true; });
+        var backdrop = document.querySelector("[data-horizon-drawer-backdrop]");
+        if (backdrop) backdrop.hidden = true;
+        if (restoreFocus && lastDrawerTrigger) lastDrawerTrigger.focus();
+        lastDrawerTrigger = null;
+    }
+    function openDrawer(ref, trigger) {
+        var drawer = document.querySelector("[data-horizon-drawer-panel=\"" + ref + "\"]");
+        if (!drawer) return;
+        closeDrawers(false);
+        lastDrawerTrigger = trigger;
+        drawer.hidden = false;
+        var backdrop = document.querySelector("[data-horizon-drawer-backdrop]");
+        if (backdrop) backdrop.hidden = false;
+        var close = drawer.querySelector("[data-horizon-drawer-close]");
+        if (close) close.focus();
+    }
     document.addEventListener("click", function (event) {
         var poolToggle = event.target.closest("[data-pool-toggle]");
         if (poolToggle) {
             var poolRef = poolToggle.getAttribute("data-pool-toggle");
-            var region = document.querySelector("[data-pool-region=\"" + poolRef + "\"]");
-            if (region) {
-                var open = poolToggle.getAttribute("aria-expanded") === "true";
-                poolToggle.setAttribute("aria-expanded", open ? "false" : "true");
-                region.hidden = open;
-            }
+            var open = poolToggle.getAttribute("aria-expanded") === "true";
+            setPoolOpen(poolRef, !open);
+            return;
+        }
+        var poolCount = event.target.closest("[data-pool-open-filter]");
+        if (poolCount) {
+            var countPool = poolCount.getAttribute("data-pool");
+            var countFilter = poolCount.getAttribute("data-pool-open-filter") || "all";
+            var countRegion = setPoolOpen(countPool, true);
+            applyMachineFilter(countPool, countFilter);
+            if (countRegion) countRegion.scrollIntoView({block: "nearest"});
             return;
         }
         var filter = event.target.closest("[data-machine-filter]");
         if (filter) {
             var pool = filter.getAttribute("data-pool");
             var category = filter.getAttribute("data-machine-filter");
-            var region = document.querySelector("[data-pool-region=\"" + pool + "\"]");
-            if (!region) return;
-            region.querySelectorAll("[data-machine-filter]").forEach(function (button) {
-                var active = button === filter;
-                button.classList.toggle("active", active);
-                button.setAttribute("aria-pressed", active ? "true" : "false");
-            });
-            region.querySelectorAll("[data-machine-category]").forEach(function (row) {
-                row.hidden = category !== "all" && row.getAttribute("data-machine-category") !== category;
-            });
+            applyMachineFilter(pool, category);
             return;
         }
         var drawerTrigger = event.target.closest("[data-machine-drawer]");
         if (drawerTrigger) {
-            var drawer = document.querySelector("[data-machine-drawer-panel=\"" + drawerTrigger.getAttribute("data-machine-drawer") + "\"]");
-            if (drawer) {
-                document.querySelectorAll("[data-machine-drawer-panel]").forEach(function (panel) { panel.hidden = true; });
-                drawer.hidden = false;
-                drawer.querySelector("[data-machine-drawer-close]").focus();
-            }
+            openDrawer(drawerTrigger.getAttribute("data-machine-drawer"), drawerTrigger);
             return;
         }
-        if (event.target.closest("[data-machine-drawer-close]")) {
-            event.target.closest("[data-machine-drawer-panel]").hidden = true;
+        var memberTrigger = event.target.closest("[data-member-drawer]");
+        if (memberTrigger) {
+            openDrawer(memberTrigger.getAttribute("data-member-drawer"), memberTrigger);
+            return;
+        }
+        if (event.target.closest("[data-horizon-drawer-close]") || event.target.closest("[data-horizon-drawer-backdrop]")) {
+            closeDrawers(true);
             return;
         }
         var range = event.target.closest("[data-range]");
@@ -1760,7 +1943,7 @@ echo '<script>
     });
     document.addEventListener("keydown", function (event) {
         if (event.key === "Escape") {
-            document.querySelectorAll("[data-machine-drawer-panel]").forEach(function (panel) { panel.hidden = true; });
+            closeDrawers(true);
         }
     });
 }());

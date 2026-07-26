@@ -211,10 +211,11 @@ namespace {
 
         if (PHP_SAPI === 'cli-server') {
             header('Content-Type: text/html; charset=utf-8');
-            echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">';
+            $themeClass = strtolower((string) ($_GET['theme'] ?? '')) === 'dark' ? ' class="dark"' : '';
+            echo '<!doctype html><html lang="en"' . $themeClass . '><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">';
             echo '<title>Windows Agent application fixture</title>';
             echo '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/css/bootstrap.min.css">';
-            echo '<style>body{padding:20px;background:#f6f7f9}.tab-content{background:#fff;padding:15px;border:1px solid #ddd;border-top:0}</style></head><body>';
+            echo '<style>body{padding:20px;background:#f6f7f9}.tab-content{padding:15px;border:1px solid #ddd;border-top:0}.dark body{background:#252b31;color:#e6edf3}.dark .tab-content{border-color:#4b5563;background:#252b31}</style></head><body>';
         }
 
         echo renderFixture($renderFixturePath, $parserPath, $pagePath);

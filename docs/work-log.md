@@ -1,5 +1,29 @@
 # Work Log
 
+## 2026-07-26
+
+- Implemented the overlay 0.6.19 Horizon UI correction. The centralized
+  snapshot now carries a bounded sanitized all-machine inventory, and expanded
+  pools filter actual rows by all, issues, in-session, ready, or unavailable.
+  Every machine row opens focused detail, while Connection Server conditions
+  and platform members open in-place server evidence instead of a generic
+  device dashboard.
+- Reworked the Horizon workspace around LibreNMS light/dark theme tokens and
+  added explicit responsive pool metric labels. The approved count-based pool
+  policy, 30-day default, non-alerting behavior, RRD schemas, and Windows
+  agent/MSI 0.6.14 remain unchanged.
+- Validation passed: all 59 .NET tests; ten parser fixtures; ten rendered-page
+  fixtures; 20 central collector/trigger/worker/discovery cases; all 71
+  source/test PHP files and 68 packaged PHP files linted through WSL; Bash
+  syntax; ShellCheck; JSON and whitespace checks; checksum, archive, package
+  manifest, version, and required-file verification. Desktop dark/light and
+  mobile dark browser QA passed for real pool filters, unavailable-machine
+  rows, machine and Connection Server drawers, stable in-page navigation,
+  30-day default, responsive labels, and page-width containment. The in-app
+  browser exposed stale tab handles, so the documented Playwright fallback
+  used Microsoft Edge. Overlay SHA-256:
+  `b1ebee731985199c0c6661b536a76aa5516b952d351d2b4d83be8977df93644b`.
+
 ## 2026-07-25
 
 - Implemented and packaged overlay 0.6.18 with the approved Horizon collector

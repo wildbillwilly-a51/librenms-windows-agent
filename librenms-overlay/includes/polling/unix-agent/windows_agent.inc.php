@@ -448,6 +448,7 @@ $horizon_gateways = $parse_rows($horizon_gateways_raw, 'name');
 $horizon_pools_summary = $parse_windows_agent_kv($horizon_pools_summary_raw);
 $horizon_pools = $parse_rows($horizon_pools_raw, 'name');
 $horizon_pool_machine_states = $parse_rows($horizon_pool_machine_states_raw, 'pool');
+$horizon_pool_machines = [];
 $horizon_pool_machine_issues = [];
 $horizon_central_meta = is_array($existing_application_data['horizon_central_meta'] ?? null) ? $existing_application_data['horizon_central_meta'] : [];
 $horizon_central_data_keys = [
@@ -455,7 +456,7 @@ $horizon_central_data_keys = [
     'horizon_pod_members', 'horizon_configuration_replications', 'horizon_directory_summary',
     'horizon_directory_domains', 'horizon_directory_member_status', 'horizon_gateways',
     'horizon_pools_summary', 'horizon_pools', 'horizon_pool_machine_states',
-    'horizon_pool_machine_issues',
+    'horizon_pool_machines', 'horizon_pool_machine_issues',
     'horizon_central_meta',
 ];
 if (($horizon_central_meta['source'] ?? '') === 'central') {
@@ -877,6 +878,7 @@ $windows_agent_app->data = [
     'horizon_pools_summary' => $horizon_pools_summary,
     'horizon_pools' => $horizon_pools,
     'horizon_pool_machine_states' => $horizon_pool_machine_states,
+    'horizon_pool_machines' => $horizon_pool_machines,
     'horizon_pool_machine_issues' => $horizon_pool_machine_issues,
     'horizon_central_meta' => $horizon_central_meta,
     'factorytalk_summary' => $factorytalk_summary,

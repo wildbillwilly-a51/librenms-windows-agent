@@ -73,8 +73,10 @@ counter values remain informational.
 The Horizon application view is a problems-first operational workspace. It
 leads with actionable conditions and pool capacity, defaults trends to 30
 days, and keeps platform health, collector reliability, and complete
-diagnostics available below. Every pool expands in place; bounded issue
-machines can be selected for focused state, evidence, and next-action detail.
+diagnostics available below. Every pool expands in place into a bounded,
+filterable machine inventory; machine rows can be selected for focused state,
+evidence, and next-action detail. Connection Server conditions open local
+server detail instead of leaving the Horizon workspace.
 Horizon configuration replication (AD LDS) and per-member Horizon domain
 access remain separate from the Windows/Microsoft AD collector.
 
@@ -83,12 +85,12 @@ informational while another spare is ready, two or more unavailable spares is
 a warning, zero ready spares is critical, and a non-empty pool with every
 machine in session is critical because it has no placement capacity. This
 visibility does not enable LibreNMS notifications. Release 0.6.14's
-Windows-side API prototype remains disabled by default. Overlay release 0.6.18
+Windows-side API prototype remains disabled by default. Overlay release 0.6.19
 provides the cluster-safe, poll-triggered centralized collector and the new
 operational UI. See
 [Horizon monitoring design](docs/horizon-monitoring.md) for scope and setup.
 
-### Central Horizon API Collector (Overlay 0.6.18)
+### Central Horizon API Collector (Overlay 0.6.19)
 
 Keep the Windows agent on every Horizon server for local
 service/process/listener/certificate telemetry; do not place Horizon API
@@ -315,7 +317,7 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Install a specific overlay version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.18
+curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.19
 ```
 
 Preview without changing the node:

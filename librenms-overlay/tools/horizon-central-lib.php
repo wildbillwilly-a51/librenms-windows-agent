@@ -230,6 +230,7 @@ final class PodCollector
                     'machine_rows' => $this->machineRows,
                     'inventory_complete' => ((int) ($snapshot['horizon_api_summary']['sessions_truncated'] ?? 0) === 0
                         && (int) ($snapshot['horizon_api_summary']['machines_truncated'] ?? 0) === 0
+                        && (int) ($snapshot['horizon_api_summary']['machine_details_truncated'] ?? 0) === 0
                         && (int) ($snapshot['horizon_api_summary']['machine_issues_truncated'] ?? 0) === 0
                         && (int) ($snapshot['horizon_api_summary']['service_details_truncated'] ?? 0) === 0) ? 1 : 0,
                 ];
@@ -358,6 +359,10 @@ final class PodCollector
         if ($issueLimit < 1 || $issueLimit > 500) {
             throw new HorizonFailure('invalid_machine_issue_limit');
         }
+        $detailLimit = (int) ($config['machine_detail_limit'] ?? 1000);
+        if ($detailLimit < 1 || $detailLimit > 5000) {
+            throw new HorizonFailure('invalid_machine_detail_limit');
+        }
     }
 
     /** @param array<string,mixed> $config @return list<string> */
@@ -429,7 +434,7 @@ final class PodCollector
         [$sessionTotals, $protocols, $activeMachineIds, $sessionsTruncated] = $this->sessions($session, $pageSize, $maxPages, $failures);
         $poolRows = self::rows($this->optional($session, 'rest/inventory/v1/desktop-pools', 'desktop_pools', $failures));
         [$pools, $poolById] = self::pools($poolRows);
-        [$pools, $machineStates, $machineIssues, $machineIssuesTruncated, $machinesTruncated] = $this->machines(
+        [$pools, $machineStates, $machineDetails, $machineIssues, $machineDetailsTruncated, $machineIssuesTruncated, $machinesTruncated] = $this->machines(
             $session,
             $pools,
             $poolById,
@@ -437,6 +442,7 @@ final class PodCollector
             $pageSize,
             $maxPages,
             $failures,
+            max(1, min(5000, (int) ($config['machine_detail_limit'] ?? 1000))),
             max(1, min(500, (int) ($config['machine_issue_limit'] ?? 100))),
             gmdate('c')
         );
@@ -462,6 +468,8 @@ final class PodCollector
             'sessions_other' => $sessionTotals['other'],
             'sessions_truncated' => $sessionsTruncated ? 1 : 0,
             'machines_truncated' => $machinesTruncated ? 1 : 0,
+            'machine_details_total' => array_sum(array_map(static fn (array $pool): int => (int) ($pool['machines_total'] ?? 0), $pools)),
+            'machine_details_truncated' => $machineDetailsTruncated ? 1 : 0,
             'machine_issues_total' => (int) ($poolTotals['issue_machines'] ?? count($machineIssues)),
             'machine_issues_truncated' => $machineIssuesTruncated ? 1 : 0,
             'service_details_truncated' => (int) ($memberTotals['service_details_truncated'] ?? 0),
@@ -504,6 +512,7 @@ final class PodCollector
             'horizon_pools_summary' => $poolTotals,
             'horizon_pools' => $pools,
             'horizon_pool_machine_states' => $machineStates,
+            'horizon_pool_machines' => $machineDetails,
             'horizon_pool_machine_issues' => $machineIssues,
         ];
     }
@@ -710,11 +719,13 @@ final class PodCollector
         return [$pools, $byId];
     }
 
-    /** @param list<array<string,mixed>> $pools @param array<string,int> $poolById @param array<string,true> $active @param list<string> $failures @return array{0:list<array<string,mixed>>,1:list<array<string,mixed>>,2:list<array<string,mixed>>,3:bool,4:bool} */
-    private function machines(ApiSession $session, array $pools, array $poolById, array $active, int $pageSize, int $maxPages, array &$failures, int $issueLimit, string $collectedUtc): array
+    /** @param list<array<string,mixed>> $pools @param array<string,int> $poolById @param array<string,true> $active @param list<string> $failures @return array{0:list<array<string,mixed>>,1:list<array<string,mixed>>,2:list<array<string,mixed>>,3:list<array<string,mixed>>,4:bool,5:bool,6:bool} */
+    private function machines(ApiSession $session, array $pools, array $poolById, array $active, int $pageSize, int $maxPages, array &$failures, int $detailLimit, int $issueLimit, string $collectedUtc): array
     {
         $truncated = false;
+        $detailsTruncated = false;
         $issuesTruncated = false;
+        $details = [];
         $issues = [];
         for ($page = 1; $page <= $maxPages; $page++) {
             try {
@@ -737,24 +748,31 @@ final class PodCollector
                 $managed = is_array($row['managed_machine_data'] ?? null) ? $row['managed_machine_data'] : [];
                 $maintenance = self::boolean($managed['in_maintenance_mode'] ?? false, false) || $state === 'MAINTENANCE';
                 $isIssue = $maintenance || self::machineStateIsIssue($state, $hasSession);
+                $detail = [
+                    'id' => self::boundedText($machineId, 128, 'unknown'),
+                    'name' => self::boundedText((string) ($row['name'] ?? $machineId), 128, 'unknown'),
+                    'pool_id' => self::boundedText($poolId, 128, 'unknown'),
+                    'pool' => self::boundedText((string) ($pools[$index]['name'] ?? ''), 128, 'unknown'),
+                    'pool_display_name' => self::boundedText((string) ($pools[$index]['display_name'] ?? $pools[$index]['name'] ?? ''), 128, 'unknown'),
+                    'clone_type' => (string) ($pools[$index]['clone_type'] ?? ''),
+                    'state' => $state,
+                    'maintenance' => $maintenance ? 1 : 0,
+                    'has_session' => $hasSession ? 1 : 0,
+                    'issue' => $isIssue ? 1 : 0,
+                    'issue_reason' => $isIssue ? self::machineIssueReason($state, $maintenance) : 'none',
+                    'collected_utc' => $collectedUtc,
+                ];
+                if (count($details) >= $detailLimit) {
+                    $detailsTruncated = true;
+                } else {
+                    $details[] = $detail;
+                }
                 if ($isIssue) {
                     $pools[$index]['issue_machines']++;
                     if (count($issues) >= $issueLimit) {
                         $issuesTruncated = true;
                     } else {
-                        $issues[] = [
-                            'id' => self::boundedText($machineId, 128, 'unknown'),
-                            'name' => self::boundedText((string) ($row['name'] ?? $machineId), 128, 'unknown'),
-                            'pool_id' => self::boundedText($poolId, 128, 'unknown'),
-                            'pool' => self::boundedText((string) ($pools[$index]['name'] ?? ''), 128, 'unknown'),
-                            'pool_display_name' => self::boundedText((string) ($pools[$index]['display_name'] ?? $pools[$index]['name'] ?? ''), 128, 'unknown'),
-                            'clone_type' => (string) ($pools[$index]['clone_type'] ?? ''),
-                            'state' => $state,
-                            'maintenance' => $maintenance ? 1 : 0,
-                            'has_session' => $hasSession ? 1 : 0,
-                            'issue_reason' => self::machineIssueReason($state, $maintenance),
-                            'collected_utc' => $collectedUtc,
-                        ];
+                        $issues[] = $detail;
                     }
                 }
                 if ($hasSession) {
@@ -780,8 +798,16 @@ final class PodCollector
             (string) ($left['pool_display_name'] ?? $left['pool'] ?? ''),
             (string) ($right['pool_display_name'] ?? $right['pool'] ?? '')
         ) ?: strcasecmp((string) ($left['name'] ?? ''), (string) ($right['name'] ?? '')));
+        usort($details, static fn (array $left, array $right): int =>
+            ((int) ($right['issue'] ?? 0) <=> (int) ($left['issue'] ?? 0))
+            ?: strcasecmp(
+                (string) ($left['pool_display_name'] ?? $left['pool'] ?? ''),
+                (string) ($right['pool_display_name'] ?? $right['pool'] ?? '')
+            )
+            ?: strcasecmp((string) ($left['name'] ?? ''), (string) ($right['name'] ?? ''))
+        );
 
-        return [$pools, $states, $issues, $issuesTruncated, $truncated];
+        return [$pools, $states, $details, $issues, $detailsTruncated, $issuesTruncated, $truncated];
     }
 
     /** @param list<array<string,mixed>> $pools @param array<string,mixed> $config @return array{0:list<array<string,mixed>>,1:array<string,int>} */

@@ -40,8 +40,8 @@
       "health_state": "ok",
       "reason": "timeout",
       "connection_servers_total": 3,
-      "connection_servers_unhealthy": 0,
-      "services_unhealthy": 0,
+      "connection_servers_unhealthy": 1,
+      "services_unhealthy": 1,
       "replications_unhealthy": 0,
       "certificates_invalid": 0,
       "sessions_total": 40,
@@ -50,6 +50,8 @@
       "sessions_other": 0,
       "sessions_truncated": 0,
       "machines_truncated": 0,
+      "machine_details_total": 3,
+      "machine_details_truncated": 0,
       "machine_issues_total": 1,
       "machine_issues_truncated": 0
     },
@@ -64,12 +66,28 @@
       "gateways_unhealthy": 0
     },
     "horizon_pod_members": [
-      {"name": "abc-vcs1.example.test", "status": "OK", "server_type": "connection_server", "enabled": 1}
+      {
+        "name": "abc-vcs1.example.test",
+        "status": "OK",
+        "server_type": "connection_server",
+        "enabled": 1,
+        "connections": 12,
+        "certificate_valid": 1,
+        "configuration_replications_unhealthy": 0,
+        "unhealthy_services": [
+          {"name": "CRL_PREFETCH", "status": "DOWN"}
+        ]
+      }
     ],
     "horizon_directory_summary": {"domains_total": 1, "member_links_total": 3, "member_links_unhealthy": 0},
-    "horizon_pools_summary": {"pools_total": 1, "pools_healthy": 0, "pools_informational": 1, "pools_warning": 0, "pools_critical": 0, "pools_incomplete": 0, "spare_total": 10, "spare_ready": 9, "spare_unready": 1, "issue_machines": 1},
+    "horizon_pools_summary": {"pools_total": 1, "pools_healthy": 0, "pools_informational": 1, "pools_warning": 0, "pools_critical": 0, "pools_incomplete": 0, "spare_total": 2, "spare_ready": 1, "spare_unready": 1, "issue_machines": 1},
     "horizon_pools": [
-      {"id": "pool-a", "name": "instant-a", "display_name": "Instant A", "source": "INSTANT_CLONE", "clone_type": "INSTANT_CLONE", "health_state": "info", "health_reason": "one_unavailable_capacity_remains", "machines_total": 20, "machines_with_sessions": 10, "spare_total": 10, "spare_ready": 9, "spare_unready": 1, "spare_unready_percent": 10, "spare_maintenance": 0, "issue_machines": 1, "placement_headroom_percent": 45}
+      {"id": "pool-a", "name": "instant-a", "display_name": "Instant A", "source": "INSTANT_CLONE", "clone_type": "INSTANT_CLONE", "health_state": "info", "health_reason": "one_unavailable_capacity_remains", "machines_total": 3, "machines_with_sessions": 1, "spare_total": 2, "spare_ready": 1, "spare_unready": 1, "spare_unready_percent": 50, "spare_maintenance": 0, "issue_machines": 1, "placement_headroom_percent": 33.3}
+    ],
+    "horizon_pool_machines": [
+      {"id": "machine-017", "name": "abc-desktop-017", "pool_id": "pool-a", "pool": "instant-a", "pool_display_name": "Instant A", "clone_type": "INSTANT_CLONE", "state": "CONNECTED", "maintenance": 0, "has_session": 1, "issue": 0, "issue_reason": "none", "collected_utc": "2026-07-22T17:55:00Z"},
+      {"id": "machine-018", "name": "abc-desktop-018", "pool_id": "pool-a", "pool": "instant-a", "pool_display_name": "Instant A", "clone_type": "INSTANT_CLONE", "state": "AVAILABLE", "maintenance": 0, "has_session": 0, "issue": 0, "issue_reason": "none", "collected_utc": "2026-07-22T17:55:00Z"},
+      {"id": "machine-019", "name": "abc-desktop-019", "pool_id": "pool-a", "pool": "instant-a", "pool_display_name": "Instant A", "clone_type": "INSTANT_CLONE", "state": "AGENT_UNREACHABLE", "maintenance": 0, "has_session": 0, "issue": 1, "issue_reason": "agent_unreachable", "collected_utc": "2026-07-22T17:55:00Z"}
     ],
     "horizon_pool_machine_issues": [
       {"id": "machine-019", "name": "abc-desktop-019", "pool_id": "pool-a", "pool": "instant-a", "pool_display_name": "Instant A", "clone_type": "INSTANT_CLONE", "state": "AGENT_UNREACHABLE", "maintenance": 0, "has_session": 0, "issue_reason": "agent_unreachable", "collected_utc": "2026-07-22T17:55:00Z"}
@@ -84,7 +102,7 @@
       "horizon_api_sessions_total": 40,
       "horizon_pod_members_total": 3,
       "horizon_pools_total": 1,
-      "horizon_spare_ready": 9,
+      "horizon_spare_ready": 1,
       "horizon_central_stale": 1,
       "horizon_central_snapshot_age_seconds": 300
     },
@@ -106,14 +124,21 @@
         "Horizon API collection is stale; last good snapshot retained",
         "Central collector",
         "Instant A",
+        "abc-desktop-017",
+        "abc-desktop-018",
         "abc-desktop-019",
         "Agent unreachable",
         "Machine details",
+        "Connection Server details",
+        "data-pool-open-filter=\"sessions\"",
+        "data-pool-open-filter=\"unavailable\"",
+        "data-member-drawer=",
         "Collector reliability",
         "30d"
       ],
       "not_contains": [
-        "not_configured"
+        "not_configured",
+        "device/device="
       ]
     }
   }
