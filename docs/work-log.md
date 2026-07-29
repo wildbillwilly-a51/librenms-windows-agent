@@ -1,5 +1,29 @@
 # Work Log
 
+## 2026-07-28
+
+- Filled in the previously empty `docs/project-summary.md` template with stable
+  project orientation: purpose and generic-repo boundary, released status,
+  three-project plus overlay architecture, entry points and key paths,
+  protocol/runtime/distribution interfaces, standard validation and release
+  commands, and durable constraints. Deliberately kept version numbers out of
+  the summary so `CURRENT-STATE.md` remains the single version source of truth
+  and `docs/codex-handoff.md` remains the objective record.
+- Added `CLAUDE.md` containing only an `@AGENTS.md` import so Claude Code
+  sessions inherit the existing project rules rather than a second copy of them.
+- Validation: verified every asserted command and identifier against the source
+  rather than the docs. Confirmed `build-release.ps1` accepts `-Version`,
+  `-AgentVersion`, `-OverlayVersion`, `-ArtifactsDir`, `-SkipTests`,
+  `-OverlayOnly`, `-AgentOnly`, and `-UpdateChecksums`; confirmed
+  `build-msi.ps1` and `build-overlay-package.ps1` accept `-ArtifactsDir`;
+  confirmed the test project path and the three overlay fixture runners exist;
+  confirmed `net462` in `Directory.Build.props`, port `6556` in
+  `AgentConfig.cs`, and service name `LibreNMSWindowsAgent` in
+  `installer/wix/Package.wxs`; confirmed Redis use is confined to overlay
+  Horizon central tools. Documentation-only change, so agent tests, package
+  builds, and PHP fixtures were not rerun and prior release evidence remains
+  valid. No deployment was performed.
+
 ## 2026-07-26
 
 - Implemented and packaged overlay 0.6.20 around an explicit Horizon health

@@ -1,5 +1,16 @@
 # Changelog
 
+## Documentation maintenance - 2026-07-28
+
+- Filled in `docs/project-summary.md`, which was still an empty template, with
+  stable purpose, status, architecture, entry points, interfaces, commands, and
+  constraints orientation. Version-specific facts continue to live in
+  `CURRENT-STATE.md` and objective state in `docs/codex-handoff.md`, so the
+  summary does not duplicate release numbers.
+- Added a `CLAUDE.md` entry point that imports `AGENTS.md` so the existing
+  project rules apply without duplicating them. No agent, overlay, installer,
+  protocol, or release behavior changed.
+
 ## Overlay 0.6.20 / Windows agent 0.6.16 - 2026-07-26
 
 - Added an explicit Horizon health contract with independent platform,
