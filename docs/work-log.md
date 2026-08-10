@@ -1,5 +1,38 @@
 # Work Log
 
+## 2026-08-10
+
+- Verified the deployed state of the published releases against the live
+  environment rather than the handoff docs, which were stale. Windows agent
+  `0.6.16` is running on one host and returns a valid payload with the release's
+  Horizon service-expectedness and active-certificate classifications present.
+  Overlay `0.6.20` is installed on all five application nodes; all 70 payload
+  files hash-match the published artifact on every node, and both backend nodes
+  correctly carry no overlay. Central RRD data is current.
+- Confirmed via the GitHub API that the public mirror's `main` matches the local
+  commit, that the published `SHA256SUMS` is byte-identical to the local file,
+  and that the published `install-agent.ps1` is byte-identical to local and
+  defaults to the current agent version.
+- Set the release workflow in `AGENTS.md`: added a `Release And Publication`
+  section (one version per batch, publish as part of release completion, new
+  version becomes the installer default in the same commit, mixed deployed
+  versions reported at handoff), made published artifacts immutable, and
+  de-pinned example version numbers from the validation block.
+- Established that publishing cannot move a deployed host: the overlay reapply
+  timer execs the locally staged `install-overlay.sh` under the state root and
+  performs no download, so rollout timing stays with the operator. This is
+  recorded in the new `AGENTS.md` section because it is the reason a published
+  version can safely become the installer default immediately.
+- Validation: read the reapply install path in `librenms-overlay/install-overlay.sh`
+  and the units in `librenms-overlay/systemd/` to confirm no network access in
+  the reapply path; confirmed `install.sh` verifies the downloaded overlay by
+  exact artifact name against `SHA256SUMS` under `set -euo pipefail`, so a
+  version absent from `SHA256SUMS` aborts rather than installing unverified
+  bytes. Docs-only change, so no build, test, or packaging validation was run.
+- Known gap, not changed: `SHA256SUMS` pins only the three current artifacts, so
+  installing a superseded version by `--version` fails the checksum step. Left
+  as-is pending a decision on whether to pin the previous version as well.
+
 ## 2026-07-28
 
 - Filled in the previously empty `docs/project-summary.md` template with stable

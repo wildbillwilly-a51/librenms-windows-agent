@@ -47,8 +47,12 @@ completion.
 - Do not publish secrets, private infrastructure facts, customer names, private
   hostnames, private IP inventories, SSH keys, tokens, cookies, certificates, or
   live LibreNMS credentials.
-- Treat `artifacts/librenms-windows-agent-overlay-*.tar.gz` as a release
-  payload. Rebuild `SHA256SUMS` whenever the tarball changes.
+- Treat `artifacts/librenms-windows-agent-overlay-*.tar.gz`,
+  `artifacts/librenms-windows-agent-*.msi`, and
+  `artifacts/librenms-windows-agent-config-*-win.json` as immutable release
+  payloads. Never re-cut a version that has already been pushed to GitHub;
+  publish the next version instead. Rebuild `SHA256SUMS` whenever a new
+  artifact is added.
 
 ## Validation
 
@@ -58,8 +62,8 @@ Use the smallest relevant validation first:
 dotnet run --project .\tests\LibreNMS.WindowsAgent.Tests\LibreNMS.WindowsAgent.Tests.csproj -c Release
 bash -n ./install.sh
 .\scripts\build-overlay-package.ps1 -ArtifactsDir <temporary-output-directory>
-tar -tzf .\artifacts\librenms-windows-agent-overlay-0.6.19.tar.gz
-Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-0.6.19.tar.gz
+tar -tzf .\artifacts\librenms-windows-agent-overlay-<current-overlay-version>.tar.gz
+Get-FileHash -Algorithm SHA256 .\artifacts\librenms-windows-agent-overlay-<current-overlay-version>.tar.gz
 ```
 
 For release work, run `scripts/build-release.ps1`. When PHP is available, also
@@ -105,6 +109,31 @@ unless reviewed, scanned, and intentionally added.
 
 If GitHub push is unavailable, keep the local commit and report push as skipped
 or pending. Do not rewrite history to repair a failed push.
+
+### Release And Publication
+
+The public GitHub repository is the install source for both the Windows agent
+and the overlay. Publication is part of finishing release work, not a separate
+task.
+
+- One version per batch of work. Iterate locally without bumping the version;
+  bump once, when the batch is published.
+- A version number is immutable once pushed. A fix needed after publication
+  ships as the next version, never as new bytes behind an already-published
+  version number.
+- Agent-only, overlay-only, and combined releases all use
+  `scripts/build-release.ps1`. See `docs/release-runbook.md` for the exact
+  switches.
+- A newly published version becomes the installer default in the same commit.
+  Publishing never updates a deployed host: the overlay reapply timer
+  re-applies the locally staged copy and performs no download, so agents and
+  overlay nodes change only when the operator runs an installer. Rollout timing
+  stays with the operator.
+- Avoid leaving mixed agent or overlay versions in the field. When a release
+  supersedes a version that is deployed, say so plainly at handoff and list the
+  hosts or nodes still behind.
+- `CURRENT-STATE.md` is the version source of truth. Do not pin example
+  version numbers in this file.
 
 <!-- new-project-setup:v7:start -->
 ## Project Workflow

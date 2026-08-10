@@ -1,5 +1,20 @@
 # Changelog
 
+## Release workflow rules - 2026-08-10
+
+- Added a `Release And Publication` section to `AGENTS.md` codifying the public
+  GitHub repository as the install source for both the agent and the overlay:
+  one version per batch of work, publication as part of finishing release work,
+  a newly published version becoming the installer default in the same commit,
+  and an explicit note that mixed deployed versions are called out at handoff.
+- Strengthened the artifact rule so published overlay, MSI, and versioned config
+  artifacts are immutable. A fix needed after publication now ships as the next
+  version instead of new bytes behind an already-published version number.
+- Replaced pinned example version numbers in the `AGENTS.md` validation block
+  with a placeholder so the rules file does not go stale on every release, and
+  recorded `CURRENT-STATE.md` as the version source of truth. No agent, overlay,
+  installer, protocol, or release behavior changed.
+
 ## Documentation maintenance - 2026-07-28
 
 - Filled in `docs/project-summary.md`, which was still an empty template, with
