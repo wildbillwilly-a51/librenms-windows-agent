@@ -139,7 +139,11 @@
         "Listener Inventory",
         "Host Certificates",
         "Visibility only",
-        "data-type=\"application_windows-agent_horizon_collector_health\""
+        "data-type=\"application_windows-agent_horizon_collector_health\"",
+        "aria-controls=\"windows-agent-horizon\"",
+        "Trends",
+        "data-type=\"application_windows-agent_horizon_state_health\"",
+        "data-type=\"application_windows-agent_horizon_edges\""
       ],
       "not_contains": [
         "<h3 class=\"panel-title\">VMware Horizon visibility</h3>",

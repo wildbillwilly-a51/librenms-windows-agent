@@ -77,7 +77,7 @@
     "app_page": {
       "contains": [
         "FactoryTalk Runtime Metrics",
-        "Operational view",
+        "aria-controls=\"windows-agent-factorytalk\"",
         "Trends",
         "No FactoryTalk health issues were reported.",
         "Top FactoryTalk Processes",
@@ -99,7 +99,8 @@
       "not_contains": [
         "PRIVATE_CONTROLLER",
         "198.51.100.4",
-        "Reported Health Issues"
+        "Reported Health Issues",
+        "aria-controls=\"windows-agent-active-directory\""
       ]
     }
   }

@@ -1,5 +1,49 @@
 # Work Log
 
+## 2026-08-10 (overlay app page role tabs)
+
+- Gave each detected first-order role its own application-page tab, following the
+  existing Horizon pattern: `Active Directory`, `FactoryTalk`, and `Horizon`,
+  each conditional on that role's own detection flag. Confirmed against live
+  payloads that all three flags have the same shape and are mutually exclusive on
+  real hosts: `ad_dc_health_summary.dc_detected`,
+  `factorytalk_summary.detected`, and the existing Horizon surface predicate.
+- Moved the AD summary, local DC health, replication targets, and FSMO sections
+  onto the Active Directory tab, and the FactoryTalk operational view onto the
+  FactoryTalk tab. DFSR follows the domain controller when one is detected and
+  otherwise remains on `Roles & Workloads`.
+- Built the Active Directory dashboard from fields the agent already reports
+  (`state`, `next_action`, core service counts, share publication, replication
+  failures, FSMO state, time state), so no agent or protocol change was needed.
+- Found and fixed a real defect while restructuring: `$horizon_graphs` was still
+  assembled but never read, so nine existing Horizon graph definitions had been
+  unreachable from the UI since Horizon was promoted out of `Roles & Workloads`.
+  Confirmed all eleven referenced graph files exist, then wired every role tab's
+  graphs into a shared `Trends` disclosure rather than deleting the list.
+- Replaced the duplicated active-tab logic with one registry plus a single
+  `array_key_first` computation, because the nav loop and the pane calls
+  previously decided the active tab independently.
+- Cleared two stale references from the earlier Horizon promotion: the
+  `Roles & Workloads` issue glyph no longer ORs in Horizon, FactoryTalk, and
+  AD/DC states, and the Horizon API notice no longer directs users to
+  `Roles & Workloads` for local evidence.
+- Validation: `php -l` clean on the changed page and on all 69 overlay PHP files;
+  all 11 app-page fixtures, the parser fixtures, and the central-collector tests
+  pass. Beyond the string assertions, rendered each scenario through the runner's
+  `--render` mode and confirmed structurally that exactly one nav item and exactly
+  one pane are active in all four cases, that `minimal-agent` shows no role tabs
+  and lands on `Overview`, and that `full-domain-controller` (both `dc_detected`
+  and FactoryTalk detected) renders Active Directory first, then FactoryTalk.
+  Verified by grep that neither `README.md` nor `docs/` documents the tab layout,
+  so no doc updates were required.
+- Not released. The version is unchanged and no artifact was rebuilt, so the
+  published overlay still contains the previous app page and no deployed node
+  changes. Publishing this as the next overlay version is a separate step once the
+  rendered result has been reviewed.
+- Deferred: `SHA256SUMS` still pins only the current artifacts, so rollback by
+  `--version` remains unavailable pending a decision on pinning the previous
+  version.
+
 ## 2026-08-10
 
 - Verified the deployed state of the published releases against the live

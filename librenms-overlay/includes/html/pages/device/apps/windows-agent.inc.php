@@ -1273,7 +1273,7 @@ if ($horizon_surface_available) {
         $horizon_details .= $render_disclosure('windows-agent-horizon-collector-trend', 'Collector performance trend', $render_graph_html('windows-agent_horizon_collector_health'), 'Duration, requests, pages, endpoints, and completeness');
         $horizon_details .= '</div>';
     } else {
-        $horizon_details .= '<div class="alert alert-info">Central Horizon API collection is ' . $esc($horizon_api_enabled ? 'unavailable' : 'not configured') . '. Local host evidence remains available in Roles &amp; Workloads.</div>';
+        $horizon_details .= '<div class="alert alert-info">Central Horizon API collection is ' . $esc($horizon_api_enabled ? 'unavailable' : 'not configured') . '. Local host evidence remains available on this tab.</div>';
         $rawDetails = $render_horizon_local_diagnostics();
         if ($rawDetails !== '') {
             $horizon_details .= '<div class="windows-agent-horizon-diagnostics">';
@@ -1544,6 +1544,123 @@ $dfsr_details = $table(['State', 'Replication group', 'Folder', 'Member', 'Sourc
 $fsmo_details = $table(['State', 'Role', 'Owner', 'Reason'], $issue_first($ad_fsmo, static fn (array $row): int => strtolower((string) ($row['state'] ?? '')) === 'ok' ? 0 : 1, 'role'), static function ($row) use ($esc): string {
     return '<td>' . $esc($row['state'] ?? '') . '</td><td>' . $esc($row['role'] ?? '') . '</td><td>' . $esc($row['owner'] ?? '') . '</td><td>' . $esc($row['reason'] ?? '') . '</td>';
 });
+
+$ad_dc_detected = (int) ($ad_dc_health_summary['dc_detected'] ?? 0) === 1;
+$ad_reported_next_action = trim((string) ($ad_dc_health_summary['next_action'] ?? ''));
+$ad_core_services_total = (int) ($ad_dc_health_summary['core_services_total'] ?? 0);
+$ad_core_services_down = (int) ($ad_dc_health_summary['core_services_not_running'] ?? 0);
+$ad_shares_missing = (int) ($ad_dc_health_summary['shares_missing'] ?? 0);
+$ad_replication_failures = (int) ($ad_summary['replication_failures'] ?? 0);
+
+$dfsr_has_issue = false;
+foreach ($ad_dfsr as $dfsr_row) {
+    if (strtolower((string) ($dfsr_row['state'] ?? '')) !== 'ok') {
+        $dfsr_has_issue = true;
+        break;
+    }
+}
+
+$ad_attention = [];
+foreach ($ad_dc_services as $service) {
+    if ((int) ($service['core'] ?? 0) !== 1 || strtolower((string) ($service['state'] ?? '')) === 'running') {
+        continue;
+    }
+
+    $ad_attention[] = [
+        'title' => 'Core domain-controller service is not running: ' . (string) ($service['display'] ?? $service['name'] ?? 'unknown'),
+        'detail' => 'Current state: ' . (string) ($service['state'] ?? 'unknown') . '; startup: ' . (string) ($service['start_mode'] ?? 'unknown'),
+        'action' => $ad_reported_next_action !== '' ? $ad_reported_next_action : 'Check the service and its Active Directory dependencies.',
+    ];
+}
+foreach ($ad_dc_shares as $share) {
+    if ((int) ($share['present'] ?? 0) === 1) {
+        continue;
+    }
+
+    $ad_attention[] = [
+        'title' => 'Published share is missing: ' . (string) ($share['name'] ?? 'unknown'),
+        'detail' => 'Expected path: ' . (string) ($share['path'] ?? 'unknown'),
+        'action' => 'Confirm SYSVOL and NETLOGON are published on this domain controller.',
+    ];
+}
+foreach ($ad_replication as $replication_row) {
+    if (strtolower((string) ($replication_row['state'] ?? '')) === 'ok') {
+        continue;
+    }
+
+    $ad_attention[] = [
+        'title' => 'Replication is unhealthy for target: ' . (string) ($replication_row['target'] ?? 'unknown'),
+        'detail' => 'Failures: ' . (string) ($replication_row['failure_count'] ?? '0') . '; last failure: ' . (string) ($replication_row['last_failure_status'] ?? ($replication_row['reason'] ?? 'unknown')),
+        'action' => 'Review Active Directory replication for this partner.',
+    ];
+}
+foreach ($ad_fsmo as $fsmo_row) {
+    if (strtolower((string) ($fsmo_row['state'] ?? '')) === 'ok') {
+        continue;
+    }
+
+    $ad_attention[] = [
+        'title' => 'FSMO role is unhealthy: ' . (string) ($fsmo_row['role'] ?? 'unknown'),
+        'detail' => 'Owner: ' . (string) ($fsmo_row['owner'] ?? 'unknown') . '; reason: ' . (string) ($fsmo_row['reason'] ?? 'unknown'),
+        'action' => 'Confirm the reported FSMO role owner is reachable.',
+    ];
+}
+
+$ad_health_issue_count = max(
+    (int) ($ad_dc_health_summary['health_issues'] ?? 0),
+    $ad_core_services_down,
+    $ad_shares_missing,
+    count($ad_attention)
+);
+
+$ad_dashboard = '';
+if ($ad_dc_detected) {
+    $ad_status_class = [
+        'success' => 'success',
+        'warning' => 'warning',
+        'danger' => 'danger',
+    ][$sections['ad_dc']['state']['class'] ?? ''] ?? 'info';
+    $ad_status_text = $ad_health_issue_count === 0
+        ? 'No domain-controller health issues were reported.'
+        : $ad_health_issue_count . ' domain-controller health issue(s) were reported.';
+    $ad_next_action = $ad_health_issue_count === 0
+        ? ''
+        : ($ad_reported_next_action !== '' ? $ad_reported_next_action : (string) ($ad_attention[0]['action'] ?? 'Review the domain-controller evidence below.'));
+
+    $ad_dashboard .= '<div class="windows-agent-role-dashboard">';
+    $ad_dashboard .= '<div class="windows-agent-role-status windows-agent-role-status-' . $esc($ad_status_class) . '">';
+    $ad_dashboard .= '<span class="label label-' . $esc($ad_status_class) . '">' . $esc($sections['ad_dc']['state']['text'] ?? 'Unknown') . '</span> ';
+    $ad_dashboard .= '<strong>' . $esc($ad_status_text) . '</strong>';
+    if ($ad_next_action !== '') {
+        $ad_dashboard .= ' <span class="windows-agent-role-action"><strong>Next:</strong> ' . $esc($ad_next_action) . '</span>';
+    }
+    $ad_dashboard .= '<span class="text-muted windows-agent-role-collected">Collected ' . $esc($data['last_agent_utc'] ?? 'unknown') . '</span></div>';
+
+    $ad_stats = [
+        ['Health issues', $ad_health_issue_count, 'Local domain-controller evidence'],
+        ['Core services down', $ad_core_services_down, $ad_core_services_total . ' expected'],
+        ['SYSVOL / NETLOGON', ((int) ($ad_dc_health_summary['sysvol_share_present'] ?? 0) === 1 ? 'Published' : 'Missing') . ' / ' . ((int) ($ad_dc_health_summary['netlogon_share_present'] ?? 0) === 1 ? 'Published' : 'Missing'), $ad_shares_missing . ' missing'],
+        ['Replication failures', $ad_replication_failures, 'State: ' . (string) ($ad_summary['replication_state'] ?? 'unknown')],
+        ['FSMO', (string) ($ad_summary['fsmo_state'] ?? 'unknown'), count($ad_fsmo) . ' role(s) reported'],
+        ['Time sync', (string) ($ad_dc_health_summary['time_state'] ?? 'unknown'), (int) ($ad_dc_health_summary['time_service_running'] ?? 0) === 1 ? 'Service running' : 'Service not running'],
+    ];
+    $ad_dashboard .= '<div class="row windows-agent-role-stats">';
+    foreach ($ad_stats as [$ad_stat_label, $ad_stat_value, $ad_stat_detail]) {
+        $ad_dashboard .= '<div class="col-sm-4 col-lg-2 windows-agent-role-stat"><div class="text-muted windows-agent-role-stat-label">' . $esc($ad_stat_label) . '</div><div class="windows-agent-role-stat-value">' . $esc($ad_stat_value) . '</div><div class="text-muted windows-agent-role-stat-detail">' . $esc($ad_stat_detail) . '</div></div>';
+    }
+    $ad_dashboard .= '</div>';
+
+    if (! empty($ad_attention)) {
+        $ad_dashboard .= '<div class="windows-agent-role-attention"><h4>Reported Health Issues <small>' . $ad_health_issue_count . '</small></h4><ul>';
+        foreach ($ad_attention as $attention) {
+            $ad_dashboard .= '<li><strong>' . $esc($attention['title'] ?? 'Active Directory health issue') . '</strong> ';
+            $ad_dashboard .= '<span class="text-muted">' . $esc($attention['detail'] ?? '') . '</span>';
+            $ad_dashboard .= '<div class="text-muted windows-agent-role-attention-action"><strong>Next:</strong> ' . $esc($attention['action'] ?? 'Review the domain-controller evidence below.') . '</div></li>';
+        }
+        $ad_dashboard .= '</ul></div>';
+    }
+    $ad_dashboard .= '</div>';
+}
 $users_details = $table(['User', 'Domain', 'Session', 'ID', 'State', 'Idle time', 'Logon time', 'Current', 'Source'], $logged_on_user_sessions, static function ($row) use ($esc, $state_label): string {
     return '<td>' . $esc($row['user'] ?? '') . '</td><td>' . $esc($row['domain'] ?? '') . '</td><td>' . $esc($row['session_name'] ?? '') . '</td><td>' . $esc($row['session_id'] ?? '') . '</td><td>' . $state_label($row['state'] ?? 'unknown', ['active']) . '</td><td>' . $esc($row['idle_time'] ?? '') . '</td><td>' . $esc($row['logon_time'] ?? '') . '</td><td>' . $esc($row['current'] ?? '0') . '</td><td>' . $esc($row['source'] ?? '') . '</td>';
 });
@@ -1616,9 +1733,30 @@ $performance_tab .= $render_section_summary('performance-depth', 'Windows Perfor
     ['label' => 'Pressure Issues', 'key' => 'windows-agent_perf_pressure_issues'],
 ]);
 
-$roles_tab = '';
-$roles_tab .= $render_section_summary('sql', 'SQL Server', $sections['sql']['state'], $sections['sql']['summary'], $sql_details);
-$roles_tab .= $render_section_summary('iis', 'IIS', $sections['iis']['state'], $sections['iis']['summary'], $iis_details);
+$render_graph_list = static function (array $graphs, string $id_prefix) use ($esc, $render_graph_html, $render_disclosure): string {
+    $primary = '';
+    $secondary = '';
+    foreach ($graphs as $graph) {
+        $graph_key = $graph['key'] ?? '';
+        if ($graph_key === '') {
+            continue;
+        }
+
+        $graph_html = '<div class="windows-agent-graph-view"><h4>' . $esc($graph['label'] ?? 'Graph') . '</h4>' . $render_graph_html($graph_key) . '</div>';
+        if ((bool) ($graph['secondary'] ?? false)) {
+            $secondary .= $graph_html;
+        } else {
+            $primary .= $graph_html;
+        }
+    }
+
+    if ($secondary !== '') {
+        $primary .= $render_disclosure($id_prefix . '-additional-graphs', 'Additional graphs', $secondary);
+    }
+
+    return $primary;
+};
+
 $horizon_graphs = [
     ['label' => 'Horizon State and Issues', 'key' => 'windows-agent_horizon_state_health'],
     ['label' => 'Horizon Listeners and Certificates', 'key' => 'windows-agent_horizon_edges'],
@@ -1652,15 +1790,49 @@ if (! empty($factorytalk_linx_connections) || ! empty($factorytalk_linx_backplan
     $factorytalk_graphs[] = ['label' => 'FactoryTalk Linx Transactions', 'key' => 'windows-agent_factorytalk_linx_transactions', 'secondary' => true];
     $factorytalk_graphs[] = ['label' => 'FactoryTalk Live Data Clients', 'key' => 'windows-agent_factorytalk_livedata_clients', 'secondary' => true];
 }
-$roles_tab .= $render_section_summary('factorytalk', 'FactoryTalk', $sections['factorytalk']['state'], $sections['factorytalk']['summary'], $factorytalk_details, $factorytalk_graphs, 'Operational view', 'Trends');
+$dfsr_section = $render_section_summary('dfsr', 'DFSR Replication Health', $section_state(empty($ad_dfsr) ? 'not_applicable' : 'ok'), $metric('Rows', count($ad_dfsr)), $dfsr_details);
+
+$active_directory_tab = '';
+if ($ad_dc_detected) {
+    $active_directory_tab .= $ad_dashboard;
+    $active_directory_tab .= $render_section_summary('ad', 'Active Directory Summary', $section_state($ad_summary['state'] ?? 'not_applicable'), $metric('Domain', $ad_summary['domain'] ?? '') . ' ' . $metric('Failures', $ad_summary['replication_failures'] ?? '0'), $ad_details);
+    $active_directory_tab .= $render_section_summary('ad-dc', 'AD/DC Local Health', $sections['ad_dc']['state'], $sections['ad_dc']['summary'], $ad_dc_details);
+    $active_directory_tab .= $render_section_summary('ad-replication', 'AD Replication Targets', $section_state(empty($ad_replication) ? 'not_applicable' : 'ok'), $metric('Targets', count($ad_replication)), $ad_replication_details);
+    $active_directory_tab .= $render_section_summary('fsmo', 'FSMO Roles', $section_state(empty($ad_fsmo) ? 'not_applicable' : 'ok'), $metric('Roles', count($ad_fsmo)), $fsmo_details);
+    $active_directory_tab .= $dfsr_section;
+    $active_directory_tab .= $render_disclosure('windows-agent-active-directory-trends', 'Trends', $render_graph_list([
+        ['label' => 'AD/DC Local Health Issues', 'key' => 'windows-agent_ad_dc_health'],
+    ], 'windows-agent-active-directory'), 'Local domain-controller health issues');
+    if (trim($active_directory_tab) === '') {
+        $active_directory_tab = '<div class="alert alert-info">A domain controller was detected, but the agent reported no Active Directory detail.</div>';
+    }
+}
+
+$factorytalk_tab = '';
+if ($factorytalk_detected) {
+    $factorytalk_tab .= $factorytalk_details;
+    $factorytalk_tab .= $render_disclosure('windows-agent-factorytalk-trends', 'Trends', $render_graph_list($factorytalk_graphs, 'windows-agent-factorytalk'), count($factorytalk_graphs) . ' graph(s)');
+    if (trim($factorytalk_tab) === '') {
+        $factorytalk_tab = '<div class="alert alert-info">FactoryTalk was detected, but the agent reported no FactoryTalk detail.</div>';
+    }
+}
+
+$horizon_tab = '';
+if ($horizon_surface_available) {
+    $horizon_tab .= $horizon_details;
+    $horizon_tab .= $render_disclosure('windows-agent-horizon-trends', 'Trends', $render_graph_list($horizon_graphs, 'windows-agent-horizon'), count($horizon_graphs) . ' graph(s)');
+    if (trim($horizon_tab) === '') {
+        $horizon_tab = '<div class="alert alert-info">Horizon was detected, but the agent reported no Horizon detail.</div>';
+    }
+}
+
+$roles_tab = '';
+$roles_tab .= $render_section_summary('sql', 'SQL Server', $sections['sql']['state'], $sections['sql']['summary'], $sql_details);
+$roles_tab .= $render_section_summary('iis', 'IIS', $sections['iis']['state'], $sections['iis']['summary'], $iis_details);
 $roles_tab .= $render_section_summary('roles', 'Detected Roles', $section_state(empty($roles) ? 'not_detected' : 'ok'), $metric('Rows', count($roles)), $role_details);
-$roles_tab .= $render_section_summary('ad', 'Active Directory Summary', $section_state($ad_summary['state'] ?? 'not_applicable'), $metric('Domain', $ad_summary['domain'] ?? '') . ' ' . $metric('Failures', $ad_summary['replication_failures'] ?? '0'), $ad_details);
-$roles_tab .= $render_section_summary('ad-dc', 'AD/DC Local Health', $sections['ad_dc']['state'], $sections['ad_dc']['summary'], $ad_dc_details, [
-    ['label' => 'AD/DC Local Health Issues', 'key' => 'windows-agent_ad_dc_health'],
-]);
-$roles_tab .= $render_section_summary('ad-replication', 'AD Replication Targets', $section_state(empty($ad_replication) ? 'not_applicable' : 'ok'), $metric('Targets', count($ad_replication)), $ad_replication_details);
-$roles_tab .= $render_section_summary('dfsr', 'DFSR Replication Health', $section_state(empty($ad_dfsr) ? 'not_applicable' : 'ok'), $metric('Rows', count($ad_dfsr)), $dfsr_details);
-$roles_tab .= $render_section_summary('fsmo', 'FSMO Roles', $section_state(empty($ad_fsmo) ? 'not_applicable' : 'ok'), $metric('Roles', count($ad_fsmo)), $fsmo_details);
+if (! $ad_dc_detected) {
+    $roles_tab .= $dfsr_section;
+}
 $roles_tab .= $render_section_summary('users', 'Logged-On Users', $section_state(empty($logged_on_user_sessions) ? 'not_detected' : 'ok'), $metric('Sessions', count($logged_on_user_sessions)), $users_details);
 
 $security_tab = '';
@@ -1900,45 +2072,75 @@ echo '<style>
     .windows-agent-horizon-machine-toolbar .btn-group { display: flex; flex-wrap: wrap; }
 }
 </style>';
-echo '<ul class="nav nav-tabs" role="tablist">';
-$tabs = [];
-if ($horizon_surface_available) {
-    $tabs['windows-agent-horizon'] = 'Horizon Operations';
+// Detected first-order roles are promoted to their own tab, in a fixed order so
+// a host carrying more than one role always renders the same layout. Each role
+// tab appears only while that role is detected, and the first tab in the built
+// list is the landing tab.
+$tab_definitions = [];
+if ($ad_dc_detected) {
+    $tab_definitions['windows-agent-active-directory'] = [
+        'title' => 'Active Directory',
+        'body' => $active_directory_tab,
+        'issue' => $state_has_issue($sections['ad_dc']['state']) || $dfsr_has_issue,
+    ];
 }
-$tabs += [
-    'windows-agent-overview' => 'Overview',
-    'windows-agent-roles' => 'Roles & Workloads',
-    'windows-agent-security' => 'Security & Certificates',
-    'windows-agent-backup' => 'Backup',
-    'windows-agent-services' => 'Services & Events',
-    'windows-agent-agent-performance' => 'Agent Performance',
+if ($factorytalk_detected) {
+    $tab_definitions['windows-agent-factorytalk'] = [
+        'title' => 'FactoryTalk',
+        'body' => $factorytalk_tab,
+        'issue' => $state_has_issue($sections['factorytalk']['state']),
+    ];
+}
+if ($horizon_surface_available) {
+    $tab_definitions['windows-agent-horizon'] = [
+        'title' => 'Horizon',
+        'body' => $horizon_tab,
+        'issue' => $state_has_issue($sections['horizon']['state']),
+    ];
+}
+$tab_definitions += [
+    'windows-agent-overview' => [
+        'title' => 'Overview',
+        'body' => $overview,
+        'issue' => false,
+    ],
+    'windows-agent-roles' => [
+        'title' => 'Roles & Workloads',
+        'body' => $roles_tab,
+        'issue' => $state_has_issue($sections['sql']['state']) || $state_has_issue($sections['iis']['state']) || (! $ad_dc_detected && $dfsr_has_issue),
+    ],
+    'windows-agent-security' => [
+        'title' => 'Security & Certificates',
+        'body' => $security_tab,
+        'issue' => $state_has_issue($sections['tls']['state']),
+    ],
+    'windows-agent-backup' => [
+        'title' => 'Backup',
+        'body' => $backup_tab,
+        'issue' => $state_has_issue($sections['backup']['state']) || $state_has_issue($sections['datto']['state']),
+    ],
+    'windows-agent-services' => [
+        'title' => 'Services & Events',
+        'body' => $services_tab,
+        'issue' => $state_has_issue($sections['services']['state']) || $state_has_issue($sections['events']['state']) || $state_has_issue($sections['processes']['state']) || $state_has_issue($sections['tcp']['state']) || ((int) ($pending_reboot['pending'] ?? 0) || (int) ($windows_update['reboot_required'] ?? 0)),
+    ],
+    'windows-agent-agent-performance' => [
+        'title' => 'Agent Performance',
+        'body' => $agent_performance_tab,
+        'issue' => $state_has_issue($sections['agent']['state']) || $state_has_issue($sections['vm']['state']) || $state_has_issue($sections['performance']['state']),
+    ],
 ];
-$tab_has_issue = [
-    'windows-agent-horizon' => $state_has_issue($sections['horizon']['state']),
-    'windows-agent-overview' => false,
-    'windows-agent-roles' => $state_has_issue($sections['sql']['state']) || $state_has_issue($sections['iis']['state']) || $state_has_issue($sections['horizon']['state']) || $state_has_issue($sections['factorytalk']['state']) || $state_has_issue($sections['ad_dc']['state']),
-    'windows-agent-security' => $state_has_issue($sections['tls']['state']),
-    'windows-agent-backup' => $state_has_issue($sections['backup']['state']) || $state_has_issue($sections['datto']['state']),
-    'windows-agent-services' => $state_has_issue($sections['services']['state']) || $state_has_issue($sections['events']['state']) || $state_has_issue($sections['processes']['state']) || $state_has_issue($sections['tcp']['state']) || ((int) ($pending_reboot['pending'] ?? 0) || (int) ($windows_update['reboot_required'] ?? 0)),
-    'windows-agent-agent-performance' => $state_has_issue($sections['agent']['state']) || $state_has_issue($sections['vm']['state']) || $state_has_issue($sections['performance']['state']),
-];
+$active_tab_id = (string) array_key_first($tab_definitions);
 $issue_icon = '<span class="windows-agent-tab-alert glyphicon glyphicon-exclamation-sign text-danger" title="This tab has one or more issues" aria-label="issues present"></span>';
-$first = true;
-foreach ($tabs as $id => $title) {
-    echo '<li role="presentation" class="' . ($first ? 'active' : '') . '"><a href="#' . $esc($id) . '" aria-controls="' . $esc($id) . '" role="tab" data-toggle="tab">' . $esc($title) . (($tab_has_issue[$id] ?? false) ? ' ' . $issue_icon : '') . '</a></li>';
-    $first = false;
+echo '<ul class="nav nav-tabs" role="tablist">';
+foreach ($tab_definitions as $id => $tab) {
+    echo '<li role="presentation" class="' . ($id === $active_tab_id ? 'active' : '') . '"><a href="#' . $esc($id) . '" aria-controls="' . $esc($id) . '" role="tab" data-toggle="tab">' . $esc($tab['title'] ?? '') . (($tab['issue'] ?? false) ? ' ' . $issue_icon : '') . '</a></li>';
 }
 echo '</ul>';
 echo '<div class="tab-content" style="padding-top: 15px;">';
-if ($horizon_surface_available) {
-    $render_tab('windows-agent-horizon', true, $horizon_details);
+foreach ($tab_definitions as $id => $tab) {
+    $render_tab($id, $id === $active_tab_id, (string) ($tab['body'] ?? ''));
 }
-$render_tab('windows-agent-overview', ! $horizon_surface_available, $overview);
-$render_tab('windows-agent-roles', false, $roles_tab);
-$render_tab('windows-agent-security', false, $security_tab);
-$render_tab('windows-agent-backup', false, $backup_tab);
-$render_tab('windows-agent-services', false, $services_tab);
-$render_tab('windows-agent-agent-performance', false, $agent_performance_tab);
 echo '</div>';
 echo '<script>
 (function () {

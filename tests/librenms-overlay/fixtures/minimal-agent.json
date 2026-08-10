@@ -121,6 +121,9 @@
       "not_contains": [
         "No DC DNS detail data reported.",
         "No role data reported.",
+        "aria-controls=\"windows-agent-active-directory\"",
+        "aria-controls=\"windows-agent-factorytalk\"",
+        "aria-controls=\"windows-agent-horizon\"",
         "windows-agent-graphs-horizon",
         "data-type=\"application_windows-agent_horizon_state_health\"",
         "data-type=\"application_windows-agent_horizon_edges\"",

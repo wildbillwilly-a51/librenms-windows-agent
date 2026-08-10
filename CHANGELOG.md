@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased overlay app page - 2026-08-10
+
+Not yet packaged into a published overlay artifact. The current released overlay
+remains the version recorded in `CURRENT-STATE.md`.
+
+- Promoted the first-order role detections to their own application-page tabs,
+  each shown only while that role is detected: `Active Directory`
+  (`dc_detected`), `FactoryTalk` (`detected`), and `Horizon` (renamed from
+  `Horizon Operations`). Role tabs render before `Overview` in a fixed order, and
+  the first tab present is the landing tab.
+- Moved Active Directory Summary, AD/DC Local Health, AD Replication Targets, and
+  FSMO Roles off `Roles & Workloads` and onto the Active Directory tab, and moved
+  the FactoryTalk operational view onto the FactoryTalk tab. DFSR Replication
+  Health renders on the Active Directory tab on a detected domain controller and
+  otherwise stays on `Roles & Workloads`, since DFSR also runs on file servers.
+- Added an Active Directory dashboard matching the existing role-dashboard
+  pattern: state and next action from the reported health contract, stat tiles for
+  health issues, core services down, SYSVOL/NETLOGON publication, replication
+  failures, FSMO state and time sync, plus an attention list built from stopped
+  core services, missing shares, unhealthy replication partners, and unhealthy
+  FSMO roles. No agent or protocol change was required.
+- Fixed nine Horizon graphs that no longer rendered anywhere after Horizon was
+  promoted to its own tab. The graph list was still being built but never
+  consumed, so state, listener, runtime, health-contract, API, pod, and clone-pool
+  trends were unreachable. Every role tab now exposes its graphs through a
+  consistent `Trends` disclosure that preserves the `Additional graphs` grouping.
+- Replaced the tab navigation and tab panes with one registry and a single
+  active-tab computation. The previous code derived the active tab twice, so
+  adding conditional tabs could have produced zero or several active panes.
+- Corrected two references left behind by the earlier Horizon promotion: the
+  `Roles & Workloads` issue indicator no longer reports Horizon, FactoryTalk, or
+  AD/DC problems that render on other tabs, and the Horizon API notice no longer
+  points at `Roles & Workloads` for local host evidence.
+- Undetected roles now appear only in the `Detected Roles` inventory table rather
+  than as empty `Not detected` sections, and a detected role whose detail is
+  absent renders an explicit notice instead of a blank tab.
+
 ## Release workflow rules - 2026-08-10
 
 - Added a `Release And Publication` section to `AGENTS.md` codifying the public
