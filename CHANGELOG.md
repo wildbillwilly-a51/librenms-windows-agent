@@ -1,9 +1,9 @@
 # Changelog
 
-## Unreleased overlay app page - 2026-08-10
+## Overlay 0.6.21 - 2026-08-10
 
-Not yet packaged into a published overlay artifact. The current released overlay
-remains the version recorded in `CURRENT-STATE.md`.
+Overlay-only release. Windows agent `0.6.16`, its versioned configuration, and
+the Windows installer are unchanged, and their published bytes are untouched.
 
 - Promoted the first-order role detections to their own application-page tabs,
   each shown only while that role is detected: `Active Directory`

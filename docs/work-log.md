@@ -1,5 +1,30 @@
 # Work Log
 
+## 2026-08-10 (overlay 0.6.21 release)
+
+- Published overlay `0.6.21` as an overlay-only release carrying the role-tab
+  work below. Bumped the overlay version in `install.sh`, the source capability
+  manifest, the capability-manifest test, `README.md`, and `CURRENT-STATE.md`,
+  then built with
+  `build-release.ps1 -Version 0.6.21 -OverlayOnly -UpdateChecksums`.
+- Confirmed no `0.6.21` artifact existed before the build, so no published
+  version was re-cut. The preserved MSI and versioned config hashes came back
+  byte-identical to the previously published values, and `SHA256SUMS` now pins
+  the new overlay alongside the unchanged agent artifacts.
+- Documented the tab layout in the `Poll And Verify` runbook step, since the
+  application page is what an operator looks at after a poll.
+- Validation: `bash -n install.sh`; `install-agent.ps1` parsed; portable .NET
+  suite passed; parser, app-page, and central-collector fixtures passed with the
+  capability test now asserting `0.6.21`; 69 source overlay PHP files linted
+  clean. Extracted the built tarball and re-verified from the packaged bytes:
+  `capabilities.json` reports `0.6.21` with every prior capability and the
+  unchanged `private_integration_api` range, 69 packaged PHP files lint clean,
+  the three packaged shell scripts parse, the shipped app page contains the new
+  tab registry, and `manifest.txt` reconciles exactly with the 70 payload files.
+  `build-release.ps1` reported PHP unavailable and skipped its own overlay lint
+  because PHP lives in WSL rather than on the Windows PATH; that gap is covered
+  by the separate WSL lint of both source and packaged PHP.
+
 ## 2026-08-10 (overlay app page role tabs)
 
 - Gave each detected first-order role its own application-page tab, following the

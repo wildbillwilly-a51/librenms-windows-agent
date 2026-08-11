@@ -25,13 +25,13 @@ and private exports do not belong here.
 
 ## Current Releases
 
-- Overlay version: `0.6.20`
+- Overlay version: `0.6.21`
 - Windows agent version: `0.6.16`
-- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.20.tar.gz`
+- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.21.tar.gz`
 - Windows MSI: `artifacts/librenms-windows-agent-0.6.16.msi`
 - Versioned agent config: `artifacts/librenms-windows-agent-config-0.6.16-win.json`
 - Checksums: `SHA256SUMS`
-- Overlay SHA256: `a9971b42f6dd4cc97811ea1694298a0ebf96b036f860de974a5acbfa5e3d6718`
+- Overlay SHA256: `98750562af7ebe68519b6ee722c3442e666652de5f2e3d4a64cbfd7c70c6671b`
 - Windows MSI SHA256: `5a40c9965a44179b09c57e4e3951e55982b983bfd1fd83b4e93cbeaaf5811732`
 - Versioned config SHA256: `94fd8b56e0ac2ca15f50dd0ffff1d3f9167032b4717aeecd5b091f336fbe404b`
 - Public overlay installer: `install.sh`
@@ -42,12 +42,16 @@ adds explicit Horizon service expectedness plus active-certificate health. The b
 matching versioned config, checks prerequisites and port ownership, prepares
 configuration before service startup, leaves registered upgrades inside MSI
 rollback, retains verbose diagnostics, and verifies a live protocol response.
-Overlay release `0.6.20` provides scope-separated Horizon health, explicit
-redundancy and component semantics, retained condition history, fail-soft
-vendor metrics, and the updated operations UI. Horizon credentials remain only
-on the collector node, and local Windows telemetry stays independent. Both
-release artifacts and their public installers are published on GitHub `main`;
-the raw public bytes match `SHA256SUMS`.
+Overlay release `0.6.21` keeps the scope-separated Horizon health, explicit
+redundancy and component semantics, retained condition history, and fail-soft
+vendor metrics introduced in `0.6.20`, and gives each detected first-order role
+its own application-page tab: `Active Directory`, `FactoryTalk`, and `Horizon`,
+each shown only while that role is detected and placed ahead of `Overview`. It
+also restores the Horizon trend graphs that had become unreachable, and reports
+tab-level issues against the tab that actually owns the evidence. Horizon
+credentials remain only on the collector node, and local Windows telemetry stays
+independent. Both release artifacts and their public installers are published on
+GitHub `main`; the raw public bytes match `SHA256SUMS`.
 
 ## Product Contract
 
@@ -82,7 +86,7 @@ For an intentional release:
 For an agent-only release that preserves the current overlay:
 
 ```powershell
-.\scripts\build-release.ps1 -Version 0.6.16 -AgentOnly -OverlayVersion 0.6.20 -UpdateChecksums
+.\scripts\build-release.ps1 -Version 0.6.16 -AgentOnly -OverlayVersion 0.6.21 -UpdateChecksums
 ```
 
 Before publishing, review the full committed snapshot for secrets, private
@@ -98,8 +102,14 @@ fixtures.
 
 ## Next Recommended Action
 
-Deployment is intentionally waiting at an explicit approval checkpoint.
-Install Windows agent 0.6.16 first on an approved canary and confirm the
-running service, local payload, firewall result, Horizon classification
-evidence, and LibreNMS reachability before any wider rollout. Overlay 0.6.20
-also remains undeployed pending separate approval.
+Overlay `0.6.21` is published and is the installer default. Rollout timing
+belongs to the operator: publishing changes no deployed node, because the
+overlay reapply timer re-applies the locally staged copy and performs no
+download.
+
+Apply `0.6.21` to overlay nodes when convenient and confirm the application page
+renders a role tab for each detected first-order role, that an undetected role
+shows no tab, and that the restored Horizon trend graphs draw. Windows agent
+`0.6.16` requires no reinstall for this overlay release; bring any agent still
+below `0.6.16` up to the current version so the field does not stay on mixed
+agent versions.

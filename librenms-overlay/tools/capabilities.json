@@ -1,6 +1,6 @@
 {
   "product": "librenms-windows-agent-overlay",
-  "overlay_version": "0.6.20",
+  "overlay_version": "0.6.21",
   "configuration_schema_version": 2,
   "capabilities": {
     "horizon_trigger_producer": 1,

@@ -241,6 +241,15 @@ sudo -u librenms ./lnms device:poll "<DEVICE_ID>" --modules="unix-agent,applicat
 After polling, open the Windows device in LibreNMS. The `Apps` or
 `Applications` view should show `Windows Agent`.
 
+The application page always provides `Overview`, `Roles & Workloads`,
+`Security & Certificates`, `Backup`, `Services & Events`, and
+`Agent Performance`. Each detected first-order role also gets its own tab,
+shown only while that role is detected and placed ahead of `Overview`:
+`Active Directory` on a domain controller, `FactoryTalk` on a FactoryTalk host,
+and `Horizon` on a Horizon server. The leftmost tab present is the landing tab,
+so a role host opens on its role. Roles that were evaluated but not detected are
+listed in the `Detected Roles` table on `Roles & Workloads`.
+
 Quick network check from the poller that owns the device:
 
 ```bash
@@ -336,7 +345,7 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Install a specific overlay version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.20
+curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.21
 ```
 
 Preview without changing the node:
