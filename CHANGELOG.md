@@ -1,5 +1,15 @@
 # Changelog
 
+## Application page UX roadmap - 2026-08-12
+
+- Added `docs/app-page-ux-plan.md`, the execution roadmap for a full application
+  page evaluation, correctness, and polish package: a Horizon machine-state and
+  capacity correctness fix, a uniform tab contract with a shared summary renderer,
+  per-role research to decide which metrics lead, an audit of collected-but-
+  unsurfaced data, pool drawer refinement, and the validation strategy and release
+  sequencing for each phase. Planning only; no agent, overlay, installer,
+  protocol, or release behavior changed.
+
 ## Overlay 0.6.21 - 2026-08-10
 
 Overlay-only release. Windows agent `0.6.16`, its versioned configuration, and

@@ -1,5 +1,45 @@
 # Work Log
 
+## 2026-08-12
+
+- Verified overlay `0.6.21` in the field: all five application nodes report the new
+  version with all 70 payload files hash-matching the published artifact, backend
+  nodes still carry no overlay, and the sequential rollout order held. Confirmed
+  the release diff is exactly two files, the app page and the capability manifest,
+  so the polling parser is untouched and no re-poll or RRD exposure is involved.
+  Confirmed from the web server error log that the rendered pages produced no
+  errors; noted that the Laravel log is not the right evidence for web renders,
+  since it had not been written for over a day.
+- Established that all four monitored Windows hosts resolve their role tab
+  correctly on live payloads, including the negative case: a SQL host detects
+  `sql_server`, `backup_storage`, and `security_management` but none of the three
+  first-order roles, so it renders no role tab and lands on `Overview`.
+- Investigated the reported Horizon pool count inaccuracy and identified it as a
+  correctness defect rather than a display issue. Placement readiness counts only
+  the single "available" machine state, so in-use, idle, provisioned, and
+  maintenance machines all count as unready; pool scoring then reads zero ready
+  spares as critical, which makes a fully utilised pool report critical
+  permanently. Also found that the machine classifier has no `unrecognized`
+  branch and falls through to `warning`, that the per-machine issue flag counts
+  `incomplete` as a problem, and that `machineStateIsIssue()` is dead code whose
+  logic disagrees with the classifier actually in use.
+- Confirmed the defect from live history rather than by reading code alone: the
+  capacity and overall scopes held their worst value continuously for 24 hours
+  while the vendor's own problem counts varied, and the collector's built-in
+  vendor-disagreement metric held a constant non-zero offset. That metric is a
+  usable pass/fail oracle for the fix.
+- Two candidate defects were investigated and ruled out rather than reported: the
+  machine state is normalised before comparison, so there is no case-sensitivity
+  bug, and an apparent invalid operator in the pool scoring arithmetic was a search
+  tool rendering artifact, not the file contents.
+- Added `docs/app-page-ux-plan.md` as the execution roadmap for the application
+  page package, sequencing the Horizon correctness fix ahead of the presentation
+  work so the UI is designed against correct numbers, and sequencing the
+  unsurfaced-data audit ahead of per-role forefront selection so the full set of
+  available metrics is known before choosing which lead.
+- Validation: documentation and planning only, so no build, test, or packaging
+  validation was run. All cluster and agent inspection was read-only.
+
 ## 2026-08-10 (overlay 0.6.21 release)
 
 - Published overlay `0.6.21` as an overlay-only release carrying the role-tab
