@@ -257,7 +257,7 @@ $tests['partial endpoint and truncation become incomplete'] = static function ()
     expect($snapshot['horizon_api_summary']['sessions_truncated'] === 1, 'session truncation absent');
     expect($snapshot['horizon_pools_summary']['pools_incomplete'] === 2, 'truncated pool inventories should be incomplete');
 };
-$tests['zero ready and no placement capacity are critical'] = static function (): void {
+$tests['faulted capacity is critical while full utilisation is not a fault'] = static function (): void {
     $responses = successfulResponses();
     $responses['rest/inventory/v1/desktop-pools'] = [
         ['id' => 'zero-ready', 'name' => 'Zero Ready', 'source' => 'INSTANT_CLONE', 'enabled' => true],
@@ -274,8 +274,112 @@ $tests['zero ready and no placement capacity are critical'] = static function ()
         ['id' => 'u2', 'desktop_pool_id' => 'no-unused', 'state' => 'CONNECTED'],
     ];
     $snapshot = (new PodCollector(static fn (): ApiSession => new FakeHorizonSession($responses)))->collect(testConfig(), ['username' => 'reader', 'password' => str_repeat('x', 12)]);
-    expect($snapshot['horizon_pools'][0]['health_state'] === 'critical' && $snapshot['horizon_pools'][0]['health_reason'] === 'no_ready_spares', 'zero-ready pool was not critical');
-    expect($snapshot['horizon_pools'][1]['health_state'] === 'critical' && $snapshot['horizon_pools'][1]['health_reason'] === 'no_placement_capacity', 'pool with every machine in session was not critical');
+    $zeroReady = $snapshot['horizon_pools'][0];
+    $fullyUsed = $snapshot['horizon_pools'][1];
+
+    // No ready spares because the only candidate is faulted: a real outage.
+    expect($zeroReady['health_state'] === 'critical' && $zeroReady['health_reason'] === 'ready_spares_faulted', 'zero-ready faulted pool was not critical');
+    expect((int) $zeroReady['spare_faulted'] === 1, 'faulted spare was not counted as faulted');
+    expect((int) $zeroReady['spare_maintenance'] === 1, 'maintenance spare was not counted as withheld');
+
+    // Every machine is serving a user. Nothing is broken, so this must not be a
+    // fault; it is capacity exhaustion and must be distinguishable from failure.
+    expect($fullyUsed['health_state'] === 'warning', 'fully utilised pool should warn, not report a fault');
+    expect($fullyUsed['health_reason'] === 'no_placement_capacity', 'fully utilised pool lost its exhaustion reason code');
+    expect((int) $fullyUsed['spare_faulted'] === 0, 'in-use machines must not be counted as faulted spares');
+    expect((int) $fullyUsed['machines_with_sessions'] === 2, 'in-use machines were not counted as in use');
+    expect((int) $snapshot['horizon_pools_summary']['spare_faulted'] === 1, 'aggregate faulted spare total is wrong');
+    expect($snapshot['horizon_pools_summary']['reason_code'] === 'pool_capacity_faulted', 'aggregate reason should name the fault, not exhaustion');
+};
+$tests['machine state taxonomy classifies placement health and issues independently'] = static function (): void {
+    // Ready and in-use are both healthy; only one is free capacity.
+    $ready = PodCollector::classifyMachineState('AVAILABLE', false, false);
+    expect($ready['placement'] === 'ready' && $ready['state'] === 'ok' && $ready['issue'] === false, 'AVAILABLE misclassified');
+    $inUse = PodCollector::classifyMachineState('CONNECTED', true, false);
+    expect($inUse['placement'] === 'none' && $inUse['state'] === 'ok' && $inUse['issue'] === false, 'in-use machine misclassified');
+    $idle = PodCollector::classifyMachineState('DISCONNECTED', true, false);
+    expect($idle['state'] === 'ok' && $idle['issue'] === false, 'disconnected session machine should not be a problem');
+
+    // A fault on an in-use machine is still a fault, just not free capacity.
+    $faultedInUse = PodCollector::classifyMachineState('ERROR', true, false);
+    expect($faultedInUse['issue'] === true, 'a fault on an in-use machine must not be suppressed');
+    expect($faultedInUse['placement'] === 'none', 'an in-use machine must never count as placement capacity');
+
+    // Benign, expected to become ready, and not a problem.
+    $pending = PodCollector::classifyMachineState('PROVISIONING', false, false);
+    expect($pending['placement'] === 'pending' && $pending['state'] === 'info' && $pending['issue'] === false, 'transitional machine misclassified');
+    $stuck = PodCollector::classifyMachineState('PROVISIONING', false, false, 7);
+    expect($stuck['state'] === 'warning' && $stuck['reason_code'] === 'machine_transitional_too_long', 'stuck transitional machine should warn');
+
+    // Intentionally withheld.
+    $held = PodCollector::classifyMachineState('AVAILABLE', false, true);
+    expect($held['placement'] === 'held' && $held['issue'] === false && $held['reason_code'] === 'maintenance_mode', 'maintenance machine misclassified');
+
+    // Vendor-documented problem states are issues.
+    foreach (['AGENT_UNREACHABLE', 'AGENT_ERR_NEED_REBOOT', 'AGENT_CONFIG_ERROR', 'PROVISIONING_ERROR', 'ALREADY_USED'] as $problem) {
+        $row = PodCollector::classifyMachineState($problem, false, false);
+        expect($row['issue'] === true && $row['placement'] === 'faulted', "$problem should be a faulted issue");
+    }
+
+    // An unrecognized state is reported, never scored, and never a warning.
+    $unknownWord = PodCollector::classifyMachineState('SOME_FUTURE_STATE', false, false);
+    expect($unknownWord['state'] === 'incomplete', 'unrecognized state must not be reported as a warning');
+    expect($unknownWord['issue'] === false, 'unrecognized state must not count as a problem machine');
+    expect($unknownWord['recognized'] === false, 'unrecognized state must be flagged as unrecognized');
+    expect($unknownWord['placement'] === 'none', 'unrecognized state must not be scored for capacity');
+
+    // Vendor reports UNKNOWN as a problem machine, so we follow it for counting
+    // while still not claiming to know what is wrong.
+    $vendorUnknown = PodCollector::classifyMachineState('UNKNOWN', false, false);
+    expect($vendorUnknown['state'] === 'incomplete' && $vendorUnknown['issue'] === true, 'UNKNOWN should count as a vendor problem machine');
+};
+$tests['unrecognized and pending spares never manufacture a capacity fault'] = static function (): void {
+    $responses = successfulResponses();
+    $responses['rest/inventory/v1/desktop-pools'] = [
+        ['id' => 'pending-only', 'name' => 'Pending Only', 'source' => 'INSTANT_CLONE', 'enabled' => true],
+        ['id' => 'held-only', 'name' => 'Held Only', 'source' => 'INSTANT_CLONE', 'enabled' => true],
+        ['id' => 'unknown-only', 'name' => 'Unknown Only', 'source' => 'INSTANT_CLONE', 'enabled' => true],
+    ];
+    $responses['rest/inventory/v1/sessions?page=1&size=100'] = [];
+    $responses['rest/inventory/v1/machines?page=1&size=100'] = [
+        ['id' => 'p1', 'desktop_pool_id' => 'pending-only', 'state' => 'PROVISIONING'],
+        ['id' => 'p2', 'desktop_pool_id' => 'pending-only', 'state' => 'CUSTOMIZING'],
+        ['id' => 'h1', 'desktop_pool_id' => 'held-only', 'state' => 'MAINTENANCE'],
+        ['id' => 'h2', 'desktop_pool_id' => 'held-only', 'state' => 'DISABLED'],
+        ['id' => 'x1', 'desktop_pool_id' => 'unknown-only', 'state' => 'SOME_FUTURE_STATE'],
+    ];
+    $snapshot = (new PodCollector(static fn (): ApiSession => new FakeHorizonSession($responses)))->collect(testConfig(), ['username' => 'reader', 'password' => str_repeat('x', 12)]);
+    $byName = [];
+    foreach ($snapshot['horizon_pools'] as $pool) $byName[$pool['name']] = $pool;
+
+    expect($byName['Pending Only']['health_state'] === 'info' && $byName['Pending Only']['health_reason'] === 'spares_pending_only', 'pool whose spares are still building should be informational');
+    expect((int) $byName['Pending Only']['spare_pending'] === 2, 'pending spares were not counted as pending');
+    expect((int) $byName['Pending Only']['spare_faulted'] === 0, 'pending spares must not be counted as faulted');
+
+    expect($byName['Held Only']['health_state'] === 'info' && $byName['Held Only']['health_reason'] === 'spares_held_only', 'pool whose spares are withheld should be informational');
+    expect((int) $byName['Held Only']['spare_faulted'] === 0, 'withheld spares must not be counted as faulted');
+
+    expect($byName['Unknown Only']['health_state'] !== 'critical' && $byName['Unknown Only']['health_state'] !== 'warning', 'an unrecognized machine state must not drive a pool fault');
+    expect((int) $byName['Unknown Only']['spare_unrecognized'] === 1, 'unrecognized spare was not recorded');
+    expect((int) $snapshot['horizon_pools_summary']['issue_machines'] === 0, 'benign and unrecognized states must not inflate problem machines');
+
+    // The published state distribution must expose the classification so a
+    // mishandled state is visible without collector filesystem access.
+    $unrecognized = array_values(array_filter($snapshot['horizon_pool_machine_states'], static fn (array $row): bool => ($row['machine_state'] ?? '') === 'SOME_FUTURE_STATE'))[0] ?? [];
+    expect((int) ($unrecognized['recognized'] ?? 1) === 0, 'state distribution did not flag the unrecognized state');
+    expect((int) ($unrecognized['issue'] ?? 1) === 0, 'state distribution marked an unrecognized state as an issue');
+};
+$tests['every machine row state agrees with the aggregate counts'] = static function (): void {
+    $responses = successfulResponses();
+    $snapshot = (new PodCollector(static fn (): ApiSession => new FakeHorizonSession($responses)))->collect(testConfig(), ['username' => 'reader', 'password' => str_repeat('x', 12)]);
+    $rowIssues = count(array_filter($snapshot['horizon_pool_machines'], static fn (array $row): bool => (int) ($row['issue'] ?? 0) === 1));
+    $poolIssues = 0;
+    foreach ($snapshot['horizon_pools'] as $pool) $poolIssues += (int) ($pool['issue_machines'] ?? 0);
+    expect($rowIssues === $poolIssues, "per-machine issue rows ($rowIssues) disagree with pool issue counts ($poolIssues)");
+    foreach ($snapshot['horizon_pools'] as $pool) {
+        $parts = (int) $pool['spare_ready'] + (int) $pool['spare_pending'] + (int) $pool['spare_maintenance'] + (int) $pool['spare_faulted'] + (int) $pool['spare_unrecognized'];
+        expect($parts === (int) $pool['spare_total'], 'spare breakdown does not reconcile with spare_total for pool ' . (string) $pool['name']);
+    }
 };
 $tests['active machines with bad Horizon state remain selectable evidence'] = static function (): void {
     $responses = successfulResponses();
@@ -562,7 +666,8 @@ $tests['discovery reports TLS auth identity and cross-site ambiguity failures'] 
 $tests['capability manifest advertises the stable private integration contract'] = static function (): void {
     $path = dirname(__DIR__, 2) . '/librenms-overlay/tools/capabilities.json';
     $manifest = json_decode((string) file_get_contents($path), true, flags: JSON_THROW_ON_ERROR);
-    expect($manifest['overlay_version'] === '0.6.21', 'overlay capability version mismatch');
+    expect($manifest['overlay_version'] === '0.6.22', 'overlay capability version mismatch');
+    expect((int) ($manifest['capabilities']['horizon_machine_state_taxonomy'] ?? 0) === 1, 'machine state taxonomy capability not advertised');
     expect($manifest['configuration_schema_version'] === 2, 'configuration schema version mismatch');
     expect($manifest['capabilities']['horizon_trigger_producer'] === 1, 'trigger capability missing');
     expect($manifest['capabilities']['horizon_central_worker'] === 1, 'worker capability missing');

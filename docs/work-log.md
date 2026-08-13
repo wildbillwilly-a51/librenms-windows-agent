@@ -1,5 +1,47 @@
 # Work Log
 
+## 2026-08-12 (overlay 0.6.22, roadmap Phase 0)
+
+- Implemented and published Phase 0 of `docs/app-page-ux-plan.md`: Horizon machine
+  state and pool capacity correctness, as overlay `0.6.22`.
+- Built the state taxonomy from the vendor-documented machine state enum, including
+  the agent error family that the previous code did not enumerate at all and
+  therefore swept into its warning fallback. Aligned the problem-machine definition
+  with the vendor's documented problem-VM list so the collector's own vendor
+  comparison metric can converge.
+- Separated capacity exhaustion from capacity failure. Previously a pool with every
+  machine in session scored critical, which is what pinned the capacity scope at
+  its worst value; that now reports exhaustion with a distinct reason code.
+  Withheld and still-becoming-ready spares no longer score as failures.
+- Two of my own errors were caught by tests rather than by review, both worth
+  recording. First, an existing test caught that short-circuiting a
+  session-bearing machine to healthy suppressed genuine faults on in-use machines;
+  session presence now affects placement only, never health or the issue flag.
+  Second, one of the new tests caught that the not-placement-capacity shortcut ran
+  before the unrecognized-state branch, so unrecognized machines were skipped
+  entirely and their pool then scored as having no capacity.
+- Also caught a process error: earlier runs of the central suite were piped through
+  `tail`, which hid three failing tests behind passing output. Rerunning with the
+  exit code and stderr captured surfaced them. Validation for this phase used a
+  script that reports the exit code, the pass count, and stderr for every tier.
+- Two pre-existing tests asserted the defective behaviour and were rewritten rather
+  than deleted, including one whose name encoded it. Added coverage for every
+  taxonomy state, an unrecognized state, a fully utilised pool, an all-withheld
+  pool, a pending-only pool, and a reconciliation assertion that per-machine issue
+  rows match pool issue counts and that the spare breakdown sums to the spare total.
+- Validation: 29 central collector tests, 11 parser fixtures, 11 app-page fixtures,
+  69 overlay PHP files linted, overlay test runners linted, `bash -n install.sh`,
+  all with exit code 0. Verified from the packaged artifact that the taxonomy and
+  new reason codes ship, that both dead functions are absent, that
+  `capabilities.json` reports `0.6.22` with the new capability flag and an
+  unchanged `private_integration_api` range, that 69 packaged PHP files lint clean,
+  that the three packaged shell scripts parse, and that `manifest.txt` reconciles
+  with its 70 payload files. Preserved agent MSI and config hashes came back
+  byte-identical, and no `0.6.22` artifact existed before the build.
+- Not verified: the field oracle. The vendor mismatch metric and capacity scope
+  behaviour can only be read after this release is applied to overlay nodes, which
+  is the operator's action. That is the remaining exit criterion for Phase 0.
+
 ## 2026-08-12
 
 - Verified overlay `0.6.21` in the field: all five application nodes report the new

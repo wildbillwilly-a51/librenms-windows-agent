@@ -1,5 +1,44 @@
 # Changelog
 
+## Overlay 0.6.22 - 2026-08-12
+
+Overlay-only release. Phase 0 of the application page roadmap: Horizon machine
+state and pool capacity correctness. Windows agent `0.6.16`, its versioned
+configuration, and the Windows installer are unchanged and their published bytes
+are untouched.
+
+- Replaced three disagreeing machine-state code paths with a single state
+  taxonomy that decides four properties independently: whether a machine is
+  placement capacity, how severe its own state is, whether it counts as a problem
+  machine, and whether the state was recognized at all. The per-machine severity
+  and the aggregate counts now derive from the same table, so a displayed row can
+  no longer disagree with the totals.
+- Full utilisation is no longer reported as a fault. A pool whose machines are all
+  serving users reports capacity exhaustion with its own reason code, distinct
+  from faulted capacity. Previously any fully utilised pool scored critical, which
+  made the capacity health scope saturate and stop carrying information.
+- Spares that are intentionally withheld, or still becoming ready, no longer score
+  as failures. Only genuinely faulted spares can drive a pool critical, and they
+  do so only when no ready capacity remains.
+- An unrecognized machine state is reported as incomplete and excluded from
+  capacity scoring instead of falling through to a warning. Not knowing a state is
+  no longer treated as evidence of a problem.
+- Aligned the problem-machine definition with the vendor's documented problem-VM
+  states, including the agent error family, so the collector's vendor comparison
+  metric can converge.
+- A fault on a machine that is serving a session is still reported as a fault; it
+  is only excluded from free capacity.
+- The published machine state distribution now carries the capacity treatment,
+  severity, and issue flag for each reported state, and the Horizon machine state
+  inventory surfaces them. A state the overlay does not recognize is now visible on
+  the page rather than requiring access to the collector's state directory. State
+  strings and counts only; no machine identifiers.
+- Removed two uncalled functions whose logic contradicted the classifier actually
+  in use.
+- Advertised `horizon_machine_state_taxonomy` in the capability manifest. No RRD
+  schema, protocol, or application identity change; the new spare breakdown is
+  published as section fields only.
+
 ## Application page UX roadmap - 2026-08-12
 
 - Added `docs/app-page-ux-plan.md`, the execution roadmap for a full application

@@ -1,36 +1,42 @@
 # Codex Handoff
 
-- Objective: Publish overlay 0.6.21, which gives each detected first-order role
-  its own application-page tab, without deploying it.
-- Current state: Overlay 0.6.21 is built, published on GitHub `main`, and is the
-  installer default. Windows agent 0.6.16 is unchanged and its published bytes
-  are untouched, so this release is overlay-only. `Active Directory`,
-  `FactoryTalk`, and `Horizon` each render as their own tab, only while that role
-  is detected, ahead of `Overview`; the leftmost tab present is the landing tab.
-  Active Directory carries a new dashboard built from health-contract fields the
-  agent already reports, so no agent or protocol change was needed. DFSR follows
-  a detected domain controller and otherwise stays on `Roles & Workloads`. Nine
-  Horizon trend graphs that had become unreachable after Horizon was promoted to
-  its own tab now render again through a shared `Trends` disclosure.
-- Relevant decisions: tab visibility keys off each role's own reported detection
-  flag, never off section presence, because summary sections are emitted even when
-  the role is absent. Tab labels are bare role names. The `Detected Roles`
-  inventory stays on `Roles & Workloads` as the record of what was evaluated.
-  Undetected roles no longer render empty `Not detected` sections. Publishing does
-  not update a deployed node, so rollout timing stays with the operator.
-- Validation completed: portable .NET suite; `bash -n` on the overlay installer
-  and a parse check on the Windows installer; parser, app-page, and central
-  collector fixtures, with the capability manifest test asserting the new overlay
-  version; PHP lint over all overlay source and all packaged PHP; rendered every
-  detection scenario and confirmed structurally that exactly one tab and one pane
-  are active, that a host with no detected role lands on `Overview`, and that a
-  host with two detected roles orders them deterministically; packaged-artifact
-  verification including capability manifest, shell syntax, and a manifest-to-file
-  reconciliation; public-safety scan of the committed snapshot.
-- Validation remaining: the rendered pages have not been reviewed in a browser
-  against live data, and the release has not been applied to any overlay node.
-- Next action: apply overlay 0.6.21 to overlay nodes when convenient, then
-  confirm a role tab appears for each detected role, no tab appears for an
-  undetected role, and the restored Horizon trend graphs draw. Separately, bring
-  any Windows agent still below 0.6.16 up to the current version so the field does
-  not stay on mixed agent versions.
+- Objective: Execute `docs/app-page-ux-plan.md` phase by phase. Phase 0, Horizon
+  machine state and pool capacity correctness, is published as overlay 0.6.22.
+- Current state: Overlay 0.6.22 is built, published on GitHub `main`, and is the
+  installer default. Windows agent 0.6.16 is unchanged and its published bytes are
+  untouched, so this is an overlay-only release. One state taxonomy now decides
+  independently whether a machine is placement capacity, how severe its own state
+  is, whether it counts as a problem machine, and whether the state was recognized.
+  Full utilisation reports capacity exhaustion rather than a fault; withheld and
+  still-becoming-ready spares no longer score as failures; only faulted spares with
+  no ready capacity remaining can drive a pool critical; an unrecognized state
+  reports incomplete and is excluded from scoring. The published state distribution
+  carries each state's capacity treatment, severity, and issue flag, and the page
+  shows them.
+- Relevant decisions: the per-machine severity and the aggregate counts derive from
+  the same table so a row can never disagree with the totals. The problem-machine
+  definition follows the vendor's documented problem-VM list so the vendor
+  comparison metric can converge. Session presence affects placement only and never
+  suppresses a fault. Maintenance is a deliberate operator action, so a withheld
+  machine is informational rather than a problem. No RRD schema, protocol, or
+  application identity change; the new spare breakdown is published as section
+  fields only.
+- Validation completed: 29 central collector tests, 11 parser fixtures, 11 app-page
+  fixtures, 69 overlay PHP files linted, overlay test runners linted, and
+  `bash -n install.sh`, all with exit code 0 and stderr inspected rather than piped
+  through `tail`. Packaged-artifact verification confirmed the taxonomy and new
+  reason codes ship, both dead functions are absent, the capability manifest reports
+  the new version and capability with an unchanged private integration range, 69
+  packaged PHP files lint clean, the packaged shell scripts parse, and
+  `manifest.txt` reconciles with its 70 payload files. Preserved agent artifact
+  hashes were byte-identical and no artifact for this version existed beforehand.
+- Validation remaining: the Phase 0 field oracle. After 0.6.22 is applied to overlay
+  nodes, the collector's vendor problem-machine mismatch metric should trend toward
+  zero and the capacity health scope should vary with the environment instead of
+  holding one value. A fully utilised healthy pool must no longer report a fault.
+  Any state the Horizon machine state inventory lists as unrecognized is a gap in
+  the taxonomy worth reporting.
+- Next action: apply overlay 0.6.22 to overlay nodes, then read the oracle above. If
+  the mismatch metric does not move, that is a hard blocker for the rest of the
+  roadmap and Phase 1 should not start until it is understood. Phase 1, the tab
+  contract and shared summary renderer, is the next phase otherwise.

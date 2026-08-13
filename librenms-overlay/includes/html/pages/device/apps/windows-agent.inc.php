@@ -334,19 +334,49 @@ $render_disclosure = static function (string $id, string $label, string $body, s
 $humanize_horizon_reason = static function ($value): string {
     $value = trim(strtolower((string) $value));
     $labels = [
-        'no_placement_capacity' => 'No placement capacity',
-        'no_ready_spares' => 'No ready spares',
-        'multiple_unavailable_spares' => 'Multiple unavailable spares',
-        'one_unavailable_capacity_remains' => 'One unavailable spare; capacity remains',
+        // Pool capacity. Exhaustion and failure are deliberately worded so they
+        // cannot be mistaken for each other.
+        'no_placement_capacity' => 'Fully in use; no free capacity',
+        'ready_spares_faulted' => 'No ready spares; remaining spares are faulted',
+        'multiple_faulted_spares' => 'Multiple faulted spares',
+        'faulted_spare_capacity_remains' => 'One faulted spare; capacity remains',
+        'spares_pending_only' => 'Spares are still becoming ready',
+        'spares_held_only' => 'Remaining spares are intentionally withheld',
+        'spare_readiness_undetermined' => 'Spare readiness could not be determined',
+        'within_threshold' => 'Capacity available',
+        'capacity_available' => 'Capacity available',
         'inventory_incomplete' => 'Inventory incomplete',
-        'agent_unreachable' => 'Agent unreachable',
+        'pool_disabled' => 'Pool disabled',
+        'pool_capacity_healthy' => 'Pool capacity healthy',
+        'pool_capacity_faulted' => 'Pool capacity has faulted machines',
+        'pool_capacity_exhausted' => 'Pool capacity fully in use',
+        'pool_capacity_degraded' => 'Pool capacity degraded',
+        'pool_capacity_observation' => 'Pool capacity observation',
+        'pool_inventory_incomplete' => 'Pool inventory incomplete',
+        // Machine states.
+        'machine_healthy' => 'Ready for placement',
+        'machine_in_use' => 'Serving a user session',
+        'machine_withheld' => 'Intentionally withheld',
+        'machine_transitional' => 'Becoming ready',
+        'machine_transitional_too_long' => 'Stuck becoming ready',
+        'machine_state_unknown' => 'State reported as unknown',
+        'machine_state_unrecognized' => 'State not recognized by this overlay',
+        'machine_unavailable' => 'Machine unavailable',
+        'machine_already_used' => 'Machine already used and not recycled',
         'maintenance_mode' => 'Maintenance mode',
+        'agent_unreachable' => 'Agent unreachable',
+        'agent_config_error' => 'Agent configuration error',
+        'agent_startup_in_progress' => 'Agent startup in progress',
+        'agent_disabled' => 'Agent disabled',
+        'agent_invalid_ip' => 'Agent reported an invalid address',
+        'agent_needs_reboot' => 'Agent requires a reboot',
+        'agent_protocol_failure' => 'Agent protocol failure',
+        'agent_domain_failure' => 'Agent domain failure',
+        'customizing_error' => 'Customization error',
         'provisioning_error' => 'Provisioning error',
         'machine_state_error' => 'Machine state error',
         'machine_disabled' => 'Machine disabled',
         'crl_prefetch_not_running' => 'CRL Prefetch is not running',
-        'within_threshold' => 'Capacity available',
-        'capacity_available' => 'Capacity available',
     ];
 
     return $labels[$value] ?? ucwords(str_replace('_', ' ', $value === '' ? 'unknown' : $value));
@@ -1246,8 +1276,21 @@ if ($horizon_surface_available) {
         if (empty($horizon_gateways)) {
             $podDetails .= '<h4>Standalone Gateways</h4><p class="text-muted">No standalone gateways configured. Embedded gateway roles, when enabled, are shown on their Connection Server members.</p>';
         }
-        $machineStateDetails = $table(['Pool', 'Clone type', 'Machine state', 'Count'], $horizon_pool_machine_states, static function ($row) use ($esc): string {
-            return '<td>' . $esc($row['pool'] ?? '') . '</td><td>' . $esc($row['clone_type'] ?? $row['source'] ?? '') . '</td><td>' . $esc($row['machine_state'] ?? $row['state'] ?? '') . '</td><td>' . $esc($row['count'] ?? $row['machines'] ?? 0) . '</td>';
+        $placement_label = static function (string $placement): string {
+            return [
+                'ready' => 'Ready for placement',
+                'pending' => 'Becoming ready',
+                'held' => 'Withheld intentionally',
+                'faulted' => 'Faulted',
+                'none' => 'Not placement capacity',
+            ][strtolower($placement)] ?? 'Not scored';
+        };
+        $machineStateDetails = $table(['Pool', 'Clone type', 'Machine state', 'Count', 'Capacity treatment', 'Severity', 'Counts as issue'], $horizon_pool_machine_states, static function ($row) use ($esc, $state_label, $placement_label): string {
+            $recognized = (int) ($row['recognized'] ?? 1) === 1;
+            $treatment = $recognized
+                ? $esc($placement_label((string) ($row['placement'] ?? 'none')))
+                : '<span class="text-muted">Unrecognized state, not scored</span>';
+            return '<td>' . $esc($row['pool'] ?? '') . '</td><td>' . $esc($row['clone_type'] ?? $row['source'] ?? '') . '</td><td>' . $esc($row['machine_state'] ?? $row['state'] ?? '') . '</td><td>' . $esc($row['count'] ?? $row['machines'] ?? 0) . '</td><td>' . $treatment . '</td><td>' . $state_label($row['severity'] ?? 'incomplete', ['ok', 'info']) . '</td><td>' . $esc((int) ($row['issue'] ?? 0) === 1 ? 'yes' : 'no') . '</td>';
         });
         $connectionServerDetails = $table(['Member', 'Status', 'Type', 'API target', 'Version', 'Connections', 'Unhealthy services', 'Replication issues'], $horizon_pod_members, static function ($row) use ($esc, $state_label): string {
             $services = [];

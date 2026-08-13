@@ -706,22 +706,146 @@ final class PodCollector
         };
     }
 
-    /** @return array{state:string,reason_code:string,impact:string} */
+    /**
+     * Single source of truth for machine state semantics.
+     *
+     * Four independent properties, because they answer different questions and
+     * conflating them is what made capacity health saturate:
+     *
+     * - placement: `ready` counts as capacity available for a new session now;
+     *   `pending` is benign and expected to become ready; `held` is intentionally
+     *   withheld; `faulted` is broken; `none` does not participate.
+     * - health: the severity shown for the machine itself.
+     * - issue: whether the machine counts as a problem machine. Aligned with the
+     *   vendor's own problem-VM definition so the vendor comparison converges.
+     * - reason: stable reason code.
+     *
+     * A machine serving a session is healthy and is not placement capacity.
+     * Utilisation is not a fault. An unrecognized state is not evidence of a
+     * problem, so it reports `incomplete` and is excluded from capacity scoring.
+     *
+     * @return array<string,array{placement:string,health:string,issue:bool,reason:string}>
+     */
+    private static function machineStateTaxonomy(): array
+    {
+        $ready = ['placement' => 'ready', 'health' => 'ok', 'issue' => false, 'reason' => 'machine_healthy'];
+        $inUse = ['placement' => 'none', 'health' => 'ok', 'issue' => false, 'reason' => 'machine_in_use'];
+        $pending = ['placement' => 'pending', 'health' => 'info', 'issue' => false, 'reason' => 'machine_transitional'];
+        $held = ['placement' => 'held', 'health' => 'info', 'issue' => false, 'reason' => 'machine_withheld'];
+        $faulted = static fn (string $reason): array => ['placement' => 'faulted', 'health' => 'warning', 'issue' => true, 'reason' => $reason];
+
+        return [
+            // Ready for placement.
+            'AVAILABLE' => $ready,
+
+            // Serving or assigned to a user. Healthy, but not free capacity.
+            'CONNECTED' => $inUse,
+            'DISCONNECTED' => $inUse,
+
+            // Benign and expected to become ready.
+            'PROVISIONED' => $pending,
+            'PROVISIONING' => $pending,
+            'CUSTOMIZING' => $pending,
+            'VALIDATING' => $pending,
+            'WAITING_FOR_AGENT' => $pending,
+            'STARTUP' => $pending,
+
+            // Intentionally withheld by an operator or lifecycle action.
+            'MAINTENANCE' => $held,
+            'DISABLED' => ['placement' => 'held', 'health' => 'info', 'issue' => false, 'reason' => 'machine_disabled'],
+            'DISABLE_IN_PROGRESS' => $held,
+            'DELETING' => $held,
+
+            // Vendor-documented problem states.
+            'AGENT_UNREACHABLE' => $faulted('agent_unreachable'),
+            'AGENT_CONFIG_ERROR' => $faulted('agent_config_error'),
+            'AGENT_ERR_STARTUP_IN_PROGRESS' => $faulted('agent_startup_in_progress'),
+            'AGENT_ERR_DISABLED' => $faulted('agent_disabled'),
+            'AGENT_ERR_INVALID_IP' => $faulted('agent_invalid_ip'),
+            'AGENT_ERR_NEED_REBOOT' => $faulted('agent_needs_reboot'),
+            'AGENT_ERR_PROTOCOL_FAILURE' => $faulted('agent_protocol_failure'),
+            'AGENT_ERR_DOMAIN_FAILURE' => $faulted('agent_domain_failure'),
+            'CUSTOMIZING_ERROR' => $faulted('customizing_error'),
+            'PROVISIONING_ERROR' => $faulted('provisioning_error'),
+            'ERROR' => $faulted('machine_state_error'),
+            'UNAVAILABLE' => $faulted('machine_unavailable'),
+            'ALREADY_USED' => $faulted('machine_already_used'),
+
+            // Reported by the vendor but not determinable by us. The vendor counts
+            // these as problem machines, so `issue` follows the vendor while the
+            // displayed severity stays `incomplete` rather than claiming a fault.
+            'UNKNOWN' => ['placement' => 'faulted', 'health' => 'incomplete', 'issue' => true, 'reason' => 'machine_state_unknown'],
+        ];
+    }
+
+    /**
+     * @return array{state:string,reason_code:string,impact:string,placement:string,issue:bool,recognized:bool}
+     */
     public static function classifyMachineState(string $state, bool $hasSession, bool $maintenance, int $consecutiveSamples = 1): array
     {
         $status = self::status($state);
-        if ($maintenance) return self::classification('info', 'maintenance_mode', 'capacity');
-        if ($status === 'AVAILABLE' || ($hasSession && in_array($status, ['CONNECTED', 'AVAILABLE'], true))) {
-            return self::classification('ok', 'machine_healthy', 'none');
-        }
-        if (in_array($status, ['PROVISIONING', 'CUSTOMIZING', 'VALIDATING', 'WAITING_FOR_AGENT'], true)) {
-            return $consecutiveSamples >= 7
-                ? self::classification('warning', 'machine_transitional_too_long', 'capacity')
-                : self::classification('info', 'machine_transitional', 'capacity');
-        }
-        if ($status === 'UNKNOWN' || $status === '') return self::classification('incomplete', 'machine_state_unknown', 'capacity');
 
-        return self::classification('warning', self::machineIssueReason($status, false), 'capacity');
+        if ($status === '') {
+            return self::machineClassification('incomplete', 'machine_state_unknown', 'capacity', 'faulted', true, true);
+        }
+
+        $taxonomy = self::machineStateTaxonomy();
+        if (! isset($taxonomy[$status])) {
+            // Not knowing a state is not evidence of a problem. Report it, do not
+            // score it, and never let it manufacture a warning.
+            return self::machineClassification('incomplete', 'machine_state_unrecognized', 'capacity', 'none', false, false);
+        }
+
+        $entry = $taxonomy[$status];
+        $health = $entry['health'];
+        $reason = $entry['reason'];
+        $issue = $entry['issue'];
+        $placement = $entry['placement'];
+
+        // A benign transitional state that has not progressed is worth attention.
+        if ($placement === 'pending' && $consecutiveSamples >= 7) {
+            $health = 'warning';
+            $reason = 'machine_transitional_too_long';
+        }
+
+        // Session presence and maintenance change how a machine participates in
+        // capacity. Neither hides a fault: a machine reporting a bad state while
+        // serving a session is still evidence, it just is not free capacity.
+        if ($hasSession) {
+            $placement = 'none';
+            if (! $issue && $health === 'ok') $reason = 'machine_in_use';
+        } elseif ($maintenance) {
+            // Maintenance is a deliberate operator action, so an out-of-service
+            // machine is informational rather than a problem.
+            $placement = 'held';
+            $health = 'info';
+            $reason = 'maintenance_mode';
+            $issue = false;
+        }
+
+        return self::machineClassification(
+            $health,
+            $reason,
+            $placement === 'none' && ! $issue && $health === 'ok' ? 'none' : 'capacity',
+            $placement,
+            $issue,
+            true
+        );
+    }
+
+    /**
+     * @return array{state:string,reason_code:string,impact:string,placement:string,issue:bool,recognized:bool}
+     */
+    private static function machineClassification(string $state, string $reasonCode, string $impact, string $placement, bool $issue, bool $recognized): array
+    {
+        return [
+            'state' => $state,
+            'reason_code' => $reasonCode,
+            'impact' => $impact,
+            'placement' => $placement,
+            'issue' => $issue,
+            'recognized' => $recognized,
+        ];
     }
 
     /**
@@ -1048,7 +1172,7 @@ final class PodCollector
         foreach ($rows as $row) {
             $source = self::status((string) ($row['source'] ?? ''));
             if (! in_array($source, ['INSTANT_CLONE', 'LINKED_CLONE', 'VIEW_COMPOSER'], true)) continue;
-            $pool = ['id' => (string) ($row['id'] ?? ''), 'name' => (string) ($row['name'] ?? ''), 'display_name' => (string) ($row['display_name'] ?? ''), 'source' => $source, 'clone_type' => $source, 'enabled' => self::boolean($row['enabled'] ?? true, true) ? 1 : 0, 'machines_total' => 0, 'machines_with_sessions' => 0, 'spare_total' => 0, 'spare_ready' => 0, 'spare_unready' => 0, 'spare_maintenance' => 0, 'issue_machines' => 0, '_states' => []];
+            $pool = ['id' => (string) ($row['id'] ?? ''), 'name' => (string) ($row['name'] ?? ''), 'display_name' => (string) ($row['display_name'] ?? ''), 'source' => $source, 'clone_type' => $source, 'enabled' => self::boolean($row['enabled'] ?? true, true) ? 1 : 0, 'machines_total' => 0, 'machines_with_sessions' => 0, 'spare_total' => 0, 'spare_ready' => 0, 'spare_unready' => 0, 'spare_maintenance' => 0, 'spare_pending' => 0, 'spare_faulted' => 0, 'spare_unrecognized' => 0, 'issue_machines' => 0, '_states' => []];
             if ($pool['id'] !== '') $byId[$pool['id']] = count($pools);
             $pools[] = $pool;
         }
@@ -1098,7 +1222,9 @@ final class PodCollector
                     : $collectedUtc;
                 $stateAge = max(0, (int) strtotime($collectedUtc) - (int) strtotime($stateFirstSeen));
                 $machineClassification = self::classifyMachineState($state, $hasSession, $maintenance, $stateAge >= 1800 ? 7 : 1);
-                $isIssue = self::stateRank($machineClassification['state']) >= self::stateRank('incomplete');
+                // The taxonomy decides this, not the display severity, so a row's
+                // state can never disagree with the aggregate counts.
+                $isIssue = (bool) $machineClassification['issue'];
                 $detail = [
                     'id' => self::boundedText($machineId, 128, 'unknown'),
                     'name' => self::boundedText((string) ($row['name'] ?? $machineId), 128, 'unknown'),
@@ -1133,19 +1259,61 @@ final class PodCollector
                     $pools[$index]['machines_with_sessions']++;
                     continue;
                 }
-                $pools[$index]['spare_total']++;
-                if ($maintenance) $pools[$index]['spare_maintenance']++;
-                if ($state === 'AVAILABLE' && ! $maintenance) $pools[$index]['spare_ready']++;
-                else {
+                if (! $machineClassification['recognized']) {
+                    // Checked before the placement shortcut: an unrecognized state
+                    // is counted so the totals reconcile, but is never scored, so
+                    // it cannot manufacture a capacity fault.
+                    $pools[$index]['spare_total']++;
+                    $pools[$index]['spare_unrecognized']++;
                     $pools[$index]['spare_unready']++;
+                    continue;
+                }
+                if ($machineClassification['placement'] === 'none') {
+                    // Recognized as not participating in placement, and not a spare.
+                    continue;
+                }
+                $pools[$index]['spare_total']++;
+                switch ($machineClassification['placement']) {
+                    case 'ready':
+                        $pools[$index]['spare_ready']++;
+                        break;
+                    case 'pending':
+                        $pools[$index]['spare_pending']++;
+                        $pools[$index]['spare_unready']++;
+                        break;
+                    case 'held':
+                        $pools[$index]['spare_maintenance']++;
+                        $pools[$index]['spare_unready']++;
+                        break;
+                    default:
+                        $pools[$index]['spare_faulted']++;
+                        $pools[$index]['spare_unready']++;
+                        break;
                 }
             }
             if (count($rows) < $pageSize) break;
             if ($page === $maxPages) $truncated = true;
         }
+        // Publish how the taxonomy treats each reported state alongside the counts.
+        // This is what makes a misclassified or unrecognized state visible on the
+        // page without filesystem access to this collector's state directory. It
+        // carries state strings and counts only, never machine identifiers.
+        $taxonomy = self::machineStateTaxonomy();
         $states = [];
         foreach ($pools as $pool) {
-            foreach ($pool['_states'] as $state => $count) $states[] = ['pool' => $pool['name'], 'clone_type' => $pool['clone_type'], 'machine_state' => $state, 'count' => $count];
+            foreach ($pool['_states'] as $state => $count) {
+                $entry = $taxonomy[$state] ?? null;
+                $states[] = [
+                    'pool' => $pool['name'],
+                    'clone_type' => $pool['clone_type'],
+                    'machine_state' => $state,
+                    'count' => $count,
+                    'placement' => $entry['placement'] ?? 'none',
+                    'severity' => $entry['health'] ?? 'incomplete',
+                    'issue' => ($entry['issue'] ?? false) ? 1 : 0,
+                    'recognized' => $entry === null ? 0 : 1,
+                ];
+            }
         }
 
         usort($issues, static fn (array $left, array $right): int => strcasecmp(
@@ -1167,17 +1335,29 @@ final class PodCollector
     /** @param list<array<string,mixed>> $pools @param array<string,mixed> $config @return array{0:list<array<string,mixed>>,1:array<string,int>} */
     private static function scorePools(array $pools, bool $incomplete, array $config): array
     {
-        $totals = ['pools_total' => count($pools), 'pools_healthy' => 0, 'pools_informational' => 0, 'pools_warning' => 0, 'pools_critical' => 0, 'pools_disabled' => 0, 'pools_incomplete' => 0, 'spare_total' => 0, 'spare_ready' => 0, 'spare_unready' => 0, 'issue_machines' => 0];
+        $totals = ['pools_total' => count($pools), 'pools_healthy' => 0, 'pools_informational' => 0, 'pools_warning' => 0, 'pools_critical' => 0, 'pools_disabled' => 0, 'pools_incomplete' => 0, 'spare_total' => 0, 'spare_ready' => 0, 'spare_unready' => 0, 'spare_pending' => 0, 'spare_held' => 0, 'spare_faulted' => 0, 'spare_unrecognized' => 0, 'issue_machines' => 0];
         foreach ($pools as &$pool) {
             $spares = (int) $pool['spare_total'];
             $unready = (int) $pool['spare_unready'];
             $percent = $spares > 0 ? round(($unready / $spares) * 100, 1) : 0.0;
+            $ready = (int) $pool['spare_ready'];
+            $faulted = (int) ($pool['spare_faulted'] ?? 0);
+            $pending = (int) ($pool['spare_pending'] ?? 0);
+            $held = (int) ($pool['spare_maintenance'] ?? 0);
+
+            // Order matters. Failure outranks exhaustion, and exhaustion is not a
+            // failure: a fully utilised pool with nothing broken is at capacity,
+            // not degraded. Benign pending and intentionally held spares never
+            // score worse than informational on their own.
             if ((int) $pool['enabled'] === 0) [$state, $reason] = ['disabled', 'pool_disabled'];
             elseif ($incomplete) [$state, $reason] = ['incomplete', 'inventory_incomplete'];
-            elseif ((int) $pool['machines_total'] > 0 && $spares === 0) [$state, $reason] = ['critical', 'no_placement_capacity'];
-            elseif ($spares > 0 && (int) $pool['spare_ready'] === 0) [$state, $reason] = ['critical', 'no_ready_spares'];
-            elseif ($unready >= 2) [$state, $reason] = ['warning', 'multiple_unavailable_spares'];
-            elseif ($unready === 1) [$state, $reason] = ['info', 'one_unavailable_capacity_remains'];
+            elseif ($ready === 0 && $faulted > 0) [$state, $reason] = ['critical', 'ready_spares_faulted'];
+            elseif ($faulted >= 2) [$state, $reason] = ['warning', 'multiple_faulted_spares'];
+            elseif ($faulted === 1) [$state, $reason] = ['info', 'faulted_spare_capacity_remains'];
+            elseif ((int) $pool['machines_total'] > 0 && $spares === 0) [$state, $reason] = ['warning', 'no_placement_capacity'];
+            elseif ($ready === 0 && $pending > 0) [$state, $reason] = ['info', 'spares_pending_only'];
+            elseif ($ready === 0 && $held > 0) [$state, $reason] = ['info', 'spares_held_only'];
+            elseif ($ready === 0 && $spares > 0) [$state, $reason] = ['incomplete', 'spare_readiness_undetermined'];
             else [$state, $reason] = ['ok', 'within_threshold'];
             $pool['health_state'] = $state;
             $pool['health_reason'] = $reason;
@@ -1187,8 +1367,12 @@ final class PodCollector
                 : 0.0;
             unset($pool['_states']);
             $totals['spare_total'] += $spares;
-            $totals['spare_ready'] += (int) $pool['spare_ready'];
+            $totals['spare_ready'] += $ready;
             $totals['spare_unready'] += $unready;
+            $totals['spare_pending'] += $pending;
+            $totals['spare_held'] += $held;
+            $totals['spare_faulted'] += $faulted;
+            $totals['spare_unrecognized'] += (int) ($pool['spare_unrecognized'] ?? 0);
             $totals['issue_machines'] += (int) ($pool['issue_machines'] ?? 0);
             $key = ['ok' => 'pools_healthy', 'info' => 'pools_informational', 'warning' => 'pools_warning', 'critical' => 'pools_critical', 'disabled' => 'pools_disabled', 'incomplete' => 'pools_incomplete'][$state];
             $totals[$key]++;
@@ -1199,10 +1383,15 @@ final class PodCollector
                 : ($totals['pools_incomplete'] > 0 ? 'incomplete'
                     : ($totals['pools_informational'] > 0 ? 'info'
                         : ($totals['pools_total'] > 0 && $totals['pools_disabled'] === $totals['pools_total'] ? 'disabled' : 'ok'))));
-        $totals['reason_code'] = $totals['state'] === 'critical' ? 'pool_capacity_exhausted'
-            : ($totals['state'] === 'warning' ? 'pool_capacity_degraded'
-                : ($totals['state'] === 'incomplete' ? 'pool_inventory_incomplete'
-                    : ($totals['state'] === 'info' ? 'pool_capacity_observation' : 'pool_capacity_healthy')));
+        // Report the driver, not just the severity. Faulted capacity and exhausted
+        // capacity are different operator problems and must not share a code.
+        if ($totals['state'] === 'ok') $totals['reason_code'] = 'pool_capacity_healthy';
+        elseif ($totals['state'] === 'disabled') $totals['reason_code'] = 'pool_capacity_healthy';
+        elseif ($totals['spare_faulted'] > 0) $totals['reason_code'] = 'pool_capacity_faulted';
+        elseif ($totals['spare_total'] === 0) $totals['reason_code'] = 'pool_capacity_exhausted';
+        elseif ($totals['state'] === 'incomplete') $totals['reason_code'] = 'pool_inventory_incomplete';
+        elseif ($totals['state'] === 'warning') $totals['reason_code'] = 'pool_capacity_degraded';
+        else $totals['reason_code'] = 'pool_capacity_observation';
 
         return [$pools, $totals];
     }
@@ -1495,42 +1684,6 @@ final class PodCollector
         if ($page) $this->pageCount++;
 
         return $session->get($path);
-    }
-
-    private static function machineIssueReason(string $state, bool $maintenance): string
-    {
-        if ($maintenance) return 'maintenance_mode';
-        $normalized = strtolower((string) preg_replace('/[^a-z0-9]+/i', '_', trim($state)));
-        $normalized = trim($normalized, '_');
-
-        return match ($normalized) {
-            'agent_unreachable' => 'agent_unreachable',
-            'provisioning_error' => 'provisioning_error',
-            'error' => 'machine_state_error',
-            'disabled' => 'machine_disabled',
-            '' => 'machine_state_unknown',
-            default => 'machine_state_' . substr($normalized, 0, 48),
-        };
-    }
-
-    private static function machineStateIsIssue(string $state, bool $hasSession): bool
-    {
-        $normalized = self::status($state);
-        $knownIssues = [
-            'AGENT_UNREACHABLE',
-            'ALREADY_USED',
-            'CUSTOMIZING_ERROR',
-            'DISABLED',
-            'ERROR',
-            'PROVISIONING_ERROR',
-            'UNAVAILABLE',
-            'UNKNOWN',
-        ];
-        if (in_array($normalized, $knownIssues, true)) {
-            return true;
-        }
-
-        return ! $hasSession && $normalized !== 'AVAILABLE';
     }
 
     private static function boundedText(string $value, int $limit, string $fallback): string
