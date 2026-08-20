@@ -1,5 +1,23 @@
 # Work Log
 
+## 2026-08-20 (Phase 0 complete)
+
+- Operator confirmed on the live pages that overlay 0.6.25 resolves the Horizon
+  capacity and machine-state correctness work. cew-RDMS is a genuine critical
+  (0 ready, faulted spares), not saturation; the capacity scope now varies rather
+  than holding its worst value; disconnected machines read as unavailable in both
+  the pool counts and the machine list; every inventory filter agrees with its
+  counter; and flagging is correct: ALREADY_USED (abnormal) is flagged as a fault,
+  while a maintenance machine shows unavailable but unflagged because it is a
+  deliberate operator action. That was the last Phase 0 exit criterion.
+- Recorded one UX finding for Phase 1 from the operator's observation that a
+  maintenance machine is visually indistinguishable from a plain unavailable one:
+  an intentionally-withheld machine should have a distinct non-alarm affordance,
+  separate from the yellow issue flag. No change made now; it belongs with the tab
+  contract and shared renderer work.
+- No code or artifact change in this entry; docs-only status update. Overlay
+  remains 0.6.25, the published installer default.
+
 ## 2026-08-20 (overlay 0.6.25, machine list agrees with pool counts)
 
 - Applied 0.6.24 on approval; all five nodes updated, collector ran clean. Operator

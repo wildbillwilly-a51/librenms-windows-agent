@@ -31,25 +31,22 @@
   version, 69 packaged PHP files lint clean, and `manifest.txt` reconciles with its
   70 payload files. Preserved agent artifact hashes were byte-identical and no
   artifact for this version existed beforehand.
-- Field state: overlay 0.6.23 is deployed on the five application nodes; 0.6.24 is
-  published and not yet applied. Under 0.6.23 the vendor problem-machine mismatch
-  had fallen from 3 to 1 but the capacity scope was still pinned, because a
-  disconnected session was still counted as in use. 0.6.24 addresses that.
-- Validation remaining: the Phase 0 field oracle, which has not fully passed yet.
-  Overlay 0.6.22 is deployed on the five application nodes; 0.6.23 is published but
-  not applied. The oracle could not be read under 0.6.22 because rrdcached holds
-  writes for up to thirty minutes and its socket is not readable by the inspecting
-  account, so the on-disk values were still pre-update. Read it after 0.6.23 is
-  applied.
-- Next action: apply overlay 0.6.25 to overlay nodes, then read the oracle. On the
-  affected pod the vendor problem-machine mismatch metric should trend toward zero
-  and the capacity health scope should vary instead of holding one value; the second
-  pod reads zero throughout and is the no-regression check. A fully utilised healthy
-  pool must not report a fault, and a disconnected session must read as unavailable
-  rather than available or faulted. Any state the machine inventory lists as
-  unrecognized is a taxonomy gap worth reporting. If the mismatch metric does not
-  move, treat it as a hard blocker and do not start Phase 1. Phase 1 is the tab
-  contract and shared summary renderer.
+- Phase 0 status: complete. Overlay 0.6.25 is deployed on all five application
+  nodes and the collector runs clean. The operator confirmed on the live pages that
+  cew-RDMS is a genuine critical (0 ready, faulted spares) rather than saturation,
+  the capacity scope now varies with the environment, disconnected machines read as
+  unavailable in both the pool counts and the machine list, every inventory filter
+  agrees with its counter, and machine flagging is correct: ALREADY_USED is flagged
+  as a fault while a maintenance machine shows as unavailable but unflagged because
+  it is intentional.
+- Next action: begin Phase 1 of docs/app-page-ux-plan.md, the uniform tab contract
+  and shared summary renderer. Carry one Horizon finding into the design: an
+  intentionally-withheld machine (maintenance, disabled) needs a distinct non-alarm
+  visual state so "unavailable on purpose" is legible at a glance, separate from
+  both the yellow issue flag and a plain row. Also pull the Phase 3 instrumentation
+  gap forward: the parser's windows-agent-horizon-pool-health RRD write never fires,
+  so pool spare counts are not queryable from metrics, and several defects in this
+  phase were visible only by operator inspection of the page.
 - Inspection notes for whoever continues: confirm collector liveness from the
   systemd journal for the Horizon worker, never from RRD file timestamps, because
   rrdcached's write delay makes a healthy collector look stopped. Two Horizon pods
