@@ -1,8 +1,8 @@
 # Codex Handoff
 
 - Objective: Execute `docs/app-page-ux-plan.md` phase by phase. Phase 0, Horizon
-  machine state and pool capacity correctness, is published as overlay 0.6.23.
-- Current state: Overlay 0.6.23 is built, published on GitHub `main`, and is the
+  machine state and pool capacity correctness, is published as overlay 0.6.24.
+- Current state: Overlay 0.6.24 is built, published on GitHub `main`, and is the
   installer default. Windows agent 0.6.16 is unchanged and its published bytes are
   untouched, so this is overlay-only. One state taxonomy decides independently
   whether a machine is placement capacity, how severe its own state is, whether it
@@ -31,13 +31,17 @@
   version, 69 packaged PHP files lint clean, and `manifest.txt` reconciles with its
   70 payload files. Preserved agent artifact hashes were byte-identical and no
   artifact for this version existed beforehand.
-- Validation remaining: the Phase 0 field oracle, which has not been read yet.
+- Field state: overlay 0.6.23 is deployed on the five application nodes; 0.6.24 is
+  published and not yet applied. Under 0.6.23 the vendor problem-machine mismatch
+  had fallen from 3 to 1 but the capacity scope was still pinned, because a
+  disconnected session was still counted as in use. 0.6.24 addresses that.
+- Validation remaining: the Phase 0 field oracle, which has not fully passed yet.
   Overlay 0.6.22 is deployed on the five application nodes; 0.6.23 is published but
   not applied. The oracle could not be read under 0.6.22 because rrdcached holds
   writes for up to thirty minutes and its socket is not readable by the inspecting
   account, so the on-disk values were still pre-update. Read it after 0.6.23 is
   applied.
-- Next action: apply overlay 0.6.23 to overlay nodes, then read the oracle. On the
+- Next action: apply overlay 0.6.24 to overlay nodes, then read the oracle. On the
   affected pod the vendor problem-machine mismatch metric should trend toward zero
   and the capacity health scope should vary instead of holding one value; the second
   pod reads zero throughout and is the no-regression check. A fully utilised healthy

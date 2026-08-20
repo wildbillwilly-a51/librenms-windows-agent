@@ -788,7 +788,7 @@ final class PodCollector
     /**
      * @return array{state:string,reason_code:string,impact:string,placement:string,issue:bool,recognized:bool}
      */
-    public static function classifyMachineState(string $state, bool $hasSession, bool $maintenance, int $consecutiveSamples = 1): array
+    public static function classifyMachineState(string $state, bool $hasSession, bool $maintenance, int $consecutiveSamples = 1, bool $sessionDisconnected = false): array
     {
         $status = self::status($state);
 
@@ -818,7 +818,13 @@ final class PodCollector
         // Session presence and maintenance change how a machine participates in
         // capacity. Neither hides a fault: a machine reporting a bad state while
         // serving a session is still evidence, it just is not free capacity.
-        if ($hasSession) {
+        if ($sessionDisconnected && $placement === 'ready') {
+            // The inventory calls it available, but a disconnected session is still
+            // holding it. The session is the authority on availability.
+            $placement = 'occupied';
+            $health = 'info';
+            $reason = 'machine_session_disconnected';
+        } elseif ($hasSession) {
             $placement = 'none';
             if (! $issue && $health === 'ok') $reason = 'machine_in_use';
         } elseif ($maintenance) {
@@ -1158,7 +1164,17 @@ final class PodCollector
                 elseif ($state === 'DISCONNECTED') $totals['disconnected']++;
                 else $totals['other']++;
                 $machineId = trim((string) ($row['machine_id'] ?? ''));
-                if ($machineId !== '') $machines[$machineId] = true;
+                // Record which kind of session holds the machine, not merely that
+                // one exists. A disconnected session still holds its machine, but
+                // the machine is unavailable rather than in use, and collapsing the
+                // two hides disconnected machines inside the in-session count.
+                if ($machineId !== '') {
+                    $machines[$machineId] = match ($state) {
+                        'CONNECTED' => 'connected',
+                        'DISCONNECTED' => 'disconnected',
+                        default => 'other',
+                    };
+                }
                 $protocol = preg_replace('/[^a-z0-9_]/', '', strtolower((string) ($row['session_protocol'] ?? '')));
                 if ($protocol !== '') $protocolCounts[$protocol] = ($protocolCounts[$protocol] ?? 0) + 1;
             }
@@ -1218,7 +1234,11 @@ final class PodCollector
                 $state = self::status((string) ($row['state'] ?? 'UNKNOWN')) ?: 'UNKNOWN';
                 $pools[$index]['_states'][$state] = ($pools[$index]['_states'][$state] ?? 0) + 1;
                 $machineId = (string) ($row['id'] ?? '');
-                $hasSession = $machineId !== '' && isset($active[$machineId]);
+                $sessionKind = $machineId !== '' ? (string) ($active[$machineId] ?? 'none') : 'none';
+                $hasSession = $sessionKind !== 'none';
+                // Only an active session makes a machine "in use". A disconnected
+                // session leaves it unavailable, which the taxonomy handles.
+                $hasActiveSession = $sessionKind === 'connected' || $sessionKind === 'other';
                 $managed = is_array($row['managed_machine_data'] ?? null) ? $row['managed_machine_data'] : [];
                 $maintenance = self::boolean($managed['in_maintenance_mode'] ?? false, false) || $state === 'MAINTENANCE';
                 $previousMachine = $previousById[$machineId] ?? [];
@@ -1228,7 +1248,7 @@ final class PodCollector
                     ? (string) ($previousMachine['state_first_seen_utc'] ?? $previousMachine['collected_utc'] ?? $collectedUtc)
                     : $collectedUtc;
                 $stateAge = max(0, (int) strtotime($collectedUtc) - (int) strtotime($stateFirstSeen));
-                $machineClassification = self::classifyMachineState($state, $hasSession, $maintenance, $stateAge >= 1800 ? 7 : 1);
+                $machineClassification = self::classifyMachineState($state, $hasActiveSession, $maintenance, $stateAge >= 1800 ? 7 : 1, $sessionKind === "disconnected");
                 // The taxonomy decides this, not the display severity, so a row's
                 // state can never disagree with the aggregate counts.
                 $isIssue = (bool) $machineClassification['issue'];
@@ -1262,7 +1282,8 @@ final class PodCollector
                         $issues[] = $detail;
                     }
                 }
-                if ($hasSession) {
+                if ($hasActiveSession) {
+                    // Genuinely in use. Not a spare, and not unavailable capacity.
                     $pools[$index]['machines_with_sessions']++;
                     continue;
                 }

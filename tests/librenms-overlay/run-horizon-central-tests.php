@@ -392,6 +392,45 @@ $tests['every machine row state agrees with the aggregate counts'] = static func
         expect($accounted === (int) $pool['machines_total'], 'machines are unaccounted for in pool ' . (string) $pool['name'] . ": $accounted of " . (string) $pool['machines_total']);
     }
 };
+$tests['a disconnected session is reported unavailable, not folded into the in-session count'] = static function (): void {
+    // A machine holding a disconnected session was previously counted as in use,
+    // so it never appeared as unavailable and the pool looked fully healthy with
+    // zero unavailable machines. Only an active session means in use.
+    $responses = successfulResponses();
+    $responses['rest/inventory/v1/desktop-pools'] = [
+        ['id' => 'ft', 'name' => 'Floating', 'source' => 'INSTANT_CLONE', 'enabled' => true],
+    ];
+    $machines = [];
+    $sessions = [];
+    for ($i = 1; $i <= 6; $i++) {
+        $machines[] = ['id' => "c$i", 'desktop_pool_id' => 'ft', 'state' => 'CONNECTED'];
+        $sessions[] = ['machine_id' => "c$i", 'session_state' => 'CONNECTED'];
+    }
+    for ($i = 1; $i <= 2; $i++) {
+        $machines[] = ['id' => "d$i", 'desktop_pool_id' => 'ft', 'state' => 'DISCONNECTED'];
+        $sessions[] = ['machine_id' => "d$i", 'session_state' => 'DISCONNECTED'];
+    }
+    for ($i = 1; $i <= 3; $i++) $machines[] = ['id' => "a$i", 'desktop_pool_id' => 'ft', 'state' => 'AVAILABLE'];
+    $responses['rest/inventory/v1/sessions?page=1&size=100'] = $sessions;
+    $responses['rest/inventory/v1/machines?page=1&size=100'] = $machines;
+
+    $snapshot = (new PodCollector(static fn (): ApiSession => new FakeHorizonSession($responses)))->collect(testConfig(), ['username' => 'reader', 'password' => str_repeat('x', 12)]);
+    $pool = $snapshot['horizon_pools'][0];
+    expect((int) $pool['machines_total'] === 11, 'machine total changed');
+    expect((int) $pool['machines_with_sessions'] === 6, 'only actively connected machines should count as in session, got ' . (string) $pool['machines_with_sessions']);
+    expect((int) $pool['spare_ready'] === 3, 'available spares miscounted');
+    expect((int) $pool['spare_occupied'] === 2, 'disconnected machines were not counted as occupied');
+    expect((int) $pool['spare_unready'] === 2, 'disconnected machines must be reported as unavailable, got ' . (string) $pool['spare_unready']);
+    expect((int) $pool['spare_faulted'] === 0, 'a disconnected session is not a fault');
+    expect($pool['health_state'] === 'ok', 'a pool with ready capacity should stay healthy');
+    expect((int) $snapshot['horizon_pools_summary']['issue_machines'] === 0, 'disconnected machines must not count as problem machines');
+
+    // Also cover the case where the inventory still calls the machine available
+    // while a disconnected session holds it. The session is the authority.
+    $claimed = PodCollector::classifyMachineState('AVAILABLE', false, false, 1, true);
+    expect($claimed['placement'] === 'occupied', 'a disconnected session must override an available inventory state');
+    expect($claimed['state'] === 'info' && $claimed['issue'] === false, 'a session-held available machine should be informational, not a fault');
+};
 $tests['a disconnected session is unavailable rather than available or faulted'] = static function (): void {
     $responses = successfulResponses();
     $responses['rest/inventory/v1/desktop-pools'] = [
@@ -718,7 +757,7 @@ $tests['discovery reports TLS auth identity and cross-site ambiguity failures'] 
 $tests['capability manifest advertises the stable private integration contract'] = static function (): void {
     $path = dirname(__DIR__, 2) . '/librenms-overlay/tools/capabilities.json';
     $manifest = json_decode((string) file_get_contents($path), true, flags: JSON_THROW_ON_ERROR);
-    expect($manifest['overlay_version'] === '0.6.23', 'overlay capability version mismatch');
+    expect($manifest['overlay_version'] === '0.6.24', 'overlay capability version mismatch');
     expect((int) ($manifest['capabilities']['horizon_machine_state_taxonomy'] ?? 0) === 1, 'machine state taxonomy capability not advertised');
     expect($manifest['configuration_schema_version'] === 2, 'configuration schema version mismatch');
     expect($manifest['capabilities']['horizon_trigger_producer'] === 1, 'trigger capability missing');

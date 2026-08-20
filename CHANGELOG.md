@@ -1,5 +1,26 @@
 # Changelog
 
+## Overlay 0.6.24 - 2026-08-20
+
+Overlay-only release. Makes a machine holding a disconnected session read as
+unavailable. Windows agent `0.6.16` and its artifacts are unchanged.
+
+- Session presence alone no longer means "in use". The collector records whether
+  each session is connected or disconnected, and only an active session counts a
+  machine as in session. Previously every session row marked its machine as in
+  use regardless of session state, so machines with disconnected sessions were
+  folded into the in-session count and a pool could report zero unavailable while
+  holding disconnected machines.
+- A machine holding a disconnected session is reported as occupied, so it appears
+  as unavailable in the pool spare breakdown without being scored as a fault.
+- A disconnected session overrides an inventory state that still claims the
+  machine is available, because the session is the authority on availability.
+- Added a test pinning the reported pool shape: a pool of connected, disconnected
+  and available machines must report the disconnected ones as unavailable, keep
+  them out of both the in-session count and the problem-machine count, and stay
+  healthy while ready capacity remains.
+- No RRD schema, protocol, or application identity change.
+
 ## Overlay 0.6.23 - 2026-08-13
 
 Overlay-only release. Corrects the disconnected-session classification and a

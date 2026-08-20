@@ -25,13 +25,13 @@ and private exports do not belong here.
 
 ## Current Releases
 
-- Overlay version: `0.6.23`
+- Overlay version: `0.6.24`
 - Windows agent version: `0.6.16`
-- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.23.tar.gz`
+- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.24.tar.gz`
 - Windows MSI: `artifacts/librenms-windows-agent-0.6.16.msi`
 - Versioned agent config: `artifacts/librenms-windows-agent-config-0.6.16-win.json`
 - Checksums: `SHA256SUMS`
-- Overlay SHA256: `910ce48499c1c61e2b443adc85da58efb0275988d781d87cbab8672e50f48cf0`
+- Overlay SHA256: `911c895a361099225b0635cc6b65042cafd910c6df8d32b0bc9c6a4778c026e4`
 - Windows MSI SHA256: `5a40c9965a44179b09c57e4e3951e55982b983bfd1fd83b4e93cbeaaf5811732`
 - Versioned config SHA256: `94fd8b56e0ac2ca15f50dd0ffff1d3f9167032b4717aeecd5b091f336fbe404b`
 - Public overlay installer: `install.sh`
@@ -42,15 +42,21 @@ adds explicit Horizon service expectedness plus active-certificate health. The b
 matching versioned config, checks prerequisites and port ownership, prepares
 configuration before service startup, leaves registered upgrades inside MSI
 rollback, retains verbose diagnostics, and verifies a live protocol response.
-Overlay release `0.6.23` completes the Horizon machine state and pool capacity
-correction begun in `0.6.22`. A disconnected session is now classified as
-occupied, meaning unavailable but not faulted: `0.6.22` reported it as healthy,
-which reads as available, and releases before it reported it as a warning and
-counted it as a problem machine. Neither was correct. Occupied machines are also
-counted in the pool spare breakdown, closing a gap in `0.6.22` where a machine
-in an occupying state with no session row was dropped from both the in-use and
-the spare totals and became invisible. Pool totals now reconcile in both
-directions and the tests assert it.
+Overlay release `0.6.24` makes a disconnected session read as unavailable on the
+page. Session presence alone no longer means "in use": the collector now records
+whether each session is connected or disconnected, and only an active session
+counts a machine as in session. A machine holding a disconnected session is
+reported as occupied and therefore unavailable, so a pool no longer shows those
+machines folded into its in-session count with zero unavailable. A disconnected
+session also overrides an inventory state that still claims the machine is
+available, because the session is the authority on availability.
+
+`0.6.23` introduced the occupied class and closed a gap where a machine in an
+occupying state with no session row was dropped from both the in-use and the
+spare totals and became invisible. Pool totals reconcile in both directions and
+the tests assert it. Across `0.6.22` through `0.6.24`, a disconnected machine has
+moved from being reported as a warning and counted as a problem machine, through
+being reported as healthy, to being reported as unavailable and not a fault.
 
 One state taxonomy decides, independently, whether a machine is placement
 capacity, how severe its own state is, and whether it counts as a problem
@@ -101,7 +107,7 @@ For an intentional release:
 For an agent-only release that preserves the current overlay:
 
 ```powershell
-.\scripts\build-release.ps1 -Version 0.6.16 -AgentOnly -OverlayVersion 0.6.23 -UpdateChecksums
+.\scripts\build-release.ps1 -Version 0.6.16 -AgentOnly -OverlayVersion 0.6.24 -UpdateChecksums
 ```
 
 Before publishing, review the full committed snapshot for secrets, private
@@ -117,12 +123,12 @@ fixtures.
 
 ## Next Recommended Action
 
-Overlay `0.6.23` is published and is the installer default. Rollout timing
+Overlay `0.6.24` is published and is the installer default. Rollout timing
 belongs to the operator: publishing changes no deployed node, because the
 overlay reapply timer re-applies the locally staged copy and performs no
 download.
 
-Apply `0.6.23` to overlay nodes when convenient. This release changes Horizon
+Apply `0.6.24` to overlay nodes when convenient. This release changes Horizon
 capacity classification, so confirm against the collector's own objective
 signals: the vendor problem-machine mismatch metric should trend toward zero, and
 the capacity health scope should vary with the environment instead of holding one

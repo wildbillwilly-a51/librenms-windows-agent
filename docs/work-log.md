@@ -1,5 +1,38 @@
 # Work Log
 
+## 2026-08-20 (overlay 0.6.24, disconnected sessions read as unavailable)
+
+- Applied overlay 0.6.23 to the cluster on approval. All five application nodes
+  reported the new version, backends stayed clean, and the collector ran with zero
+  errors. Read the Phase 0 oracle from rrdcached's journal rather than the RRD
+  files, since the daemon holds writes up to thirty minutes and its socket is not
+  readable by the inspecting account. The vendor problem-machine mismatch had moved
+  from 3 to 1, but the capacity scope was still pinned at its worst value.
+- Operator inspection of a real pool then showed the remaining defect, which no
+  metric would have revealed: the pool read 35 total, 31 in session, 4 available,
+  0 unavailable, with two machines in a disconnected state. The counts reconciled,
+  which proved the two disconnected machines were inside the in-session bucket.
+- Root cause: the session collector marked a machine as in-session for any session
+  row regardless of session state, so a disconnected session made its machine look
+  in use. Only an active session should mean in use; a disconnected session leaves
+  the machine unavailable. Fixed by recording session kind per machine and driving
+  the in-session bucket from an active session only.
+- A disconnected session now also overrides an inventory state that still reports
+  the machine as available, since the session is the authority on availability.
+- Reproduced the reported pool shape in a probe before and after the change: 31 in
+  session and 0 unavailable became 29 in session and 2 unavailable, with the pool
+  still healthy, no faulted spares, no problem machines, and totals reconciling.
+  Pinned that shape as a test.
+- Validation: 31 central collector tests, 11 parser fixtures, 11 app-page fixtures,
+  69 overlay PHP files linted, test runners linted, `bash -n install.sh`, all exit 0
+  with stderr inspected. Packaged artifact verified to carry the session-kind logic
+  and the occupied counters, 69 packaged PHP files lint clean, manifest reconciles
+  with its 70 payload files, agent artifact hashes byte-identical.
+- Note for the roadmap: the parser writes a `windows-agent-horizon-pool-health` RRD
+  family with spare counts, and no such RRD exists on disk, so that write never
+  fires. Those are exactly the values that would have made this defect visible from
+  metrics instead of requiring operator inspection. Recorded for the Phase 3 audit.
+
 ## 2026-08-13 (overlay 0.6.23, disconnected-session correction)
 
 - Acted on operator feedback that two machines in one clone pool showed correctly
