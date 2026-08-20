@@ -960,10 +960,13 @@ if ($horizon_surface_available) {
         $reason = (string) ($pool['health_reason'] ?? 'inventory_incomplete');
         $severity = ['critical' => 40, 'warning' => 30, 'incomplete' => 25, 'info' => 10][$state] ?? 20;
         $next = match ($reason) {
-            'no_placement_capacity' => 'Add capacity or end idle sessions.',
-            'no_ready_spares' => 'Restore or add a ready spare.',
-            'multiple_unavailable_spares' => 'Review the unavailable machines.',
-            'one_unavailable_capacity_remains' => 'Review when convenient.',
+            'no_placement_capacity' => 'Add capacity or end idle sessions. Nothing is faulted.',
+            'ready_spares_faulted' => 'Recover the faulted machines; no ready spare remains.',
+            'multiple_faulted_spares' => 'Review the faulted machines.',
+            'faulted_spare_capacity_remains' => 'Review the faulted machine when convenient.',
+            'spares_pending_only' => 'Wait for the pending machines to finish becoming ready.',
+            'spares_held_only' => 'Confirm the withheld machines are intentional and restore capacity.',
+            'spare_readiness_undetermined' => 'Spare readiness could not be determined; check the machine inventory.',
             default => 'Review pool inventory completeness.',
         };
         $conditions[] = [
@@ -1129,7 +1132,7 @@ if ($horizon_surface_available) {
         $sortedPools = $issue_first($horizon_pools, static function (array $row): int {
             return ['critical' => 50, 'warning' => 40, 'incomplete' => 30, 'info' => 20, 'disabled' => 10, 'ok' => 0][strtolower((string) ($row['health_state'] ?? 'incomplete'))] ?? 30;
         }, 'name');
-        $horizon_details .= '<section class="windows-agent-horizon-section" id="windows-agent-horizon-pool-workspace"><div class="windows-agent-horizon-section-heading"><h4>Pool capacity</h4><span class="windows-agent-horizon-policy"><i class="windows-agent-horizon-dot windows-agent-horizon-dot-info"></i> 1 unavailable + ready capacity = info <i class="windows-agent-horizon-dot windows-agent-horizon-dot-warning"></i> 2+ unavailable = warning <i class="windows-agent-horizon-dot windows-agent-horizon-dot-critical"></i> 0 ready = critical</span></div>';
+        $horizon_details .= '<section class="windows-agent-horizon-section" id="windows-agent-horizon-pool-workspace"><div class="windows-agent-horizon-section-heading"><h4>Pool capacity</h4><span class="windows-agent-horizon-policy"><i class="windows-agent-horizon-dot windows-agent-horizon-dot-info"></i> 1 faulted + ready capacity = info <i class="windows-agent-horizon-dot windows-agent-horizon-dot-warning"></i> 2+ faulted, or no free capacity = warning <i class="windows-agent-horizon-dot windows-agent-horizon-dot-critical"></i> 0 ready + faulted = critical</span></div>';
         $horizon_details .= '<div class="windows-agent-horizon-pool-head" aria-hidden="true"><span>Pool</span><span>State</span><span>Machines</span><span>In session</span><span>Ready</span><span>Unavailable</span><span>Placement headroom</span><span>Demand</span></div>';
         foreach ($sortedPools as $pool) {
             $poolKey = (string) ($pool['id'] ?? $pool['name'] ?? '');
@@ -1177,11 +1180,25 @@ if ($horizon_surface_available) {
                 $hasSession = (int) ($machine['has_session'] ?? 0) === 1;
                 $maintenance = (int) ($machine['maintenance'] ?? 0) === 1;
                 $isIssue = (int) ($machine['issue'] ?? (($machine['issue_reason'] ?? 'none') !== 'none' ? 1 : 0)) === 1;
-                $ready = ! $hasSession && ! $maintenance && strtoupper((string) ($machine['state'] ?? '')) === 'AVAILABLE';
+                // Group by the collector's own placement decision so a row can never
+                // disagree with the filter counters beside it. Fall back to the old
+                // local derivation only for data collected before placement existed.
+                $placement = strtolower((string) ($machine['placement'] ?? ''));
+                if ($placement === '') {
+                    $placement = $hasSession
+                        ? 'none'
+                        : (! $maintenance && strtoupper((string) ($machine['state'] ?? '')) === 'AVAILABLE' ? 'ready' : 'occupied');
+                }
+                $sessionKind = strtolower((string) ($machine['session_kind'] ?? ''));
+                if ($sessionKind === '' || $sessionKind === 'none') {
+                    $sessionLabel = $hasSession ? 'Present' : 'None';
+                } else {
+                    $sessionLabel = ['connected' => 'Connected', 'disconnected' => 'Disconnected'][$sessionKind] ?? 'Present';
+                }
                 $categories = ['all'];
                 if ($isIssue) $categories[] = 'issues';
-                if ($hasSession) $categories[] = 'sessions';
-                elseif ($ready) $categories[] = 'ready';
+                if ($placement === 'none') $categories[] = 'sessions';
+                elseif ($placement === 'ready') $categories[] = 'ready';
                 else $categories[] = 'unavailable';
                 $reason = $isIssue ? $humanize_horizon_reason($machine['issue_reason'] ?? 'unknown') : 'None';
                 $next = match ((string) ($machine['issue_reason'] ?? 'none')) {
@@ -1191,20 +1208,29 @@ if ($horizon_surface_available) {
                     'none' => 'No action required.',
                     default => $isIssue ? 'Review the machine state and related Horizon evidence.' : 'No action required.',
                 };
-                $horizon_details .= '<button type="button" class="windows-agent-horizon-machine-row' . ($isIssue ? ' windows-agent-horizon-machine-issue' : '') . '" data-machine-category="' . $esc(implode(' ', $categories)) . '" data-machine-drawer="' . $esc($drawerRef) . '" aria-controls="windows-agent-horizon-machine-drawer-' . $esc($drawerRef) . '"><span>' . ($isIssue ? '<span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span> ' : '') . '<strong>' . $esc($machine['name'] ?? $machine['id'] ?? 'unknown') . '</strong></span><span>' . $esc($humanize_horizon_reason($machine['state'] ?? 'unknown')) . '</span><span>' . ($hasSession ? 'Present' : 'None') . '</span><span>' . ($maintenance ? 'Yes' : 'No') . '</span><span>' . $esc($reason) . '</span><span>' . $esc($machine['collected_utc'] ?? 'unknown') . ' <span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span></span></button>';
+                $horizon_details .= '<button type="button" class="windows-agent-horizon-machine-row' . ($isIssue ? ' windows-agent-horizon-machine-issue' : '') . '" data-machine-category="' . $esc(implode(' ', $categories)) . '" data-machine-drawer="' . $esc($drawerRef) . '" aria-controls="windows-agent-horizon-machine-drawer-' . $esc($drawerRef) . '"><span>' . ($isIssue ? '<span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span> ' : '') . '<strong>' . $esc($machine['name'] ?? $machine['id'] ?? 'unknown') . '</strong></span><span>' . $esc($humanize_horizon_reason($machine['state'] ?? 'unknown')) . '</span><span>' . $esc($sessionLabel) . '</span><span>' . ($maintenance ? 'Yes' : 'No') . '</span><span>' . $esc($reason) . '</span><span>' . $esc($machine['collected_utc'] ?? 'unknown') . ' <span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span></span></button>';
                 $horizon_details .= '<aside id="windows-agent-horizon-machine-drawer-' . $esc($drawerRef) . '" class="windows-agent-horizon-detail-drawer" data-horizon-drawer-panel="' . $esc($drawerRef) . '" hidden><div class="windows-agent-horizon-drawer-header"><h4>Machine details</h4><button type="button" class="close" data-horizon-drawer-close aria-label="Close"><span aria-hidden="true">&times;</span></button></div>';
                 $horizon_details .= '<h3>' . $esc($machine['name'] ?? $machine['id'] ?? 'unknown') . '</h3><p class="' . ($isIssue ? 'text-warning' : 'text-success') . '"><span class="glyphicon ' . ($isIssue ? 'glyphicon-exclamation-sign' : 'glyphicon-ok-sign') . '" aria-hidden="true"></span> ' . $esc($humanize_horizon_reason($machine['state'] ?? 'unknown')) . '</p><dl>';
                 foreach ([
                     'Pool' => $machine['pool_display_name'] ?? $machine['pool'] ?? '',
                     'Issue' => $reason,
-                    'Session' => $hasSession ? 'Present' : 'None',
+                    'Session' => $sessionLabel,
                     'Maintenance mode' => $maintenance ? 'Yes' : 'No',
                     'Last known state' => $machine['state'] ?? 'unknown',
                     'Collected' => $machine['collected_utc'] ?? 'unknown',
                 ] as $label => $value) {
                     $horizon_details .= '<dt>' . $esc($label) . '</dt><dd>' . $esc($value) . '</dd>';
                 }
-                $horizon_details .= '</dl><div class="windows-agent-horizon-drawer-evidence"><h4>Capacity role</h4><p><strong>' . ($hasSession ? 'Hosting a session' : ($ready ? 'Ready for placement' : 'Not ready for placement')) . '</strong></p><p class="text-muted">' . ($isIssue ? 'This machine needs review in Horizon.' : 'No machine issue is reported in this snapshot.') . '</p></div><div class="windows-agent-horizon-drawer-next"><h4>Next action</h4><p>' . $esc($next) . '</p></div></aside>';
+                $capacityRole = match ($placement) {
+                    'none' => 'Hosting an active session',
+                    'ready' => 'Ready for placement',
+                    'occupied' => 'Occupied; unavailable for placement',
+                    'pending' => 'Becoming ready',
+                    'held' => 'Withheld; unavailable for placement',
+                    'faulted' => 'Faulted; unavailable for placement',
+                    default => 'Not ready for placement',
+                };
+                $horizon_details .= '</dl><div class="windows-agent-horizon-drawer-evidence"><h4>Capacity role</h4><p><strong>' . $esc($capacityRole) . '</strong></p><p class="text-muted">' . ($isIssue ? 'This machine needs review in Horizon.' : 'No machine issue is reported in this snapshot.') . '</p></div><div class="windows-agent-horizon-drawer-next"><h4>Next action</h4><p>' . $esc($next) . '</p></div></aside>';
             }
             $horizon_details .= '<div class="windows-agent-horizon-machine-empty" data-machine-empty hidden>No machines match this filter.</div>';
             if ($poolMachines === []) {

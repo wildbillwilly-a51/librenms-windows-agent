@@ -119,7 +119,7 @@
         "VMwareViewConnectionServer",
         "Conditions requiring attention",
         "Pool capacity",
-        "2+ unavailable = warning",
+        "2+ faulted, or no free capacity = warning",
         "Sessions and headroom",
         "30d",
         "Instant-B",

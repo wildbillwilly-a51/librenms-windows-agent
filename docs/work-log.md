@@ -1,5 +1,44 @@
 # Work Log
 
+## 2026-08-20 (overlay 0.6.25, machine list agrees with pool counts)
+
+- Applied 0.6.24 on approval; all five nodes updated, collector ran clean. Operator
+  inspection then showed the pool counts were right (2 unavailable) but the machine
+  inventory list disagreed: the two disconnected machines showed under All, were
+  absent from the Unavailable filter, and did not appear under any availability
+  bucket that matched the counter.
+- Root cause was a second instance of the same class of defect the taxonomy work
+  set out to remove: the app page re-derived availability locally with
+  `if hasSession -> sessions elseif ready -> ready else unavailable`, so a
+  disconnected machine, which still has a session row, was filed as in session.
+  The page was not using the collector's placement decision.
+- Fixed by publishing placement and session_kind on each machine row and grouping
+  the list, the Session column, the drawer capacity role, and the pool next-action
+  text from them, with a fallback to the old derivation only for pre-placement data.
+- Also corrected two stale texts contradicted by the page itself: the pool legend
+  and the pool next-action map still stated the superseded count-based policy
+  (e.g. "0 ready = critical", "no_ready_spares"), while the pools beside them were
+  already scored by the faulted-versus-exhausted rules.
+- While fixing, two of my own edits broke tests and were caught before publish: an
+  undefined `$ready` left behind in the drawer capacity-role line, and an
+  over-broad `not_contains "all sessions"` assertion that a legitimately connected
+  machine in the same fixture matched. The drawer line now derives its role from
+  placement; the assertion was narrowed to the unique `all unavailable` category.
+- Added a disconnected-with-session machine row to the central-precedence app-page
+  fixture and asserted it renders as `data-machine-category="all unavailable"`,
+  which fails on the pre-fix code path.
+- Validation: 31 central collector tests, 11 parser fixtures, 11 app-page fixtures,
+  69 overlay PHP files linted, test runners linted, `bash -n install.sh`, all exit 0
+  with stderr inspected. Packaged artifact verified to publish placement and
+  session_kind, carry the page changes, lint clean across 69 files, and reconcile
+  its manifest with 70 payload files; agent artifact hashes byte-identical.
+- Open, unchanged by this release: the capacity health scope is still pinned at its
+  worst value on the affected pod. Whether that is correct (real faulted machines
+  with vendor_error around 7) or a remaining scoring issue still cannot be told from
+  metrics, because the parser's `windows-agent-horizon-pool-health` RRD write never
+  fires and the per-pool reason code is not in any RRD. Pull that instrumentation
+  gap forward in the Phase 3 audit.
+
 ## 2026-08-20 (overlay 0.6.24, disconnected sessions read as unavailable)
 
 - Applied overlay 0.6.23 to the cluster on approval. All five application nodes

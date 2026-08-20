@@ -1266,6 +1266,11 @@ final class PodCollector
                     'issue_reason' => $machineClassification['reason_code'],
                     'severity' => $machineClassification['state'],
                     'impact' => $machineClassification['impact'],
+                    // Published so the UI can group rows by the same decision the
+                    // pool counts use, instead of re-deriving availability locally
+                    // and disagreeing with its own filter counters.
+                    'placement' => $machineClassification['placement'],
+                    'session_kind' => $sessionKind,
                     'collected_utc' => $collectedUtc,
                     'state_first_seen_utc' => $stateFirstSeen,
                 ];

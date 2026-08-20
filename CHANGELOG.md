@@ -1,5 +1,27 @@
 # Changelog
 
+## Overlay 0.6.25 - 2026-08-20
+
+Overlay-only release. Makes the Horizon machine inventory list agree with the
+pool counters. Windows agent `0.6.16` and its artifacts are unchanged.
+
+- The machine inventory list now groups each row by the collector's own placement
+  decision instead of re-deriving availability in the page. A disconnected machine
+  was correctly counted as unavailable in the pool totals from `0.6.24`, but the
+  list still filed any machine that had a session row under the in-session filter.
+  That is why the reported pool showed two unavailable machines that were absent
+  from the Unavailable filter and appeared only under All.
+- Each machine row now carries its placement class and session kind. The inventory
+  list categories, the Session column (now Connected / Disconnected rather than
+  Present / None), the drawer capacity role, and the pool-condition next-action
+  text all read from the collector's decision.
+- Updated the pool legend and the pool next-action text to describe the
+  faulted-versus-exhausted policy. Both still described the superseded count-based
+  rules, which contradicted the pool states shown beside them.
+- Added an app-page assertion that a disconnected machine with a session row
+  renders under the unavailable category, which is the exact case that was wrong.
+- No RRD schema, protocol, or application identity change.
+
 ## Overlay 0.6.24 - 2026-08-20
 
 Overlay-only release. Makes a machine holding a disconnected session read as

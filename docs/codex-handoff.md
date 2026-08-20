@@ -1,8 +1,8 @@
 # Codex Handoff
 
 - Objective: Execute `docs/app-page-ux-plan.md` phase by phase. Phase 0, Horizon
-  machine state and pool capacity correctness, is published as overlay 0.6.24.
-- Current state: Overlay 0.6.24 is built, published on GitHub `main`, and is the
+  machine state and pool capacity correctness, is published as overlay 0.6.25.
+- Current state: Overlay 0.6.25 is built, published on GitHub `main`, and is the
   installer default. Windows agent 0.6.16 is unchanged and its published bytes are
   untouched, so this is overlay-only. One state taxonomy decides independently
   whether a machine is placement capacity, how severe its own state is, whether it
@@ -41,7 +41,7 @@
   writes for up to thirty minutes and its socket is not readable by the inspecting
   account, so the on-disk values were still pre-update. Read it after 0.6.23 is
   applied.
-- Next action: apply overlay 0.6.24 to overlay nodes, then read the oracle. On the
+- Next action: apply overlay 0.6.25 to overlay nodes, then read the oracle. On the
   affected pod the vendor problem-machine mismatch metric should trend toward zero
   and the capacity health scope should vary instead of holding one value; the second
   pod reads zero throughout and is the no-regression check. A fully utilised healthy
