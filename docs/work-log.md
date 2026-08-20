@@ -1,5 +1,55 @@
 # Work Log
 
+## 2026-08-13 (overlay 0.6.23, disconnected-session correction)
+
+- Acted on operator feedback that two machines in one clone pool showed correctly
+  as disconnected but were classified as available. Reproduced it with a probe
+  harness against the collector rather than reasoning from the code alone, which
+  exposed two distinct defects.
+- First, the published classification for a disconnected machine was
+  `severity=ok`, and `ok` reads as available. Second, an occupying state with no
+  corresponding session row was excluded from both the in-use and the spare
+  buckets, so the machines vanished from the capacity breakdown: the probe showed
+  a five-machine pool accounting for only three.
+- Checked the 0.6.21 artifact before describing the history, and corrected my own
+  account: the operator was right that this state had never been classified
+  correctly. Before 0.6.22 a disconnected machine fell through to the warning
+  fallback and counted as a problem machine; 0.6.22 moved it to healthy. Both are
+  wrong in opposite directions, so this was not a regression I introduced but a
+  pre-existing misclassification my change had moved rather than fixed.
+- Added an `occupied` placement class: unavailable, not faulted, counted in the
+  spare total and reported as unready so it stays visible as unavailable, tracked
+  in its own counter so scoring never reads occupancy as a fault. A pool with no
+  ready capacity because every machine is occupied now reports exhaustion.
+- Added reconciliation assertions in both directions, since the accounting hole
+  had passed the previous tests: the spare breakdown must sum to the spare total,
+  and in-use plus spares must equal the machine total. One of my earlier
+  assertions had encoded the wrong mapping and was corrected rather than removed.
+- Replaced the README clone-pool policy description, which still documented the
+  superseded count-based rules including treating a fully in-session pool as
+  critical. Found while bumping version references.
+- Validation: 30 central collector tests, 11 parser fixtures, 11 app-page
+  fixtures, 69 overlay PHP files linted, overlay test runners linted, and
+  `bash -n install.sh`, all exit 0 with stderr inspected. Verified from the
+  packaged artifact that the occupied class, the new reason code, and both page
+  labels ship, that the capability manifest reports `0.6.23`, that 69 packaged PHP
+  files lint clean, and that `manifest.txt` reconciles with its 70 payload files.
+  Preserved agent artifact hashes were byte-identical and no `0.6.23` artifact
+  existed before the build.
+- Field state at handoff: overlay `0.6.22` is deployed on the five application
+  nodes and `0.6.23` is published but not applied. The Phase 0 oracle was not read
+  under `0.6.22` because rrdcached holds writes for up to thirty minutes and the
+  daemon socket is not readable by the inspecting account, so the values on disk
+  were still pre-update. Read the oracle after `0.6.23` is applied instead.
+- Process note: an earlier claim that the collector had stopped writing was wrong.
+  The journal showed uninterrupted five-minute collections; the stale file mtime
+  was rrdcached's write delay, a trap already recorded earlier in the same
+  session. Confirm collector liveness from the service journal, not from RRD file
+  timestamps.
+- Also discovered that two Horizon pods are collected, not one, each with its own
+  display device and application id. Only one carried the saturated capacity
+  signal; the other reads zero throughout and serves as a no-regression check.
+
 ## 2026-08-12 (overlay 0.6.22, roadmap Phase 0)
 
 - Implemented and published Phase 0 of `docs/app-page-ux-plan.md`: Horizon machine

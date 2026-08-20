@@ -297,8 +297,14 @@ $tests['machine state taxonomy classifies placement health and issues independen
     expect($ready['placement'] === 'ready' && $ready['state'] === 'ok' && $ready['issue'] === false, 'AVAILABLE misclassified');
     $inUse = PodCollector::classifyMachineState('CONNECTED', true, false);
     expect($inUse['placement'] === 'none' && $inUse['state'] === 'ok' && $inUse['issue'] === false, 'in-use machine misclassified');
+    // A disconnected session is neither a fault nor available. It must not report
+    // `ok`, because that reads as available to an operator, and must not be an issue.
     $idle = PodCollector::classifyMachineState('DISCONNECTED', true, false);
-    expect($idle['state'] === 'ok' && $idle['issue'] === false, 'disconnected session machine should not be a problem');
+    expect($idle['state'] === 'info', 'a disconnected session must not report as healthy/available');
+    expect($idle['issue'] === false, 'a disconnected session is not a problem machine');
+    expect($idle['reason_code'] === 'machine_session_disconnected', 'disconnected machine lost its reason code');
+    $idleNoSession = PodCollector::classifyMachineState('DISCONNECTED', false, false);
+    expect($idleNoSession['placement'] === 'occupied', 'a disconnected machine without a session row must still be accounted as occupied');
 
     // A fault on an in-use machine is still a fault, just not free capacity.
     $faultedInUse = PodCollector::classifyMachineState('ERROR', true, false);
@@ -377,9 +383,55 @@ $tests['every machine row state agrees with the aggregate counts'] = static func
     foreach ($snapshot['horizon_pools'] as $pool) $poolIssues += (int) ($pool['issue_machines'] ?? 0);
     expect($rowIssues === $poolIssues, "per-machine issue rows ($rowIssues) disagree with pool issue counts ($poolIssues)");
     foreach ($snapshot['horizon_pools'] as $pool) {
-        $parts = (int) $pool['spare_ready'] + (int) $pool['spare_pending'] + (int) $pool['spare_maintenance'] + (int) $pool['spare_faulted'] + (int) $pool['spare_unrecognized'];
+        $parts = (int) $pool['spare_ready'] + (int) $pool['spare_pending'] + (int) $pool['spare_occupied']
+            + (int) $pool['spare_maintenance'] + (int) $pool['spare_faulted'] + (int) $pool['spare_unrecognized'];
         expect($parts === (int) $pool['spare_total'], 'spare breakdown does not reconcile with spare_total for pool ' . (string) $pool['name']);
+        // Every machine must land in exactly one bucket. Dropping a state from both
+        // in-use and spare accounting is how a machine becomes invisible.
+        $accounted = (int) $pool['machines_with_sessions'] + (int) $pool['spare_total'];
+        expect($accounted === (int) $pool['machines_total'], 'machines are unaccounted for in pool ' . (string) $pool['name'] . ": $accounted of " . (string) $pool['machines_total']);
     }
+};
+$tests['a disconnected session is unavailable rather than available or faulted'] = static function (): void {
+    $responses = successfulResponses();
+    $responses['rest/inventory/v1/desktop-pools'] = [
+        ['id' => 'disc', 'name' => 'Disconnected', 'source' => 'INSTANT_CLONE', 'enabled' => true],
+        ['id' => 'allDisc', 'name' => 'All Disconnected', 'source' => 'INSTANT_CLONE', 'enabled' => true],
+    ];
+    // Deliberately no session rows, which is how a disconnected machine can be
+    // dropped from both the in-use and the spare buckets.
+    $responses['rest/inventory/v1/sessions?page=1&size=100'] = [];
+    $responses['rest/inventory/v1/machines?page=1&size=100'] = [
+        ['id' => 'd1', 'desktop_pool_id' => 'disc', 'state' => 'DISCONNECTED'],
+        ['id' => 'd2', 'desktop_pool_id' => 'disc', 'state' => 'DISCONNECTED'],
+        ['id' => 'r1', 'desktop_pool_id' => 'disc', 'state' => 'AVAILABLE'],
+        ['id' => 'x1', 'desktop_pool_id' => 'allDisc', 'state' => 'DISCONNECTED'],
+        ['id' => 'x2', 'desktop_pool_id' => 'allDisc', 'state' => 'DISCONNECTED'],
+    ];
+    $snapshot = (new PodCollector(static fn (): ApiSession => new FakeHorizonSession($responses)))->collect(testConfig(), ['username' => 'reader', 'password' => str_repeat('x', 12)]);
+    $byName = [];
+    foreach ($snapshot['horizon_pools'] as $pool) $byName[$pool['name']] = $pool;
+
+    $disc = $byName['Disconnected'];
+    expect((int) $disc['spare_total'] === 3, 'disconnected machines were dropped from spare accounting');
+    expect((int) $disc['spare_occupied'] === 2, 'disconnected machines were not counted as occupied');
+    expect((int) $disc['spare_ready'] === 1, 'disconnected machines were counted as ready capacity');
+    expect((int) $disc['spare_unready'] === 2, 'disconnected machines must be visible as unavailable');
+    expect((int) $disc['spare_faulted'] === 0, 'a disconnected session is not a fault');
+    expect($disc['health_state'] === 'ok', 'a pool with ready capacity remaining should not be degraded by disconnected sessions');
+
+    // Nothing broken, but nothing placeable either: exhaustion, not failure.
+    $all = $byName['All Disconnected'];
+    expect($all['health_state'] === 'warning' && $all['health_reason'] === 'no_placement_capacity', 'a fully occupied pool should report exhaustion');
+    expect((int) $all['spare_faulted'] === 0, 'a fully occupied pool must not report faults');
+    expect((int) $snapshot['horizon_pools_summary']['issue_machines'] === 0, 'disconnected machines must not count as problem machines');
+
+    // The published classification is what the page renders, so it must not read
+    // as healthy or available.
+    $row = array_values(array_filter($snapshot['horizon_pool_machine_states'], static fn (array $r): bool => ($r['machine_state'] ?? '') === 'DISCONNECTED'))[0] ?? [];
+    expect(($row['placement'] ?? '') === 'occupied', 'disconnected state was not published as occupied');
+    expect(($row['severity'] ?? '') === 'info', 'disconnected state must not publish as ok');
+    expect((int) ($row['issue'] ?? 1) === 0, 'disconnected state must not publish as an issue');
 };
 $tests['active machines with bad Horizon state remain selectable evidence'] = static function (): void {
     $responses = successfulResponses();
@@ -666,7 +718,7 @@ $tests['discovery reports TLS auth identity and cross-site ambiguity failures'] 
 $tests['capability manifest advertises the stable private integration contract'] = static function (): void {
     $path = dirname(__DIR__, 2) . '/librenms-overlay/tools/capabilities.json';
     $manifest = json_decode((string) file_get_contents($path), true, flags: JSON_THROW_ON_ERROR);
-    expect($manifest['overlay_version'] === '0.6.22', 'overlay capability version mismatch');
+    expect($manifest['overlay_version'] === '0.6.23', 'overlay capability version mismatch');
     expect((int) ($manifest['capabilities']['horizon_machine_state_taxonomy'] ?? 0) === 1, 'machine state taxonomy capability not advertised');
     expect($manifest['configuration_schema_version'] === 2, 'configuration schema version mismatch');
     expect($manifest['capabilities']['horizon_trigger_producer'] === 1, 'trigger capability missing');

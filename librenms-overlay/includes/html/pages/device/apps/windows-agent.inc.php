@@ -356,6 +356,7 @@ $humanize_horizon_reason = static function ($value): string {
         // Machine states.
         'machine_healthy' => 'Ready for placement',
         'machine_in_use' => 'Serving a user session',
+        'machine_session_disconnected' => 'Session disconnected; machine unavailable',
         'machine_withheld' => 'Intentionally withheld',
         'machine_transitional' => 'Becoming ready',
         'machine_transitional_too_long' => 'Stuck becoming ready',
@@ -1279,6 +1280,7 @@ if ($horizon_surface_available) {
         $placement_label = static function (string $placement): string {
             return [
                 'ready' => 'Ready for placement',
+                'occupied' => 'Unavailable, machine occupied',
                 'pending' => 'Becoming ready',
                 'held' => 'Withheld intentionally',
                 'faulted' => 'Faulted',

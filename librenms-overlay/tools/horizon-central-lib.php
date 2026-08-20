@@ -729,7 +729,11 @@ final class PodCollector
     private static function machineStateTaxonomy(): array
     {
         $ready = ['placement' => 'ready', 'health' => 'ok', 'issue' => false, 'reason' => 'machine_healthy'];
-        $inUse = ['placement' => 'none', 'health' => 'ok', 'issue' => false, 'reason' => 'machine_in_use'];
+        // Occupied: holding a machine so it cannot take a new session. Healthy, and
+        // explicitly not available. It must stay visible in the capacity breakdown
+        // rather than being dropped, or the pool totals will not reconcile.
+        $inUse = ['placement' => 'occupied', 'health' => 'ok', 'issue' => false, 'reason' => 'machine_in_use'];
+        $disconnected = ['placement' => 'occupied', 'health' => 'info', 'issue' => false, 'reason' => 'machine_session_disconnected'];
         $pending = ['placement' => 'pending', 'health' => 'info', 'issue' => false, 'reason' => 'machine_transitional'];
         $held = ['placement' => 'held', 'health' => 'info', 'issue' => false, 'reason' => 'machine_withheld'];
         $faulted = static fn (string $reason): array => ['placement' => 'faulted', 'health' => 'warning', 'issue' => true, 'reason' => $reason];
@@ -738,9 +742,12 @@ final class PodCollector
             // Ready for placement.
             'AVAILABLE' => $ready,
 
-            // Serving or assigned to a user. Healthy, but not free capacity.
+            // Occupying a machine, so unavailable for a new session. Neither of
+            // these is a fault. A disconnected session still holds its machine
+            // until logoff, so it is reported as unavailable rather than healthy:
+            // calling it `ok` reads as available to an operator.
             'CONNECTED' => $inUse,
-            'DISCONNECTED' => $inUse,
+            'DISCONNECTED' => $disconnected,
 
             // Benign and expected to become ready.
             'PROVISIONED' => $pending,
@@ -1172,7 +1179,7 @@ final class PodCollector
         foreach ($rows as $row) {
             $source = self::status((string) ($row['source'] ?? ''));
             if (! in_array($source, ['INSTANT_CLONE', 'LINKED_CLONE', 'VIEW_COMPOSER'], true)) continue;
-            $pool = ['id' => (string) ($row['id'] ?? ''), 'name' => (string) ($row['name'] ?? ''), 'display_name' => (string) ($row['display_name'] ?? ''), 'source' => $source, 'clone_type' => $source, 'enabled' => self::boolean($row['enabled'] ?? true, true) ? 1 : 0, 'machines_total' => 0, 'machines_with_sessions' => 0, 'spare_total' => 0, 'spare_ready' => 0, 'spare_unready' => 0, 'spare_maintenance' => 0, 'spare_pending' => 0, 'spare_faulted' => 0, 'spare_unrecognized' => 0, 'issue_machines' => 0, '_states' => []];
+            $pool = ['id' => (string) ($row['id'] ?? ''), 'name' => (string) ($row['name'] ?? ''), 'display_name' => (string) ($row['display_name'] ?? ''), 'source' => $source, 'clone_type' => $source, 'enabled' => self::boolean($row['enabled'] ?? true, true) ? 1 : 0, 'machines_total' => 0, 'machines_with_sessions' => 0, 'spare_total' => 0, 'spare_ready' => 0, 'spare_unready' => 0, 'spare_maintenance' => 0, 'spare_pending' => 0, 'spare_occupied' => 0, 'spare_faulted' => 0, 'spare_unrecognized' => 0, 'issue_machines' => 0, '_states' => []];
             if ($pool['id'] !== '') $byId[$pool['id']] = count($pools);
             $pools[] = $pool;
         }
@@ -1277,6 +1284,13 @@ final class PodCollector
                     case 'ready':
                         $pools[$index]['spare_ready']++;
                         break;
+                    case 'occupied':
+                        // Unavailable but not broken. Counted as unready so it stays
+                        // visible as unavailable, and tracked separately so scoring
+                        // never mistakes occupancy for a fault.
+                        $pools[$index]['spare_occupied']++;
+                        $pools[$index]['spare_unready']++;
+                        break;
                     case 'pending':
                         $pools[$index]['spare_pending']++;
                         $pools[$index]['spare_unready']++;
@@ -1335,7 +1349,7 @@ final class PodCollector
     /** @param list<array<string,mixed>> $pools @param array<string,mixed> $config @return array{0:list<array<string,mixed>>,1:array<string,int>} */
     private static function scorePools(array $pools, bool $incomplete, array $config): array
     {
-        $totals = ['pools_total' => count($pools), 'pools_healthy' => 0, 'pools_informational' => 0, 'pools_warning' => 0, 'pools_critical' => 0, 'pools_disabled' => 0, 'pools_incomplete' => 0, 'spare_total' => 0, 'spare_ready' => 0, 'spare_unready' => 0, 'spare_pending' => 0, 'spare_held' => 0, 'spare_faulted' => 0, 'spare_unrecognized' => 0, 'issue_machines' => 0];
+        $totals = ['pools_total' => count($pools), 'pools_healthy' => 0, 'pools_informational' => 0, 'pools_warning' => 0, 'pools_critical' => 0, 'pools_disabled' => 0, 'pools_incomplete' => 0, 'spare_total' => 0, 'spare_ready' => 0, 'spare_unready' => 0, 'spare_pending' => 0, 'spare_occupied' => 0, 'spare_held' => 0, 'spare_faulted' => 0, 'spare_unrecognized' => 0, 'issue_machines' => 0];
         foreach ($pools as &$pool) {
             $spares = (int) $pool['spare_total'];
             $unready = (int) $pool['spare_unready'];
@@ -1344,6 +1358,7 @@ final class PodCollector
             $faulted = (int) ($pool['spare_faulted'] ?? 0);
             $pending = (int) ($pool['spare_pending'] ?? 0);
             $held = (int) ($pool['spare_maintenance'] ?? 0);
+            $occupied = (int) ($pool['spare_occupied'] ?? 0);
 
             // Order matters. Failure outranks exhaustion, and exhaustion is not a
             // failure: a fully utilised pool with nothing broken is at capacity,
@@ -1355,6 +1370,7 @@ final class PodCollector
             elseif ($faulted >= 2) [$state, $reason] = ['warning', 'multiple_faulted_spares'];
             elseif ($faulted === 1) [$state, $reason] = ['info', 'faulted_spare_capacity_remains'];
             elseif ((int) $pool['machines_total'] > 0 && $spares === 0) [$state, $reason] = ['warning', 'no_placement_capacity'];
+            elseif ($ready === 0 && $occupied > 0) [$state, $reason] = ['warning', 'no_placement_capacity'];
             elseif ($ready === 0 && $pending > 0) [$state, $reason] = ['info', 'spares_pending_only'];
             elseif ($ready === 0 && $held > 0) [$state, $reason] = ['info', 'spares_held_only'];
             elseif ($ready === 0 && $spares > 0) [$state, $reason] = ['incomplete', 'spare_readiness_undetermined'];
@@ -1370,6 +1386,7 @@ final class PodCollector
             $totals['spare_ready'] += $ready;
             $totals['spare_unready'] += $unready;
             $totals['spare_pending'] += $pending;
+            $totals['spare_occupied'] += $occupied;
             $totals['spare_held'] += $held;
             $totals['spare_faulted'] += $faulted;
             $totals['spare_unrecognized'] += (int) ($pool['spare_unrecognized'] ?? 0);

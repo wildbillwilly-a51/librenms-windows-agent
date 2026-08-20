@@ -80,11 +80,29 @@ server detail instead of leaving the Horizon workspace.
 Horizon configuration replication (AD LDS) and per-member Horizon domain
 access remain separate from the Windows/Microsoft AD collector.
 
-Central clone-pool policy is count based: one unavailable spare is
-informational while another spare is ready, two or more unavailable spares is
-a warning, zero ready spares is critical, and a non-empty pool with every
-machine in session is critical because it has no placement capacity. This
-visibility does not enable LibreNMS notifications. Release 0.6.14's
+Central clone-pool policy separates capacity failure from capacity exhaustion,
+because they are different operator problems. A single machine state taxonomy
+decides, independently, whether a machine is available for a new session, how
+severe its own state is, and whether it counts as a problem machine.
+
+- Faulted spares drive severity: no ready spares while a spare is faulted is
+  critical, two or more faulted spares is a warning, and one faulted spare while
+  ready capacity remains is informational.
+- Exhaustion is a warning, not a fault. A pool whose machines are all serving or
+  holding sessions has no placement capacity, but nothing is broken.
+- A disconnected session is unavailable, not available and not faulted. It holds
+  its machine until logoff, so it is counted as occupied rather than as ready
+  capacity or as a problem machine.
+- Machines that are intentionally withheld, such as maintenance mode, or still
+  becoming ready, such as provisioning or customizing, are informational and
+  never score as failures on their own.
+- A machine state the overlay does not recognize is reported as incomplete and
+  excluded from capacity scoring. Not knowing a state is not evidence of a
+  problem. The Horizon machine state inventory shows the capacity treatment,
+  severity, and problem-machine flag for every reported state, so an unrecognized
+  state is visible on the page.
+
+This visibility does not enable LibreNMS notifications. Release 0.6.14's
 Windows-side API prototype remains disabled by default. Overlay release 0.6.20
 provides the cluster-safe, poll-triggered centralized collector and the new
 operational UI. See
@@ -345,7 +363,7 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Install a specific overlay version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.22
+curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.23
 ```
 
 Preview without changing the node:

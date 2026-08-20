@@ -1,5 +1,33 @@
 # Changelog
 
+## Overlay 0.6.23 - 2026-08-13
+
+Overlay-only release. Corrects the disconnected-session classification and a
+spare-accounting gap in `0.6.22`. Windows agent `0.6.16`, its versioned
+configuration, and the Windows installer are unchanged and their published bytes
+are untouched.
+
+- A disconnected session is now classified as occupied: unavailable, but neither
+  available nor faulted. `0.6.22` reported it as healthy, which reads as
+  available to an operator. Releases before `0.6.22` reported it as a warning and
+  counted it as a problem machine. Neither was correct, and this state had never
+  been classified correctly.
+- Closed a spare-accounting gap introduced in `0.6.22`. A machine in an occupying
+  state with no corresponding session row was excluded from both the in-use and
+  the spare totals, so it disappeared from the capacity breakdown entirely.
+  Occupied machines are now counted in the spare total and reported as unready,
+  so they stay visible as unavailable without being scored as faults.
+- Pool totals now reconcile in both directions, and the tests assert it: the
+  spare breakdown sums to the spare total, and in-use plus spares equals the
+  machine total. A state can no longer be dropped from the accounting silently.
+- A pool with no ready capacity because every machine is occupied reports
+  capacity exhaustion rather than an undetermined readiness state.
+- Replaced the README description of clone-pool policy, which still documented
+  the superseded count-based rules including treating a fully in-session pool as
+  critical.
+- No RRD schema, protocol, or application identity change. The occupied counter
+  is published as a section field only.
+
 ## Overlay 0.6.22 - 2026-08-12
 
 Overlay-only release. Phase 0 of the application page roadmap: Horizon machine
