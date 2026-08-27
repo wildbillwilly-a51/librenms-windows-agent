@@ -477,7 +477,8 @@ final class PodCollector
             max(1, min(5000, (int) ($config['machine_detail_limit'] ?? 1000))),
             max(1, min(500, (int) ($config['machine_issue_limit'] ?? 100))),
             gmdate('c'),
-            is_array($previous['horizon_pool_machines'] ?? null) ? $previous['horizon_pool_machines'] : []
+            is_array($previous['horizon_pool_machines'] ?? null) ? $previous['horizon_pool_machines'] : [],
+            max(0, (int) ($config['disconnected_stuck_fallback_minutes'] ?? 240)) * 60
         );
         [$pools, $poolTotals] = self::scorePools($pools, $sessionsTruncated || $machinesTruncated || in_array('sessions', $failures, true) || in_array('machines', $failures, true), $config);
 
@@ -733,10 +734,17 @@ final class PodCollector
         // explicitly not available. It must stay visible in the capacity breakdown
         // rather than being dropped, or the pool totals will not reconcile.
         $inUse = ['placement' => 'occupied', 'health' => 'ok', 'issue' => false, 'reason' => 'machine_in_use'];
-        $disconnected = ['placement' => 'occupied', 'health' => 'info', 'issue' => false, 'reason' => 'machine_session_disconnected'];
+        // A disconnected session is preserved and reconnectable: the assigned user
+        // can log straight back in, and on floating pools the logoff-after-disconnect
+        // timer returns the machine to AVAILABLE. It is healthy and not free
+        // capacity, not a fault. Verified against the vendor machine-state enum.
+        $disconnected = ['placement' => 'none', 'health' => 'ok', 'issue' => false, 'reason' => 'machine_session_disconnected'];
         $pending = ['placement' => 'pending', 'health' => 'info', 'issue' => false, 'reason' => 'machine_transitional'];
-        $held = ['placement' => 'held', 'health' => 'info', 'issue' => false, 'reason' => 'machine_withheld'];
-        $faulted = static fn (string $reason): array => ['placement' => 'faulted', 'health' => 'warning', 'issue' => true, 'reason' => $reason];
+        // Intentionally withheld by an operator (maintenance, disabled, drain). Not
+        // a fault, but out of service and worth surfacing as a warning.
+        $held = ['placement' => 'held', 'health' => 'warning', 'issue' => false, 'reason' => 'machine_withheld'];
+        // A genuinely broken machine is critical: it cannot serve its assigned user.
+        $faulted = static fn (string $reason): array => ['placement' => 'faulted', 'health' => 'critical', 'issue' => true, 'reason' => $reason];
 
         return [
             // Ready for placement.
@@ -759,7 +767,7 @@ final class PodCollector
 
             // Intentionally withheld by an operator or lifecycle action.
             'MAINTENANCE' => $held,
-            'DISABLED' => ['placement' => 'held', 'health' => 'info', 'issue' => false, 'reason' => 'machine_disabled'],
+            'DISABLED' => ['placement' => 'held', 'health' => 'warning', 'issue' => false, 'reason' => 'machine_disabled'],
             'DISABLE_IN_PROGRESS' => $held,
             'DELETING' => $held,
 
@@ -788,9 +796,16 @@ final class PodCollector
     /**
      * @return array{state:string,reason_code:string,impact:string,placement:string,issue:bool,recognized:bool}
      */
-    public static function classifyMachineState(string $state, bool $hasSession, bool $maintenance, int $consecutiveSamples = 1, bool $sessionDisconnected = false): array
+    public static function classifyMachineState(string $state, bool $hasSession, bool $maintenance, int $consecutiveSamples = 1, bool $sessionDisconnected = false, bool $disconnectStuck = false): array
     {
         $status = self::status($state);
+
+        // A disconnected session that has outlived its reclaim window is stuck: the
+        // machine is held, nobody is coming back, and it is unavailable to other
+        // users. That is a genuine down condition, so it is critical.
+        if ($sessionDisconnected && $disconnectStuck) {
+            return self::machineClassification('critical', 'session_disconnected_stuck', 'capacity', 'faulted', true, true);
+        }
 
         if ($status === '') {
             return self::machineClassification('incomplete', 'machine_state_unknown', 'capacity', 'faulted', true, true);
@@ -818,20 +833,22 @@ final class PodCollector
         // Session presence and maintenance change how a machine participates in
         // capacity. Neither hides a fault: a machine reporting a bad state while
         // serving a session is still evidence, it just is not free capacity.
-        if ($sessionDisconnected && $placement === 'ready') {
-            // The inventory calls it available, but a disconnected session is still
-            // holding it. The session is the authority on availability.
-            $placement = 'occupied';
-            $health = 'info';
+        if ($sessionDisconnected) {
+            // A not-yet-stuck disconnected session: reconnectable and healthy, still
+            // holding the machine, so it counts as in-session rather than free or
+            // faulted. Not flagged.
+            $placement = 'none';
+            $health = 'ok';
+            $issue = false;
             $reason = 'machine_session_disconnected';
         } elseif ($hasSession) {
             $placement = 'none';
             if (! $issue && $health === 'ok') $reason = 'machine_in_use';
         } elseif ($maintenance) {
-            // Maintenance is a deliberate operator action, so an out-of-service
-            // machine is informational rather than a problem.
+            // Maintenance is a deliberate operator action: out of service, so a
+            // warning worth surfacing, but not a fault and not a problem machine.
             $placement = 'held';
-            $health = 'info';
+            $health = 'warning';
             $reason = 'maintenance_mode';
             $issue = false;
         }
@@ -849,6 +866,30 @@ final class PodCollector
     /**
      * @return array{state:string,reason_code:string,impact:string,placement:string,issue:bool,recognized:bool}
      */
+    /**
+     * Seconds a disconnected session may persist before it is stuck: the pool's own
+     * logoff-after-disconnect timer, capped by the global fallback so a pool set to
+     * Never (or one we cannot read) still surfaces. The lower of the two wins, so the
+     * fallback is a hard ceiling regardless of pool policy.
+     *
+     * @param array<string,mixed> $pool
+     */
+    private static function disconnectStuckThreshold(array $pool, int $fallbackSeconds): int
+    {
+        $fallback = $fallbackSeconds > 0 ? $fallbackSeconds : PHP_INT_MAX;
+        $policy = strtoupper(trim((string) ($pool['disconnect_timeout_policy'] ?? '')));
+        $poolSeconds = match ($policy) {
+            'AFTER' => max(0, (int) ($pool['disconnect_timeout_minutes'] ?? 0)) * 60,
+            // Immediate-logoff pools should have no lingering disconnects; allow a
+            // short grace so a reclaim in progress is not flagged.
+            'IMMEDIATELY', 'IMMEDIATE' => 300,
+            // Never, or unknown/unreadable policy: no pool-derived limit.
+            default => PHP_INT_MAX,
+        };
+
+        return min($poolSeconds, $fallback);
+    }
+
     private static function machineClassification(string $state, string $reasonCode, string $impact, string $placement, bool $issue, bool $recognized): array
     {
         return [
@@ -1169,11 +1210,22 @@ final class PodCollector
                 // the machine is unavailable rather than in use, and collapsing the
                 // two hides disconnected machines inside the in-session count.
                 if ($machineId !== '') {
-                    $machines[$machineId] = match ($state) {
+                    $kind = match ($state) {
                         'CONNECTED' => 'connected',
                         'DISCONNECTED' => 'disconnected',
                         default => 'other',
                     };
+                    // Capture when the session disconnected so a machine's "stuck"
+                    // duration is the real time since disconnect, not just how long
+                    // we have observed it. Epoch milliseconds per the sessions API.
+                    $disconnectedMs = null;
+                    if ($kind === 'disconnected') {
+                        $raw = $row['disconnected_time'] ?? null;
+                        if (is_int($raw) || (is_string($raw) && ctype_digit($raw))) {
+                            $disconnectedMs = (int) $raw;
+                        }
+                    }
+                    $machines[$machineId] = ['kind' => $kind, 'disconnected_ms' => $disconnectedMs];
                 }
                 $protocol = preg_replace('/[^a-z0-9_]/', '', strtolower((string) ($row['session_protocol'] ?? '')));
                 if ($protocol !== '') $protocolCounts[$protocol] = ($protocolCounts[$protocol] ?? 0) + 1;
@@ -1195,7 +1247,11 @@ final class PodCollector
         foreach ($rows as $row) {
             $source = self::status((string) ($row['source'] ?? ''));
             if (! in_array($source, ['INSTANT_CLONE', 'LINKED_CLONE', 'VIEW_COMPOSER'], true)) continue;
-            $pool = ['id' => (string) ($row['id'] ?? ''), 'name' => (string) ($row['name'] ?? ''), 'display_name' => (string) ($row['display_name'] ?? ''), 'source' => $source, 'clone_type' => $source, 'enabled' => self::boolean($row['enabled'] ?? true, true) ? 1 : 0, 'machines_total' => 0, 'machines_with_sessions' => 0, 'spare_total' => 0, 'spare_ready' => 0, 'spare_unready' => 0, 'spare_maintenance' => 0, 'spare_pending' => 0, 'spare_occupied' => 0, 'spare_faulted' => 0, 'spare_unrecognized' => 0, 'issue_machines' => 0, '_states' => []];
+            // The pool's own logoff-after-disconnect policy is the primary "stuck"
+            // threshold. It rides in the bulk pool payload (settings.session_settings),
+            // so no per-pool call. Read defensively; absent means fallback governs.
+            $sessionSettings = is_array($row['settings']['session_settings'] ?? null) ? $row['settings']['session_settings'] : [];
+            $pool = ['id' => (string) ($row['id'] ?? ''), 'name' => (string) ($row['name'] ?? ''), 'display_name' => (string) ($row['display_name'] ?? ''), 'source' => $source, 'clone_type' => $source, 'enabled' => self::boolean($row['enabled'] ?? true, true) ? 1 : 0, 'disconnect_timeout_policy' => strtoupper(trim((string) ($sessionSettings['disconnected_session_timeout_policy'] ?? ''))), 'disconnect_timeout_minutes' => (int) ($sessionSettings['disconnected_session_timeout_minutes'] ?? 0), 'machines_total' => 0, 'machines_with_sessions' => 0, 'spare_total' => 0, 'spare_ready' => 0, 'spare_unready' => 0, 'spare_maintenance' => 0, 'spare_pending' => 0, 'spare_occupied' => 0, 'spare_faulted' => 0, 'spare_unrecognized' => 0, 'issue_machines' => 0, '_states' => []];
             if ($pool['id'] !== '') $byId[$pool['id']] = count($pools);
             $pools[] = $pool;
         }
@@ -1204,7 +1260,7 @@ final class PodCollector
     }
 
     /** @param list<array<string,mixed>> $pools @param array<string,int> $poolById @param array<string,true> $active @param list<string> $failures @return array{0:list<array<string,mixed>>,1:list<array<string,mixed>>,2:list<array<string,mixed>>,3:list<array<string,mixed>>,4:bool,5:bool,6:bool} */
-    private function machines(ApiSession $session, array $pools, array $poolById, array $active, int $pageSize, int $maxPages, array &$failures, int $detailLimit, int $issueLimit, string $collectedUtc, array $previousMachines = []): array
+    private function machines(ApiSession $session, array $pools, array $poolById, array $active, int $pageSize, int $maxPages, array &$failures, int $detailLimit, int $issueLimit, string $collectedUtc, array $previousMachines = [], int $fallbackStuckSeconds = 14400): array
     {
         $truncated = false;
         $detailsTruncated = false;
@@ -1234,11 +1290,9 @@ final class PodCollector
                 $state = self::status((string) ($row['state'] ?? 'UNKNOWN')) ?: 'UNKNOWN';
                 $pools[$index]['_states'][$state] = ($pools[$index]['_states'][$state] ?? 0) + 1;
                 $machineId = (string) ($row['id'] ?? '');
-                $sessionKind = $machineId !== '' ? (string) ($active[$machineId] ?? 'none') : 'none';
+                $sessionEntry = $machineId !== '' && is_array($active[$machineId] ?? null) ? $active[$machineId] : [];
+                $sessionKind = (string) ($sessionEntry['kind'] ?? 'none');
                 $hasSession = $sessionKind !== 'none';
-                // Only an active session makes a machine "in use". A disconnected
-                // session leaves it unavailable, which the taxonomy handles.
-                $hasActiveSession = $sessionKind === 'connected' || $sessionKind === 'other';
                 $managed = is_array($row['managed_machine_data'] ?? null) ? $row['managed_machine_data'] : [];
                 $maintenance = self::boolean($managed['in_maintenance_mode'] ?? false, false) || $state === 'MAINTENANCE';
                 $previousMachine = $previousById[$machineId] ?? [];
@@ -1248,7 +1302,27 @@ final class PodCollector
                     ? (string) ($previousMachine['state_first_seen_utc'] ?? $previousMachine['collected_utc'] ?? $collectedUtc)
                     : $collectedUtc;
                 $stateAge = max(0, (int) strtotime($collectedUtc) - (int) strtotime($stateFirstSeen));
-                $machineClassification = self::classifyMachineState($state, $hasActiveSession, $maintenance, $stateAge >= 1800 ? 7 : 1, $sessionKind === "disconnected");
+
+                // A disconnected session is normal and reconnectable until it has been
+                // gone too long, at which point it is stuck: the machine is held with
+                // nobody coming back. "Too long" is the pool's own logoff-after-disconnect
+                // timer, capped by a global fallback so a Never/long policy still surfaces.
+                $isDisconnected = $sessionKind === 'disconnected' || $state === 'DISCONNECTED';
+                $disconnectedSeconds = 0;
+                $stuckDisconnected = false;
+                if ($isDisconnected) {
+                    $disconnectedMs = $sessionEntry['disconnected_ms'] ?? null;
+                    $disconnectedSeconds = $disconnectedMs !== null
+                        ? max(0, (int) strtotime($collectedUtc) - (int) ($disconnectedMs / 1000))
+                        : $stateAge; // no session timestamp; fall back to observed age
+                    $threshold = self::disconnectStuckThreshold($pools[$index] ?? [], $fallbackStuckSeconds);
+                    $stuckDisconnected = $disconnectedSeconds >= $threshold;
+                }
+                // A fresh disconnected session still counts the machine as in-session
+                // (a user holds it); only a stuck one breaks out to unavailable.
+                $hasActiveSession = in_array($sessionKind, ['connected', 'other'], true)
+                    || ($isDisconnected && ! $stuckDisconnected);
+                $machineClassification = self::classifyMachineState($state, $hasActiveSession, $maintenance, $stateAge >= 1800 ? 7 : 1, $isDisconnected, $stuckDisconnected);
                 // The taxonomy decides this, not the display severity, so a row's
                 // state can never disagree with the aggregate counts.
                 $isIssue = (bool) $machineClassification['issue'];
@@ -1271,6 +1345,7 @@ final class PodCollector
                     // and disagreeing with its own filter counters.
                     'placement' => $machineClassification['placement'],
                     'session_kind' => $sessionKind,
+                    'disconnected_seconds' => $isDisconnected ? $disconnectedSeconds : 0,
                     'collected_utc' => $collectedUtc,
                     'state_first_seen_utc' => $stateFirstSeen,
                 ];

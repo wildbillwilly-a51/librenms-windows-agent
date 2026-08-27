@@ -116,7 +116,8 @@
         "windows-agent-details-reboot",
         "windows-agent-graphs-reboot",
         "windows-agent-tab-alert",
-        "glyphicon-exclamation-sign"
+        "glyphicon-exclamation-sign",
+        "windows-agent-tab-summary"
       ],
       "not_contains": [
         "No DC DNS detail data reported.",

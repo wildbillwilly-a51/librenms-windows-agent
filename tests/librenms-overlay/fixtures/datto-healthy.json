@@ -42,6 +42,12 @@
       "windows-agent-datto-backup.detected": 1,
       "windows-agent-datto-backup.service_running": 1,
       "windows-agent-datto-backup.health_issues": 0
+    },
+    "app_page": {
+      "contains": [
+        "windows-agent-tab-summary",
+        "No backup or storage issues were reported."
+      ]
     }
   }
 }

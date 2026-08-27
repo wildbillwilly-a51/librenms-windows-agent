@@ -1,5 +1,36 @@
 # Changelog
 
+## Overlay 0.6.26 - 2026-08-24
+
+Overlay-only release. Application page UX pass (roadmap Phase 1) plus the Horizon
+machine severity model and disconnected-session stuck detection. Windows agent
+`0.6.16` and its artifacts are unchanged.
+
+- Gave every application-page tab a uniform summary header: state, a plain-language
+  verdict, up to six decision-grade stat tiles, and an attention list, above the
+  existing detail panels. Applied to Backup, Roles & Workloads, Security &
+  Certificates, Services & Events, and Agent Performance via one shared renderer.
+- Replaced the binary machine flag with a three-colour severity model in the
+  Horizon inventory: red/critical for genuinely down machines (agent unreachable,
+  agent errors, ERROR, provisioning error, already-used), yellow/warning for
+  intentionally out-of-service machines (maintenance, disabled), and unflagged for
+  healthy ones. Row colour follows the collector's per-machine severity, decoupled
+  from the problem-machine flag.
+- Added disconnected-session stuck detection. A disconnected session is normal and
+  reconnectable until it outlives its reclaim window; past that it is stuck,
+  reported red and counted unavailable, with the message that the user has not
+  reconnected in the elapsed time and the machine is unavailable to other users.
+  The threshold is the pool's own logoff-after-disconnect timer, read from the bulk
+  pool payload, capped by an adjustable global fallback (default 240 minutes) so a
+  pool set to Never still surfaces. No per-pool configuration is required. Elapsed
+  time is measured from the session disconnected_time, falling back to observed
+  state age when that field is absent.
+- Simplified the machine inventory filter to All, In session, Available, and
+  Unavailable, and aligned the pool-capacity column label from Ready to Available.
+- Advertised horizon_uniform_tab_summaries and horizon_disconnected_stuck_detection
+  in the capability manifest. No RRD schema, protocol, or application identity
+  change; the new per-machine fields are section data only.
+
 ## Overlay 0.6.25 - 2026-08-20
 
 Overlay-only release. Makes the Horizon machine inventory list agree with the

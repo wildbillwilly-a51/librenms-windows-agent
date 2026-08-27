@@ -112,6 +112,7 @@ function testConfig(): array
         'site' => 'abc', 'dns_suffix' => 'example.test', 'display_device' => 'abc-vcs2.example.test',
         'enabled' => true, 'pool_warning_percent' => 50, 'pool_critical_percent' => 90,
         'pool_minimum_spares' => 2, 'machine_detail_limit' => 1000, 'machine_issue_limit' => 100, 'page_size' => 100, 'max_pages' => 2,
+        'disconnected_stuck_fallback_minutes' => 240,
     ];
 }
 
@@ -297,14 +298,22 @@ $tests['machine state taxonomy classifies placement health and issues independen
     expect($ready['placement'] === 'ready' && $ready['state'] === 'ok' && $ready['issue'] === false, 'AVAILABLE misclassified');
     $inUse = PodCollector::classifyMachineState('CONNECTED', true, false);
     expect($inUse['placement'] === 'none' && $inUse['state'] === 'ok' && $inUse['issue'] === false, 'in-use machine misclassified');
-    // A disconnected session is neither a fault nor available. It must not report
-    // `ok`, because that reads as available to an operator, and must not be an issue.
-    $idle = PodCollector::classifyMachineState('DISCONNECTED', true, false);
-    expect($idle['state'] === 'info', 'a disconnected session must not report as healthy/available');
+    // A recently disconnected session is preserved and reconnectable: the user
+    // holds the machine and can log back in, so it is healthy, unflagged, and
+    // counts as in-session (not free, not faulted). sessionDisconnected=true,
+    // disconnectStuck=false.
+    $idle = PodCollector::classifyMachineState('DISCONNECTED', false, false, 1, true, false);
+    expect($idle['state'] === 'ok', 'a reconnectable disconnected session should be healthy, not flagged');
     expect($idle['issue'] === false, 'a disconnected session is not a problem machine');
+    expect($idle['placement'] === 'none', 'a fresh disconnected session counts as in-session, not a spare');
     expect($idle['reason_code'] === 'machine_session_disconnected', 'disconnected machine lost its reason code');
-    $idleNoSession = PodCollector::classifyMachineState('DISCONNECTED', false, false);
-    expect($idleNoSession['placement'] === 'occupied', 'a disconnected machine without a session row must still be accounted as occupied');
+    // Once it has outlived its reclaim window it is stuck: unavailable to others
+    // and a genuine down condition, so critical. disconnectStuck=true.
+    $stuckDisc = PodCollector::classifyMachineState('DISCONNECTED', false, false, 1, true, true);
+    expect($stuckDisc['state'] === 'critical', 'a stuck disconnected session should be critical');
+    expect($stuckDisc['issue'] === true, 'a stuck disconnected session is a problem machine');
+    expect($stuckDisc['placement'] === 'faulted', 'a stuck disconnected session is unavailable capacity');
+    expect($stuckDisc['reason_code'] === 'session_disconnected_stuck', 'stuck disconnected lost its reason code');
 
     // A fault on an in-use machine is still a fault, just not free capacity.
     $faultedInUse = PodCollector::classifyMachineState('ERROR', true, false);
@@ -320,11 +329,13 @@ $tests['machine state taxonomy classifies placement health and issues independen
     // Intentionally withheld.
     $held = PodCollector::classifyMachineState('AVAILABLE', false, true);
     expect($held['placement'] === 'held' && $held['issue'] === false && $held['reason_code'] === 'maintenance_mode', 'maintenance machine misclassified');
+    expect($held['state'] === 'warning', 'maintenance is out of service and should warn, not stay silent');
 
-    // Vendor-documented problem states are issues.
+    // Vendor-documented problem states are critical issues.
     foreach (['AGENT_UNREACHABLE', 'AGENT_ERR_NEED_REBOOT', 'AGENT_CONFIG_ERROR', 'PROVISIONING_ERROR', 'ALREADY_USED'] as $problem) {
         $row = PodCollector::classifyMachineState($problem, false, false);
         expect($row['issue'] === true && $row['placement'] === 'faulted', "$problem should be a faulted issue");
+        expect($row['state'] === 'critical', "$problem is a genuine down condition and should be critical");
     }
 
     // An unrecognized state is reported, never scored, and never a warning.
@@ -392,14 +403,15 @@ $tests['every machine row state agrees with the aggregate counts'] = static func
         expect($accounted === (int) $pool['machines_total'], 'machines are unaccounted for in pool ' . (string) $pool['name'] . ": $accounted of " . (string) $pool['machines_total']);
     }
 };
-$tests['a disconnected session is reported unavailable, not folded into the in-session count'] = static function (): void {
-    // A machine holding a disconnected session was previously counted as in use,
-    // so it never appeared as unavailable and the pool looked fully healthy with
-    // zero unavailable machines. Only an active session means in use.
+$tests['a recently disconnected session counts as in-session, not unavailable'] = static function (): void {
+    // A disconnected session that has not outlived its reclaim window is normal:
+    // the user holds the machine and can reconnect. It counts as in-session, is
+    // healthy and unflagged, and is not a spare and not a problem machine.
     $responses = successfulResponses();
     $responses['rest/inventory/v1/desktop-pools'] = [
         ['id' => 'ft', 'name' => 'Floating', 'source' => 'INSTANT_CLONE', 'enabled' => true],
     ];
+    $recentMs = (time() - 60) * 1000; // disconnected one minute ago
     $machines = [];
     $sessions = [];
     for ($i = 1; $i <= 6; $i++) {
@@ -408,7 +420,7 @@ $tests['a disconnected session is reported unavailable, not folded into the in-s
     }
     for ($i = 1; $i <= 2; $i++) {
         $machines[] = ['id' => "d$i", 'desktop_pool_id' => 'ft', 'state' => 'DISCONNECTED'];
-        $sessions[] = ['machine_id' => "d$i", 'session_state' => 'DISCONNECTED'];
+        $sessions[] = ['machine_id' => "d$i", 'session_state' => 'DISCONNECTED', 'disconnected_time' => $recentMs];
     }
     for ($i = 1; $i <= 3; $i++) $machines[] = ['id' => "a$i", 'desktop_pool_id' => 'ft', 'state' => 'AVAILABLE'];
     $responses['rest/inventory/v1/sessions?page=1&size=100'] = $sessions;
@@ -417,61 +429,74 @@ $tests['a disconnected session is reported unavailable, not folded into the in-s
     $snapshot = (new PodCollector(static fn (): ApiSession => new FakeHorizonSession($responses)))->collect(testConfig(), ['username' => 'reader', 'password' => str_repeat('x', 12)]);
     $pool = $snapshot['horizon_pools'][0];
     expect((int) $pool['machines_total'] === 11, 'machine total changed');
-    expect((int) $pool['machines_with_sessions'] === 6, 'only actively connected machines should count as in session, got ' . (string) $pool['machines_with_sessions']);
+    expect((int) $pool['machines_with_sessions'] === 8, 'recent disconnected sessions should count as in-session, got ' . (string) $pool['machines_with_sessions']);
     expect((int) $pool['spare_ready'] === 3, 'available spares miscounted');
-    expect((int) $pool['spare_occupied'] === 2, 'disconnected machines were not counted as occupied');
-    expect((int) $pool['spare_unready'] === 2, 'disconnected machines must be reported as unavailable, got ' . (string) $pool['spare_unready']);
-    expect((int) $pool['spare_faulted'] === 0, 'a disconnected session is not a fault');
-    expect($pool['health_state'] === 'ok', 'a pool with ready capacity should stay healthy');
-    expect((int) $snapshot['horizon_pools_summary']['issue_machines'] === 0, 'disconnected machines must not count as problem machines');
-
-    // Also cover the case where the inventory still calls the machine available
-    // while a disconnected session holds it. The session is the authority.
-    $claimed = PodCollector::classifyMachineState('AVAILABLE', false, false, 1, true);
-    expect($claimed['placement'] === 'occupied', 'a disconnected session must override an available inventory state');
-    expect($claimed['state'] === 'info' && $claimed['issue'] === false, 'a session-held available machine should be informational, not a fault');
+    expect((int) $pool['spare_unready'] === 0, 'a recent disconnected session is not unavailable, got ' . (string) $pool['spare_unready']);
+    expect((int) $pool['spare_faulted'] === 0, 'a recent disconnected session is not a fault');
+    expect($pool['health_state'] === 'ok', 'a pool with ready capacity and only recent disconnects should be healthy');
+    expect((int) $snapshot['horizon_pools_summary']['issue_machines'] === 0, 'recent disconnected sessions are not problem machines');
 };
-$tests['a disconnected session is unavailable rather than available or faulted'] = static function (): void {
+$tests['a disconnected session stuck past the fallback cap is unavailable and critical'] = static function (): void {
+    // Pool has no readable disconnect policy, so the global fallback cap governs.
+    // A session disconnected longer than the cap is stuck: unavailable and critical.
     $responses = successfulResponses();
     $responses['rest/inventory/v1/desktop-pools'] = [
-        ['id' => 'disc', 'name' => 'Disconnected', 'source' => 'INSTANT_CLONE', 'enabled' => true],
-        ['id' => 'allDisc', 'name' => 'All Disconnected', 'source' => 'INSTANT_CLONE', 'enabled' => true],
+        ['id' => 'ft', 'name' => 'Floating', 'source' => 'INSTANT_CLONE', 'enabled' => true],
     ];
-    // Deliberately no session rows, which is how a disconnected machine can be
-    // dropped from both the in-use and the spare buckets.
-    $responses['rest/inventory/v1/sessions?page=1&size=100'] = [];
+    $stuckMs = (time() - 5 * 3600) * 1000;  // disconnected 5h ago; fallback cap is 4h
+    $freshMs = (time() - 120) * 1000;
+    $machines = [
+        ['id' => 'stuck1', 'desktop_pool_id' => 'ft', 'state' => 'DISCONNECTED'],
+        ['id' => 'fresh1', 'desktop_pool_id' => 'ft', 'state' => 'DISCONNECTED'],
+        ['id' => 'r1', 'desktop_pool_id' => 'ft', 'state' => 'AVAILABLE'],
+    ];
+    $responses['rest/inventory/v1/sessions?page=1&size=100'] = [
+        ['machine_id' => 'stuck1', 'session_state' => 'DISCONNECTED', 'disconnected_time' => $stuckMs],
+        ['machine_id' => 'fresh1', 'session_state' => 'DISCONNECTED', 'disconnected_time' => $freshMs],
+    ];
+    $responses['rest/inventory/v1/machines?page=1&size=100'] = $machines;
+
+    $snapshot = (new PodCollector(static fn (): ApiSession => new FakeHorizonSession($responses)))->collect(testConfig(), ['username' => 'reader', 'password' => str_repeat('x', 12)]);
+    $pool = $snapshot['horizon_pools'][0];
+    expect((int) $pool['machines_with_sessions'] === 1, 'only the fresh disconnect counts as in-session, got ' . (string) $pool['machines_with_sessions']);
+    expect((int) $pool['spare_faulted'] === 1, 'the stuck disconnect should be a faulted spare, got ' . (string) $pool['spare_faulted']);
+    expect((int) $pool['spare_ready'] === 1, 'available spare miscounted');
+    expect((int) $snapshot['horizon_pools_summary']['issue_machines'] === 1, 'the stuck disconnect is a problem machine');
+    $stuck = array_values(array_filter($snapshot['horizon_pool_machines'], static fn (array $m): bool => ($m['id'] ?? '') === 'stuck1'))[0] ?? [];
+    expect(($stuck['severity'] ?? '') === 'critical', 'a stuck disconnect should be critical');
+    expect(($stuck['issue_reason'] ?? '') === 'session_disconnected_stuck', 'stuck disconnect reason code missing');
+    expect((int) ($stuck['disconnected_seconds'] ?? 0) >= 5 * 3600 - 60, 'stuck disconnect duration was not carried for the UI message');
+};
+$tests['the pool logoff timer governs stuck detection, capped by the fallback'] = static function (): void {
+    // pool-after-30: AFTER 30m. pool-long: AFTER 600m but the 4h fallback caps it.
+    $responses = successfulResponses();
+    $responses['rest/inventory/v1/desktop-pools'] = [
+        ['id' => 'p30', 'name' => 'After30', 'source' => 'INSTANT_CLONE', 'enabled' => true,
+            'settings' => ['session_settings' => ['disconnected_session_timeout_policy' => 'AFTER', 'disconnected_session_timeout_minutes' => 30]]],
+        ['id' => 'plong', 'name' => 'After600', 'source' => 'INSTANT_CLONE', 'enabled' => true,
+            'settings' => ['session_settings' => ['disconnected_session_timeout_policy' => 'AFTER', 'disconnected_session_timeout_minutes' => 600]]],
+    ];
+    $ago = static fn (int $seconds): int => (time() - $seconds) * 1000;
+    $responses['rest/inventory/v1/sessions?page=1&size=100'] = [
+        ['machine_id' => 'p30_over', 'session_state' => 'DISCONNECTED', 'disconnected_time' => $ago(45 * 60)],  // > 30m pool timer -> stuck
+        ['machine_id' => 'p30_under', 'session_state' => 'DISCONNECTED', 'disconnected_time' => $ago(20 * 60)], // < 30m -> fresh
+        ['machine_id' => 'plong_capped', 'session_state' => 'DISCONNECTED', 'disconnected_time' => $ago(5 * 3600)], // < 600m pool but > 4h cap -> stuck
+    ];
     $responses['rest/inventory/v1/machines?page=1&size=100'] = [
-        ['id' => 'd1', 'desktop_pool_id' => 'disc', 'state' => 'DISCONNECTED'],
-        ['id' => 'd2', 'desktop_pool_id' => 'disc', 'state' => 'DISCONNECTED'],
-        ['id' => 'r1', 'desktop_pool_id' => 'disc', 'state' => 'AVAILABLE'],
-        ['id' => 'x1', 'desktop_pool_id' => 'allDisc', 'state' => 'DISCONNECTED'],
-        ['id' => 'x2', 'desktop_pool_id' => 'allDisc', 'state' => 'DISCONNECTED'],
+        ['id' => 'p30_over', 'desktop_pool_id' => 'p30', 'state' => 'DISCONNECTED'],
+        ['id' => 'p30_under', 'desktop_pool_id' => 'p30', 'state' => 'DISCONNECTED'],
+        ['id' => 'r30', 'desktop_pool_id' => 'p30', 'state' => 'AVAILABLE'],
+        ['id' => 'plong_capped', 'desktop_pool_id' => 'plong', 'state' => 'DISCONNECTED'],
+        ['id' => 'rlong', 'desktop_pool_id' => 'plong', 'state' => 'AVAILABLE'],
     ];
     $snapshot = (new PodCollector(static fn (): ApiSession => new FakeHorizonSession($responses)))->collect(testConfig(), ['username' => 'reader', 'password' => str_repeat('x', 12)]);
-    $byName = [];
-    foreach ($snapshot['horizon_pools'] as $pool) $byName[$pool['name']] = $pool;
-
-    $disc = $byName['Disconnected'];
-    expect((int) $disc['spare_total'] === 3, 'disconnected machines were dropped from spare accounting');
-    expect((int) $disc['spare_occupied'] === 2, 'disconnected machines were not counted as occupied');
-    expect((int) $disc['spare_ready'] === 1, 'disconnected machines were counted as ready capacity');
-    expect((int) $disc['spare_unready'] === 2, 'disconnected machines must be visible as unavailable');
-    expect((int) $disc['spare_faulted'] === 0, 'a disconnected session is not a fault');
-    expect($disc['health_state'] === 'ok', 'a pool with ready capacity remaining should not be degraded by disconnected sessions');
-
-    // Nothing broken, but nothing placeable either: exhaustion, not failure.
-    $all = $byName['All Disconnected'];
-    expect($all['health_state'] === 'warning' && $all['health_reason'] === 'no_placement_capacity', 'a fully occupied pool should report exhaustion');
-    expect((int) $all['spare_faulted'] === 0, 'a fully occupied pool must not report faults');
-    expect((int) $snapshot['horizon_pools_summary']['issue_machines'] === 0, 'disconnected machines must not count as problem machines');
-
-    // The published classification is what the page renders, so it must not read
-    // as healthy or available.
-    $row = array_values(array_filter($snapshot['horizon_pool_machine_states'], static fn (array $r): bool => ($r['machine_state'] ?? '') === 'DISCONNECTED'))[0] ?? [];
-    expect(($row['placement'] ?? '') === 'occupied', 'disconnected state was not published as occupied');
-    expect(($row['severity'] ?? '') === 'info', 'disconnected state must not publish as ok');
-    expect((int) ($row['issue'] ?? 1) === 0, 'disconnected state must not publish as an issue');
+    $sev = [];
+    foreach ($snapshot['horizon_pool_machines'] as $m) $sev[$m['id']] = $m['severity'] ?? '';
+    expect(($sev['p30_over'] ?? '') === 'critical', 'disconnected past the pool 30m timer should be stuck/critical');
+    expect(($sev['p30_under'] ?? '') === 'ok', 'disconnected under the pool 30m timer should be fresh/ok, got ' . (string) ($sev['p30_under'] ?? ''));
+    expect(($sev['plong_capped'] ?? '') === 'critical', 'the fallback cap should flag even when the pool timer is longer');
 };
+
 $tests['active machines with bad Horizon state remain selectable evidence'] = static function (): void {
     $responses = successfulResponses();
     $responses['rest/inventory/v1/sessions?page=1&size=100'] = [
@@ -757,8 +782,10 @@ $tests['discovery reports TLS auth identity and cross-site ambiguity failures'] 
 $tests['capability manifest advertises the stable private integration contract'] = static function (): void {
     $path = dirname(__DIR__, 2) . '/librenms-overlay/tools/capabilities.json';
     $manifest = json_decode((string) file_get_contents($path), true, flags: JSON_THROW_ON_ERROR);
-    expect($manifest['overlay_version'] === '0.6.25', 'overlay capability version mismatch');
+    expect($manifest['overlay_version'] === '0.6.26', 'overlay capability version mismatch');
     expect((int) ($manifest['capabilities']['horizon_machine_state_taxonomy'] ?? 0) === 1, 'machine state taxonomy capability not advertised');
+    expect((int) ($manifest['capabilities']['horizon_uniform_tab_summaries'] ?? 0) === 1, 'uniform tab summaries capability not advertised');
+    expect((int) ($manifest['capabilities']['horizon_disconnected_stuck_detection'] ?? 0) === 1, 'disconnected stuck detection capability not advertised');
     expect($manifest['configuration_schema_version'] === 2, 'configuration schema version mismatch');
     expect($manifest['capabilities']['horizon_trigger_producer'] === 1, 'trigger capability missing');
     expect($manifest['capabilities']['horizon_central_worker'] === 1, 'worker capability missing');

@@ -1,5 +1,43 @@
 # Work Log
 
+## 2026-08-24 (overlay 0.6.26: tab UX, machine severity, stuck disconnects)
+
+- Shipped roadmap Phase 1 (uniform tab summary headers via a shared renderer on the
+  five bare tabs) together with the Horizon machine severity model and disconnected
+  stuck detection, as one release per an explicit decision to land the machine model
+  correct in one go rather than shipping an interim and revising it.
+- Severity model, confirmed against the vendor machine-state enum and with the
+  operator on live pages: red for genuine faults, yellow for intentional
+  out-of-service, plain for healthy (available, connected, reconnectable
+  disconnected). Row colour driven by collector severity, decoupled from the
+  problem-machine flag.
+- Disconnected stuck detection: threshold = min(pool disconnect timer, global
+  fallback cap, default 240 min). Verified from vendor docs that a disconnected
+  session is preserved and reconnectable (not a fault when recent), that the sessions
+  API exposes disconnected_time, and that the pool disconnect policy rides in the bulk
+  pool payload (settings.session_settings) so no per-pool call is needed.
+- Corrected an in-thread over-correction: I briefly agreed disconnected should be red,
+  then the operator's reconnect question and the vendor docs established that a recent
+  disconnect is normal and only a stuck one is red.
+- Caught and recovered from a version error before publishing: I initially bumped this
+  work to 0.6.25, but 0.6.25 was already published in a prior session (public
+  SHA256SUMS listed it; the artifact returned HTTP 200). Restored the published 0.6.25
+  artifact, SHA256SUMS, and the 0.6.25 changelog/CURRENT-STATE/work-log baseline from
+  git, kept the source/test/fixture work, and re-targeted everything as 0.6.26. Local
+  HEAD equalled origin/main throughout, so nothing was lost.
+- Validation: 32 central collector tests (fresh-stays-in-session, stuck via fallback
+  cap, pool timer governs over/under, cap-wins-when-pool-longer), 11 parser fixtures,
+  11 app-page fixtures, 69 overlay PHP files linted, test runners linted,
+  bash -n install.sh, all exit 0 with stderr inspected. Rendered the machine inventory
+  and confirmed by button-row count that two critical, one warning, three plain rows
+  render, the stuck message appears, and the filter reads All/In session/Available/
+  Unavailable.
+- Not verified against live API (no credentials): that the field returns
+  disconnected_time on sessions and session_settings on the pool list. Both read
+  defensively and degrade to observed age / the global cap if absent; the pool-timer
+  path engages once confirmed in the field, and the per-machine disconnected_seconds
+  now shown makes confirmation easy.
+
 ## 2026-08-20 (Phase 0 complete)
 
 - Operator confirmed on the live pages that overlay 0.6.25 resolves the Horizon

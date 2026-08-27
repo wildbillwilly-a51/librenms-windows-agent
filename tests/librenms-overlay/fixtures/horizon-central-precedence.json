@@ -108,15 +108,18 @@
         "clone_type": "INSTANT_CLONE",
         "health_state": "info",
         "health_reason": "one_unavailable_capacity_remains",
-        "machines_total": 3,
-        "machines_with_sessions": 1,
-        "spare_total": 2,
+        "machines_total": 6,
+        "machines_with_sessions": 2,
+        "spare_total": 4,
         "spare_ready": 1,
-        "spare_unready": 1,
+        "spare_unready": 3,
         "spare_unready_percent": 50,
-        "spare_maintenance": 0,
-        "issue_machines": 1,
-        "placement_headroom_percent": 33.3
+        "spare_maintenance": 1,
+        "issue_machines": 2,
+        "placement_headroom_percent": 33.3,
+        "spare_occupied": 0,
+        "spare_faulted": 2,
+        "spare_pending": 0
       }
     ],
     "horizon_pool_machines": [
@@ -131,8 +134,11 @@
         "maintenance": 0,
         "has_session": 1,
         "issue": 0,
-        "issue_reason": "none",
-        "collected_utc": "2026-07-22T17:55:00Z"
+        "issue_reason": "machine_in_use",
+        "collected_utc": "2026-07-22T17:55:00Z",
+        "severity": "ok",
+        "placement": "none",
+        "session_kind": "connected"
       },
       {
         "id": "machine-018",
@@ -145,8 +151,11 @@
         "maintenance": 0,
         "has_session": 0,
         "issue": 0,
-        "issue_reason": "none",
-        "collected_utc": "2026-07-22T17:55:00Z"
+        "issue_reason": "machine_healthy",
+        "collected_utc": "2026-07-22T17:55:00Z",
+        "severity": "ok",
+        "placement": "ready",
+        "session_kind": "none"
       },
       {
         "id": "machine-019",
@@ -160,7 +169,10 @@
         "has_session": 0,
         "issue": 1,
         "issue_reason": "agent_unreachable",
-        "collected_utc": "2026-07-22T17:55:00Z"
+        "collected_utc": "2026-07-22T17:55:00Z",
+        "severity": "critical",
+        "placement": "faulted",
+        "session_kind": "none"
       },
       {
         "id": "machine-020",
@@ -174,10 +186,46 @@
         "has_session": 1,
         "issue": 0,
         "issue_reason": "machine_session_disconnected",
-        "severity": "info",
-        "placement": "occupied",
+        "severity": "ok",
+        "placement": "none",
         "session_kind": "disconnected",
+        "collected_utc": "2026-07-22T17:55:00Z",
+        "disconnected_seconds": 180
+      },
+      {
+        "id": "machine-021",
+        "name": "abc-desktop-021",
+        "pool_id": "pool-a",
+        "pool": "instant-a",
+        "pool_display_name": "Instant A",
+        "clone_type": "INSTANT_CLONE",
+        "state": "MAINTENANCE",
+        "maintenance": 1,
+        "has_session": 0,
+        "issue": 0,
+        "issue_reason": "maintenance_mode",
+        "severity": "warning",
+        "placement": "held",
+        "session_kind": "none",
         "collected_utc": "2026-07-22T17:55:00Z"
+      },
+      {
+        "id": "machine-022",
+        "name": "abc-desktop-022",
+        "pool_id": "pool-a",
+        "pool": "instant-a",
+        "pool_display_name": "Instant A",
+        "clone_type": "INSTANT_CLONE",
+        "state": "DISCONNECTED",
+        "maintenance": 0,
+        "has_session": 0,
+        "issue": 1,
+        "issue_reason": "session_disconnected_stuck",
+        "collected_utc": "2026-07-22T17:55:00Z",
+        "severity": "critical",
+        "placement": "faulted",
+        "session_kind": "disconnected",
+        "disconnected_seconds": 18000
       }
     ],
     "horizon_pool_machine_issues": [
@@ -242,7 +290,11 @@
         "Collector reliability",
         "30d",
         "data-machine-category=\"all unavailable\"",
-        "Disconnected"
+        "Disconnected",
+        "windows-agent-horizon-machine-row windows-agent-horizon-machine-warning",
+        "windows-agent-horizon-machine-row windows-agent-horizon-machine-critical",
+        "User has not reconnected in 5h 0m. The machine is unavailable for other users.",
+        "Not reconnected in 5h 0m"
       ],
       "not_contains": [
         "not_configured",

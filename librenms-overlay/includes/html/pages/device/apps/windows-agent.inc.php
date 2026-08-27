@@ -295,6 +295,81 @@ $render_tab = static function (string $id, bool $active, string $body) use ($esc
     echo '</div>';
 };
 
+// Shared tab summary: the uniform header every tab leads with — a status strip
+// (state, plain-language verdict, next action, collected-at), up to six decision-
+// grade stat tiles, and an attention list rendered only when something is wrong.
+// It reuses the role-dashboard vocabulary that Horizon, FactoryTalk, and AD
+// already use, so every tab reads as one system. Detailed evidence and trends
+// follow this header in each tab and are not part of it.
+$render_tab_summary = static function (array $summary) use ($esc): string {
+    $state = is_array($summary['state'] ?? null) ? $summary['state'] : [];
+    $class = ['success' => 'success', 'warning' => 'warning', 'danger' => 'danger'][$state['class'] ?? ''] ?? 'info';
+    $verdict = trim((string) ($summary['verdict'] ?? ''));
+    $next = trim((string) ($summary['next'] ?? ''));
+    $collected = trim((string) ($summary['collected'] ?? ''));
+    $tiles = array_slice(is_array($summary['tiles'] ?? null) ? $summary['tiles'] : [], 0, 6);
+    $attention = is_array($summary['attention'] ?? null) ? $summary['attention'] : [];
+
+    $html = '<div class="windows-agent-role-dashboard windows-agent-tab-summary">';
+    $html .= '<div class="windows-agent-role-status windows-agent-role-status-' . $esc($class) . '">';
+    $html .= '<span class="label label-' . $esc($class) . '">' . $esc($state['text'] ?? 'Unknown') . '</span> ';
+    $html .= '<strong>' . $esc($verdict === '' ? ($state['text'] ?? 'Unknown') : $verdict) . '</strong>';
+    if ($next !== '') {
+        $html .= ' <span class="windows-agent-role-action"><strong>Next:</strong> ' . $esc($next) . '</span>';
+    }
+    if ($collected !== '') {
+        $html .= '<span class="text-muted windows-agent-role-collected">Collected ' . $esc($collected) . '</span>';
+    }
+    $html .= '</div>';
+
+    if (! empty($tiles)) {
+        $html .= '<div class="row windows-agent-role-stats">';
+        foreach ($tiles as $tile) {
+            $label = (string) ($tile[0] ?? '');
+            $value = (string) ($tile[1] ?? '');
+            $detail = (string) ($tile[2] ?? '');
+            $html .= '<div class="col-sm-4 col-lg-2 windows-agent-role-stat"><div class="text-muted windows-agent-role-stat-label">' . $esc($label) . '</div><div class="windows-agent-role-stat-value">' . $esc($value) . '</div><div class="text-muted windows-agent-role-stat-detail">' . $esc($detail) . '</div></div>';
+        }
+        $html .= '</div>';
+    }
+
+    if (! empty($attention)) {
+        $html .= '<div class="windows-agent-role-attention"><h4>Needs attention <small>' . count($attention) . '</small></h4><ul>';
+        foreach ($attention as $item) {
+            $html .= '<li><strong>' . $esc((string) ($item['title'] ?? 'Issue')) . '</strong> ';
+            $html .= '<span class="text-muted">' . $esc((string) ($item['detail'] ?? '')) . '</span>';
+            if (($item['action'] ?? '') !== '') {
+                $html .= '<div class="text-muted windows-agent-role-attention-action"><strong>Next:</strong> ' . $esc((string) $item['action']) . '</div>';
+            }
+            $html .= '</li>';
+        }
+        $html .= '</ul></div>';
+    }
+
+    $html .= '</div>';
+
+    return $html;
+};
+
+// Worst of a set of section states, for a tab whose summary spans several sections.
+$worst_section_state = static function (array $states) use ($section_state): array {
+    $rank = ['success' => 0, 'default' => 1, 'info' => 1, 'warning' => 2, 'danger' => 3];
+    $worst = null;
+    $worstRank = -1;
+    foreach ($states as $state) {
+        if (! is_array($state)) {
+            continue;
+        }
+        $r = $rank[$state['class'] ?? 'default'] ?? 1;
+        if ($r > $worstRank) {
+            $worstRank = $r;
+            $worst = $state;
+        }
+    }
+
+    return $worst ?? $section_state('ok');
+};
+
 $metric = static function (string $label, $value) use ($esc): string {
     return '<span class="text-muted">' . $esc($label) . ':</span> <strong>' . $esc($value) . '</strong>';
 };
@@ -356,7 +431,8 @@ $humanize_horizon_reason = static function ($value): string {
         // Machine states.
         'machine_healthy' => 'Ready for placement',
         'machine_in_use' => 'Serving a user session',
-        'machine_session_disconnected' => 'Session disconnected; machine unavailable',
+        'machine_session_disconnected' => 'Session disconnected; user can reconnect',
+        'session_disconnected_stuck' => 'Disconnected too long; unavailable to other users',
         'machine_withheld' => 'Intentionally withheld',
         'machine_transitional' => 'Becoming ready',
         'machine_transitional_too_long' => 'Stuck becoming ready',
@@ -1133,7 +1209,7 @@ if ($horizon_surface_available) {
             return ['critical' => 50, 'warning' => 40, 'incomplete' => 30, 'info' => 20, 'disabled' => 10, 'ok' => 0][strtolower((string) ($row['health_state'] ?? 'incomplete'))] ?? 30;
         }, 'name');
         $horizon_details .= '<section class="windows-agent-horizon-section" id="windows-agent-horizon-pool-workspace"><div class="windows-agent-horizon-section-heading"><h4>Pool capacity</h4><span class="windows-agent-horizon-policy"><i class="windows-agent-horizon-dot windows-agent-horizon-dot-info"></i> 1 faulted + ready capacity = info <i class="windows-agent-horizon-dot windows-agent-horizon-dot-warning"></i> 2+ faulted, or no free capacity = warning <i class="windows-agent-horizon-dot windows-agent-horizon-dot-critical"></i> 0 ready + faulted = critical</span></div>';
-        $horizon_details .= '<div class="windows-agent-horizon-pool-head" aria-hidden="true"><span>Pool</span><span>State</span><span>Machines</span><span>In session</span><span>Ready</span><span>Unavailable</span><span>Placement headroom</span><span>Demand</span></div>';
+        $horizon_details .= '<div class="windows-agent-horizon-pool-head" aria-hidden="true"><span>Pool</span><span>State</span><span>Machines</span><span>In session</span><span>Available</span><span>Unavailable</span><span>Placement headroom</span><span>Demand</span></div>';
         foreach ($sortedPools as $pool) {
             $poolKey = (string) ($pool['id'] ?? $pool['name'] ?? '');
             $poolMachines = $machinesByPool[$poolKey] ?? $machinesByPool[(string) ($pool['name'] ?? '')] ?? [];
@@ -1154,7 +1230,7 @@ if ($horizon_surface_available) {
             foreach ([
                 'all' => ['value' => $machines, 'label' => 'all machines', 'metric' => 'Machines'],
                 'sessions' => ['value' => $sessions, 'label' => 'in-session machines', 'metric' => 'In session'],
-                'ready' => ['value' => (int) ($pool['spare_ready'] ?? 0), 'label' => 'ready machines', 'metric' => 'Ready'],
+                'ready' => ['value' => (int) ($pool['spare_ready'] ?? 0), 'label' => 'available machines', 'metric' => 'Available'],
                 'unavailable' => ['value' => (int) ($pool['spare_unready'] ?? 0), 'label' => 'unavailable machines', 'metric' => 'Unavailable'],
             ] as $filter => $count) {
                 $horizon_details .= '<button type="button" class="windows-agent-horizon-pool-count" data-metric-label="' . $esc($count['metric']) . '" data-pool-open-filter="' . $esc($filter) . '" data-pool="' . $esc($poolRef) . '" aria-label="Show ' . $esc($count['value']) . ' ' . $esc($count['label']) . '">' . $esc($count['value']) . '</button>';
@@ -1164,9 +1240,8 @@ if ($horizon_surface_available) {
             $horizon_details .= '<div class="windows-agent-horizon-machine-toolbar"><div><strong>Machine inventory</strong><span class="text-muted"> ' . $esc($pool['display_name'] ?? $pool['name'] ?? 'pool') . '</span></div><div class="btn-group btn-group-xs" role="group" aria-label="Machine filter">';
             $filters = [
                 'all' => 'All ' . $machines,
-                'issues' => 'Issues ' . (int) ($pool['issue_machines'] ?? 0),
                 'sessions' => 'In session ' . $sessions,
-                'ready' => 'Ready ' . (int) ($pool['spare_ready'] ?? 0),
+                'ready' => 'Available ' . (int) ($pool['spare_ready'] ?? 0),
                 'unavailable' => 'Unavailable ' . (int) ($pool['spare_unready'] ?? 0),
             ];
             foreach ($filters as $filter => $label) {
@@ -1195,6 +1270,21 @@ if ($horizon_surface_available) {
                 } else {
                     $sessionLabel = ['connected' => 'Connected', 'disconnected' => 'Disconnected'][$sessionKind] ?? 'Present';
                 }
+                // Intentionally withheld (maintenance, disabled) is unavailable but
+                // not a problem. It gets its own muted marker, distinct from both the
+                // yellow issue flag and a plain row, so "unavailable on purpose" reads
+                // at a glance without being mistaken for a fault.
+                $withheld = ! $isIssue && ($placement === 'held' || $maintenance);
+                // Row colour follows the collector's per-machine severity, decoupled
+                // from the problem-machine flag: critical (red) = broken, warning
+                // (yellow) = out of service on purpose, otherwise unflagged. A
+                // disconnected-but-reconnectable machine is healthy and stays plain.
+                $rowSeverity = strtolower((string) ($machine['severity'] ?? ''));
+                if ($rowSeverity === '' && $isIssue) {
+                    $rowSeverity = 'critical';
+                } elseif ($rowSeverity === '' && $withheld) {
+                    $rowSeverity = 'warning';
+                }
                 $categories = ['all'];
                 if ($isIssue) $categories[] = 'issues';
                 if ($placement === 'none') $categories[] = 'sessions';
@@ -1208,9 +1298,36 @@ if ($horizon_surface_available) {
                     'none' => 'No action required.',
                     default => $isIssue ? 'Review the machine state and related Horizon evidence.' : 'No action required.',
                 };
-                $horizon_details .= '<button type="button" class="windows-agent-horizon-machine-row' . ($isIssue ? ' windows-agent-horizon-machine-issue' : '') . '" data-machine-category="' . $esc(implode(' ', $categories)) . '" data-machine-drawer="' . $esc($drawerRef) . '" aria-controls="windows-agent-horizon-machine-drawer-' . $esc($drawerRef) . '"><span>' . ($isIssue ? '<span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span> ' : '') . '<strong>' . $esc($machine['name'] ?? $machine['id'] ?? 'unknown') . '</strong></span><span>' . $esc($humanize_horizon_reason($machine['state'] ?? 'unknown')) . '</span><span>' . $esc($sessionLabel) . '</span><span>' . ($maintenance ? 'Yes' : 'No') . '</span><span>' . $esc($reason) . '</span><span>' . $esc($machine['collected_utc'] ?? 'unknown') . ' <span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span></span></button>';
+                // A stuck disconnected session gets a plain-language, duration-aware
+                // message: how long since the user was last connected, and what it means.
+                $disconnectedSeconds = max(0, (int) ($machine['disconnected_seconds'] ?? 0));
+                $disconnectedHuman = $disconnectedSeconds >= 3600
+                    ? intdiv($disconnectedSeconds, 3600) . 'h ' . intdiv($disconnectedSeconds % 3600, 60) . 'm'
+                    : intdiv($disconnectedSeconds, 60) . 'm';
+                $stuckMessage = '';
+                if ((string) ($machine['issue_reason'] ?? '') === 'session_disconnected_stuck') {
+                    $reason = 'Not reconnected in ' . $disconnectedHuman;
+                    $stuckMessage = 'User has not reconnected in ' . $disconnectedHuman . '. The machine is unavailable for other users.';
+                    $next = $stuckMessage;
+                }
+                $rowClass = 'windows-agent-horizon-machine-row';
+                $rowMarker = '';
+                if ($rowSeverity === 'critical') {
+                    $rowClass .= ' windows-agent-horizon-machine-critical';
+                    $rowMarker = '<span class="glyphicon glyphicon-exclamation-sign" title="Down" aria-hidden="true"></span> ';
+                } elseif ($rowSeverity === 'warning') {
+                    $rowClass .= ' windows-agent-horizon-machine-warning';
+                    $rowMarker = '<span class="glyphicon glyphicon-pause" title="Out of service" aria-hidden="true"></span> ';
+                }
+                $horizon_details .= '<button type="button" class="' . $rowClass . '" data-machine-category="' . $esc(implode(' ', $categories)) . '" data-machine-drawer="' . $esc($drawerRef) . '" aria-controls="windows-agent-horizon-machine-drawer-' . $esc($drawerRef) . '"><span>' . $rowMarker . '<strong>' . $esc($machine['name'] ?? $machine['id'] ?? 'unknown') . '</strong></span><span>' . $esc($humanize_horizon_reason($machine['state'] ?? 'unknown')) . '</span><span>' . $esc($sessionLabel) . '</span><span>' . ($maintenance ? 'Yes' : 'No') . '</span><span>' . $esc($reason) . '</span><span>' . $esc($machine['collected_utc'] ?? 'unknown') . ' <span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span></span></button>';
                 $horizon_details .= '<aside id="windows-agent-horizon-machine-drawer-' . $esc($drawerRef) . '" class="windows-agent-horizon-detail-drawer" data-horizon-drawer-panel="' . $esc($drawerRef) . '" hidden><div class="windows-agent-horizon-drawer-header"><h4>Machine details</h4><button type="button" class="close" data-horizon-drawer-close aria-label="Close"><span aria-hidden="true">&times;</span></button></div>';
-                $horizon_details .= '<h3>' . $esc($machine['name'] ?? $machine['id'] ?? 'unknown') . '</h3><p class="' . ($isIssue ? 'text-warning' : 'text-success') . '"><span class="glyphicon ' . ($isIssue ? 'glyphicon-exclamation-sign' : 'glyphicon-ok-sign') . '" aria-hidden="true"></span> ' . $esc($humanize_horizon_reason($machine['state'] ?? 'unknown')) . '</p><dl>';
+                $drawerTextClass = $rowSeverity === 'critical' ? 'text-danger' : ($rowSeverity === 'warning' ? 'text-warning' : 'text-success');
+                $drawerIcon = $rowSeverity === 'critical' ? 'glyphicon-exclamation-sign' : ($rowSeverity === 'warning' ? 'glyphicon-pause' : 'glyphicon-ok-sign');
+                $horizon_details .= '<h3>' . $esc($machine['name'] ?? $machine['id'] ?? 'unknown') . '</h3><p class="' . $drawerTextClass . '"><span class="glyphicon ' . $drawerIcon . '" aria-hidden="true"></span> ' . $esc($humanize_horizon_reason($machine['state'] ?? 'unknown')) . '</p>';
+                if ($stuckMessage !== '') {
+                    $horizon_details .= '<p class="' . $drawerTextClass . '"><strong>' . $esc($stuckMessage) . '</strong></p>';
+                }
+                $horizon_details .= '<dl>';
                 foreach ([
                     'Pool' => $machine['pool_display_name'] ?? $machine['pool'] ?? '',
                     'Issue' => $reason,
@@ -1897,7 +2014,37 @@ if ($horizon_surface_available) {
     }
 }
 
-$roles_tab = '';
+// Roles & Workloads tab: summary spans the non-first-order roles that live here
+// (SQL and IIS), plus the detected-role inventory and logged-on sessions.
+$sql_detected = ! in_array(strtolower((string) ($sql_server_summary['state'] ?? 'not_detected')), ['not_detected', 'disabled', 'unsupported', 'not_applicable'], true);
+$iis_detected = ! in_array(strtolower((string) ($iis_summary['state'] ?? 'not_detected')), ['not_detected', 'disabled', 'unsupported', 'not_applicable'], true);
+$sql_down = (int) ($sql_server_summary['instances_not_running'] ?? 0);
+$iis_stopped = (int) ($iis_summary['sites_stopped'] ?? 0) + (int) ($iis_summary['app_pools_stopped'] ?? 0);
+$roles_detected_count = count(array_filter($roles, static fn (array $r): bool => (int) ($r['detected'] ?? 0) === 1));
+$roles_attention = [];
+if ($sql_detected && $sql_down > 0) {
+    $roles_attention[] = ['title' => $sql_down . ' SQL Server instance(s) not running', 'detail' => (string) ($sql_server_summary['instances_total'] ?? '0') . ' instance(s) detected.', 'action' => 'Review the SQL Server inventory below.'];
+}
+if ($iis_detected && $iis_stopped > 0) {
+    $roles_attention[] = ['title' => $iis_stopped . ' IIS site(s) or app pool(s) stopped', 'detail' => (string) ($iis_summary['sites_total'] ?? '0') . ' site(s), ' . (string) ($iis_summary['app_pools_total'] ?? '0') . ' pool(s).', 'action' => 'Review the IIS inventory below.'];
+}
+$roles_tab_state = $worst_section_state([$sections['sql']['state'], $sections['iis']['state']]);
+$roles_verdict = empty($roles_attention)
+    ? 'No workload issues on this host. Detected roles are listed below.'
+    : count($roles_attention) . ' workload condition(s) need attention.';
+$roles_tab = $render_tab_summary([
+    'state' => $roles_tab_state,
+    'verdict' => $roles_verdict,
+    'next' => $roles_attention[0]['action'] ?? '',
+    'collected' => (string) ($data['last_agent_utc'] ?? ''),
+    'tiles' => [
+        ['SQL Server', $sql_detected ? 'Detected' : 'Not detected', $sql_detected ? ((string) ($sql_server_summary['instances_total'] ?? '0') . ' instance(s), ' . $sql_down . ' down') : 'No SQL instance'],
+        ['IIS', $iis_detected ? 'Detected' : 'Not detected', $iis_detected ? ((string) ($iis_summary['sites_total'] ?? '0') . ' site(s), ' . $iis_stopped . ' stopped') : 'No web server'],
+        ['Detected roles', $roles_detected_count, count($roles) . ' evaluated'],
+        ['Logged-on sessions', count($logged_on_user_sessions), 'Interactive and remote'],
+    ],
+    'attention' => $roles_attention,
+]);
 $roles_tab .= $render_section_summary('sql', 'SQL Server', $sections['sql']['state'], $sections['sql']['summary'], $sql_details);
 $roles_tab .= $render_section_summary('iis', 'IIS', $sections['iis']['state'], $sections['iis']['summary'], $iis_details);
 $roles_tab .= $render_section_summary('roles', 'Detected Roles', $section_state(empty($roles) ? 'not_detected' : 'ok'), $metric('Rows', count($roles)), $role_details);
@@ -1906,10 +2053,67 @@ if (! $ad_dc_detected) {
 }
 $roles_tab .= $render_section_summary('users', 'Logged-On Users', $section_state(empty($logged_on_user_sessions) ? 'not_detected' : 'ok'), $metric('Sessions', count($logged_on_user_sessions)), $users_details);
 
-$security_tab = '';
+// Security & Certificates tab: TLS certificate health.
+$tls_expired = (int) ($tls_certificates_summary['expired_count'] ?? 0);
+$tls_expiring = (int) ($tls_certificates_summary['expiring_count'] ?? $tls_certificates_summary['expiring_warning_count'] ?? 0);
+$tls_attention = [];
+if ($tls_expired > 0) {
+    $tls_attention[] = ['title' => $tls_expired . ' certificate(s) expired', 'detail' => 'An expired certificate in a configured store may break TLS for a dependent service.', 'action' => 'Review the certificate inventory below.'];
+}
+if ($tls_unhealthy_count > 0 && $tls_expired === 0) {
+    $tls_attention[] = ['title' => $tls_unhealthy_count . ' certificate(s) unhealthy', 'detail' => 'One or more certificates reported a chain, key, or binding problem.', 'action' => 'Review the certificate health column below.'];
+}
+$security_verdict = empty($tls_attention)
+    ? 'No certificate issues in the configured stores.'
+    : count($tls_attention) . ' certificate condition(s) need attention.';
+$security_tab = $render_tab_summary([
+    'state' => $sections['tls']['state'],
+    'verdict' => $security_verdict,
+    'next' => $tls_attention[0]['action'] ?? '',
+    'collected' => (string) ($data['last_agent_utc'] ?? ''),
+    'tiles' => [
+        ['Certificates', (string) ($tls_certificates_summary['certificate_count'] ?? '0'), (string) ($tls_certificates_summary['store_count'] ?? '0') . ' store(s) scanned'],
+        ['Expired', $tls_expired, $tls_expired > 0 ? 'Action needed' : 'None'],
+        ['Expiring soon', $tls_expiring, 'Within warning window'],
+        ['Unhealthy', $tls_unhealthy_count, 'Chain, key, or binding'],
+    ],
+    'attention' => $tls_attention,
+]);
 $security_tab .= $render_section_summary('tls', 'TLS Certificate Visibility', $sections['tls']['state'], $sections['tls']['summary'], $tls_details, $tls_graphs);
 
-$backup_tab = '';
+// Backup tab: leads with the shared summary header built from the VSS/backup and
+// Datto sections, then the existing detail panels as evidence beneath it.
+$backup_vss_failed = (int) ($backup_storage_summary['vss_writers_failed'] ?? 0);
+$backup_services_down = (int) ($backup_storage_summary['backup_services_not_running'] ?? 0);
+$datto_detected = (int) ($datto_backup_summary['detected'] ?? 0) === 1;
+$datto_issues = (int) ($datto_backup_summary['health_issues'] ?? 0);
+$backup_tab_state = $worst_section_state([$sections['backup']['state'], $sections['datto']['state']]);
+$backup_attention = [];
+if ($backup_vss_failed > 0) {
+    $backup_attention[] = ['title' => $backup_vss_failed . ' VSS writer(s) failed', 'detail' => 'Volume Shadow Copy writers in a failed state can block backups.', 'action' => 'Review the VSS writer inventory below.'];
+}
+if ($backup_services_down > 0) {
+    $backup_attention[] = ['title' => $backup_services_down . ' backup service(s) not running', 'detail' => 'A stopped backup service prevents scheduled protection.', 'action' => 'Review the backup service inventory below.'];
+}
+if ($datto_detected && $datto_issues > 0) {
+    $backup_attention[] = ['title' => $datto_issues . ' Datto backup issue(s) reported', 'detail' => (string) ($datto_backup_summary['evidence'] ?? 'The Datto backup collector reported one or more issues.'), 'action' => (string) ($datto_backup_summary['next_action'] ?? 'Review the Datto backup evidence below.')];
+}
+$backup_verdict = empty($backup_attention)
+    ? 'No backup or storage issues were reported.'
+    : count($backup_attention) . ' backup condition(s) need attention.';
+$backup_tab = $render_tab_summary([
+    'state' => $backup_tab_state,
+    'verdict' => $backup_verdict,
+    'next' => $backup_attention[0]['action'] ?? '',
+    'collected' => (string) ($data['last_agent_utc'] ?? ''),
+    'tiles' => [
+        ['VSS writers failed', $backup_vss_failed, (string) ($backup_storage_summary['vss_writers_total'] ?? '0') . ' total'],
+        ['Backup services down', $backup_services_down, (string) ($backup_storage_summary['backup_services_total'] ?? '0') . ' watched'],
+        ['Datto', $datto_detected ? 'Detected' : 'Not detected', $datto_detected ? ((int) ($datto_backup_summary['service_running'] ?? 0) === 1 ? 'Service running' : 'Service not running') : 'No Datto agent'],
+        ['Datto issues', $datto_detected ? $datto_issues : 'N/A', $datto_detected ? (string) ($datto_backup_summary['state'] ?? 'unknown') : 'Not applicable'],
+    ],
+    'attention' => $backup_attention,
+]);
 $backup_tab .= $render_section_summary('backup-storage', 'Backup / Storage Visibility', $sections['backup']['state'], $sections['backup']['summary'], $backup_details, [
     ['label' => 'VSS Writer Failures', 'key' => 'windows-agent_backup_vss_failures'],
     ['label' => 'Backup Services Down', 'key' => 'windows-agent_backup_services_down'],
@@ -1919,7 +2123,43 @@ $backup_tab .= $render_section_summary('datto', 'Datto Backup Health', $sections
     ['label' => 'Datto Issue Counts', 'key' => 'windows-agent_datto_issue_counts'],
 ]);
 
-$services_tab = '';
+// Services & Events tab: watched services, event logs, processes, TCP ports, and
+// reboot state.
+$reboot_pending = (int) ($pending_reboot['pending'] ?? 0) === 1 || (int) ($windows_update['reboot_required'] ?? 0) === 1;
+$services_attention = [];
+if ($watched_service_issues > 0) {
+    $services_attention[] = ['title' => $watched_service_issues . ' watched service(s) down', 'detail' => 'A watched service is not running.', 'action' => 'Review the service inventory below.'];
+}
+if ($process_issues > 0) {
+    $services_attention[] = ['title' => $process_issues . ' watched process(es) missing', 'detail' => 'A watched process was not found.', 'action' => 'Review the watched process list below.'];
+}
+if ($tcp_issues > 0) {
+    $services_attention[] = ['title' => $tcp_issues . ' watched TCP port(s) not listening', 'detail' => 'A watched listener is not accepting connections.', 'action' => 'Review the watched TCP port list below.'];
+}
+if ($reboot_pending) {
+    $services_attention[] = ['title' => 'Reboot pending', 'detail' => 'Windows reports a pending reboot, which can leave updates or services in a partial state.', 'action' => 'Schedule a reboot when convenient.'];
+}
+$services_tab_state = $worst_section_state([
+    $sections['services']['state'], $sections['processes']['state'], $sections['tcp']['state'],
+    $section_state($reboot_pending ? 'warning' : 'ok'),
+]);
+$services_verdict = empty($services_attention)
+    ? 'Watched services, processes, ports, and reboot state are all healthy.'
+    : count($services_attention) . ' condition(s) need attention.';
+$services_tab = $render_tab_summary([
+    'state' => $services_tab_state,
+    'verdict' => $services_verdict,
+    'next' => $services_attention[0]['action'] ?? '',
+    'collected' => (string) ($data['last_agent_utc'] ?? ''),
+    'tiles' => [
+        ['Watched services down', $watched_service_issues, $classified_services_stopped . ' classified stopped'],
+        ['Watched processes missing', $process_issues, count($watched_processes) . ' watched'],
+        ['TCP ports not listening', $tcp_issues, count($watched_tcp_ports) . ' watched'],
+        ['Event criticals/errors', $event_evidence_count, (string) ($event_log_high_value_summary['signatures_total'] ?? '0') . ' high-value groups'],
+        ['Reboot', $reboot_pending ? 'Pending' : 'Not pending', $reboot_pending ? 'Action needed' : 'Clean'],
+    ],
+    'attention' => $services_attention,
+]);
 $services_tab .= $render_section_summary('reboot', 'Reboot and Windows Update', $section_state(((int) ($pending_reboot['pending'] ?? 0) || (int) ($windows_update['reboot_required'] ?? 0)) ? 'warning' : 'ok'), $metric('Pending reboot', $pending_reboot['pending'] ?? '0') . ' ' . $metric('Update reboot', $windows_update['reboot_required'] ?? '0'), $reboot_details, [
     ['label' => 'Reboot Required State', 'key' => 'windows-agent_reboot_state'],
 ]);
@@ -1930,7 +2170,34 @@ $services_tab .= $render_section_summary('events', 'Event Logs', $sections['even
 $services_tab .= $render_section_summary('processes', 'Watched Processes', $sections['processes']['state'], $sections['processes']['summary'], $process_details);
 $services_tab .= $render_section_summary('tcp', 'Watched TCP Ports', $sections['tcp']['state'], $sections['tcp']['summary'], $tcp_details);
 
-$agent_performance_tab = '';
+// Agent Performance tab: the agent's own health and resource impact, VM resources,
+// and Windows performance depth.
+$perf_pressure = (int) ($performance_summary['pressure_issues'] ?? 0);
+$agent_perf_attention = [];
+if ($agent_issues > 0) {
+    $agent_perf_attention[] = ['title' => $agent_issues . ' collector(s) failed or timed out', 'detail' => 'A collector that fails or times out leaves its section stale.', 'action' => 'Review collector timings below.'];
+}
+if ($perf_pressure > 0) {
+    $agent_perf_attention[] = ['title' => $perf_pressure . ' Windows performance pressure issue(s)', 'detail' => 'CPU queue, memory commit, paging, or disk latency crossed a pressure threshold.', 'action' => 'Review Windows performance depth below.'];
+}
+$agent_perf_tab_state = $worst_section_state([$sections['agent']['state'], $sections['vm']['state'], $sections['performance']['state'], $sections['collector_impact']['state']]);
+$agent_perf_verdict = empty($agent_perf_attention)
+    ? 'The agent is collecting cleanly with no host pressure reported.'
+    : count($agent_perf_attention) . ' agent or performance condition(s) need attention.';
+$agent_performance_tab = $render_tab_summary([
+    'state' => $agent_perf_tab_state,
+    'verdict' => $agent_perf_verdict,
+    'next' => $agent_perf_attention[0]['action'] ?? '',
+    'collected' => (string) ($data['last_agent_utc'] ?? ''),
+    'tiles' => [
+        ['Agent version', (string) ($agent['version'] ?? 'unknown'), 'Collector issues: ' . $agent_issues],
+        ['Collector CPU', $format_percent($agent_resource_cpu_percent), 'Duration ' . $agent_resource_duration_ms . ' ms'],
+        ['Collector memory', $format_bytes($agent_resource_memory_bytes), 'Agent working set'],
+        ['VM CPU / memory', ((string) ($vm_resource_summary['cpu_load_percent'] ?? '0')) . '% / ' . ((string) ($vm_resource_summary['memory_used_percent'] ?? '0')) . '%', 'Max disk ' . ((string) ($vm_resource_summary['disk_used_percent_max'] ?? '0')) . '%'],
+        ['Pressure issues', $perf_pressure, 'Windows performance depth'],
+    ],
+    'attention' => $agent_perf_attention,
+]);
 $agent_performance_tab .= $render_section_summary('agent-os', 'Agent and OS', $sections['agent']['state'], $sections['agent']['summary'], $agent_details);
 $agent_performance_tab .= $performance_tab;
 $agent_performance_tab .= $render_section_summary('collector-timings', 'Collector Timings', $sections['agent']['state'], $metric('Collectors run', $agent_performance['collectors_run'] ?? '0') . ' ' . $metric('Failed/timed out', $agent_issues), $collector_details);
@@ -1950,6 +2217,8 @@ echo '<style>
 .windows-agent-subsection { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(127, 127, 127, 0.25); }
 .windows-agent-subsection-body { margin-top: 12px; }
 .windows-agent-disclosure-summary { margin-left: 6px; }
+.windows-agent-tab-summary { margin-bottom: 18px; }
+.windows-agent-tab-summary .windows-agent-role-stats:last-child { margin-bottom: 0; border-bottom: 0; }
 .windows-agent-role-status { margin-bottom: 0; padding: 8px 10px; border-left: 3px solid #999; border-bottom: 1px solid rgba(127, 127, 127, 0.2); background: transparent; }
 .windows-agent-role-status-success { border-left-color: #5cb85c; }
 .windows-agent-role-status-warning { border-left-color: #f0ad4e; }
@@ -2084,7 +2353,10 @@ echo '<style>
 .windows-agent-horizon-machine-row[hidden] { display: none !important; }
 .windows-agent-horizon-machine-row:hover,
 .windows-agent-horizon-machine-row:focus { background: var(--horizon-surface-subtle); box-shadow: inset 0 0 0 2px rgba(77, 156, 255, 0.5); outline: 0; }
-.windows-agent-horizon-machine-issue { border-left: 4px solid #f0ad4e; }
+.windows-agent-horizon-machine-critical { border-left: 4px solid #d9534f; }
+.windows-agent-horizon-machine-critical .glyphicon-exclamation-sign { color: #d9534f; font-size: 11px; }
+.windows-agent-horizon-machine-warning { border-left: 4px solid #f0ad4e; }
+.windows-agent-horizon-machine-warning .glyphicon-pause { color: #f0ad4e; font-size: 11px; }
 .windows-agent-horizon-machine-empty { padding: 18px 12px; color: var(--horizon-muted); text-align: center; }
 .windows-agent-horizon-machine-empty-static { border-top: 1px solid var(--horizon-border); }
 .windows-agent-horizon-truncation { margin: 8px 12px; }
