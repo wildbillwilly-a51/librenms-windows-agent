@@ -1,5 +1,23 @@
 # Changelog
 
+## Overlay 0.6.27 - 2026-08-28
+
+Overlay-only release. Pool severity refinement and a conditions display fix, from
+field feedback on 0.6.26. Windows agent `0.6.16` and its artifacts are unchanged.
+
+- Pool conditions in the Horizon workspace now show the pool's display name instead
+  of its internal id (an opaque hash). The collector carries the pool name; the page
+  still uses the id for click-through linkage.
+- Pool severity is capacity-first and tied to spare capacity rather than only to
+  zero-available: fewer than the minimum ready spares (configurable, default two)
+  with faulted or stuck machines present is critical; fewer than the minimum with
+  nothing broken (a fully utilised or recycling pool) is a warning; more than one
+  machine unavailable is a warning even when spare capacity remains; one machine
+  unavailable is informational. A stuck disconnected machine counts as faulted, so a
+  pool low on spares with stuck machines is critical.
+- Updated the pool legend, reason labels, next-action text, and the README clone-pool
+  policy section to match. No RRD schema, protocol, or application identity change.
+
 ## Overlay 0.6.26 - 2026-08-24
 
 Overlay-only release. Application page UX pass (roadmap Phase 1) plus the Horizon

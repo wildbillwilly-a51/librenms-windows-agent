@@ -80,27 +80,30 @@ server detail instead of leaving the Horizon workspace.
 Horizon configuration replication (AD LDS) and per-member Horizon domain
 access remain separate from the Windows/Microsoft AD collector.
 
-Central clone-pool policy separates capacity failure from capacity exhaustion,
-because they are different operator problems. A single machine state taxonomy
+Central clone-pool policy is capacity-first. A single machine state taxonomy
 decides, independently, whether a machine is available for a new session, how
-severe its own state is, and whether it counts as a problem machine.
+severe its own state is, and whether it counts as a problem machine. Machine
+rows use a three-colour model: red for genuinely down machines, yellow for
+machines intentionally out of service, and unflagged for healthy ones.
 
-- Faulted spares drive severity: no ready spares while a spare is faulted is
-  critical, two or more faulted spares is a warning, and one faulted spare while
-  ready capacity remains is informational.
-- Exhaustion is a warning, not a fault. A pool whose machines are all serving or
-  holding sessions has no placement capacity, but nothing is broken.
-- A disconnected session is unavailable, not available and not faulted. It holds
-  its machine until logoff, so it is counted as occupied rather than as ready
-  capacity or as a problem machine.
-- Machines that are intentionally withheld, such as maintenance mode, or still
-  becoming ready, such as provisioning or customizing, are informational and
-  never score as failures on their own.
+- A machine is red/down when it is genuinely broken (agent unreachable, agent
+  errors, error, provisioning error, already-used) or when a disconnected session
+  has been stuck past its reclaim window.
+- A disconnected session is normal and reconnectable: it counts as in-session and
+  is not flagged until it outlives its reclaim window, at which point it is stuck
+  and unavailable to other users. The threshold is the pool's own
+  logoff-after-disconnect timer, capped by an adjustable global fallback so a pool
+  set to Never still surfaces; no per-pool configuration is required.
+- Machines intentionally withheld (maintenance, disabled) are yellow. Machines
+  still becoming ready (provisioning, customizing) are informational.
+- Pool severity is driven by spare capacity: fewer than the minimum ready spares
+  (default two) with faulted or stuck machines present is critical; fewer than the
+  minimum with nothing broken (a fully utilised or recycling pool) is a warning;
+  more than one machine unavailable is a warning even when spare capacity remains.
 - A machine state the overlay does not recognize is reported as incomplete and
   excluded from capacity scoring. Not knowing a state is not evidence of a
-  problem. The Horizon machine state inventory shows the capacity treatment,
-  severity, and problem-machine flag for every reported state, so an unrecognized
-  state is visible on the page.
+  problem. The Horizon machine inventory shows the capacity treatment, severity,
+  and problem-machine flag for every reported state.
 
 This visibility does not enable LibreNMS notifications. Release 0.6.14's
 Windows-side API prototype remains disabled by default. Overlay release 0.6.20
@@ -363,7 +366,7 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Install a specific overlay version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.26
+curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.27
 ```
 
 Preview without changing the node:

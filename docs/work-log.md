@@ -1,5 +1,30 @@
 # Work Log
 
+## 2026-08-28 (overlay 0.6.27: pool severity + conditions fix)
+
+- Deployed 0.6.26 to the cluster and confirmed the stuck-disconnect feature works
+  against live data: the field returns session disconnected_time, so machines show
+  real durations (one at 2563h). All five nodes byte-matched the published artifact
+  and the collector ran clean.
+- Operator feedback drove two fixes. First, the Conditions section showed the pool's
+  internal id (an opaque hash) instead of its name; the collector now carries the
+  pool display name and the page shows it while keeping the id for linkage.
+- Second, pool severity: the operator wanted a pool with several long-stuck machines
+  and only one available to be critical, not warning. Discussed and chose option B:
+  fewer than the minimum ready spares WITH faulted/stuck machines is critical; fewer
+  than the minimum with nothing broken (fully utilised or recycling) is a warning.
+  This keeps busy and recycling pools out of critical while catching the real
+  capacity-loss case. Confirmed with the operator that these states are visual today
+  (no alert rules fire); per-pool by-name alerting is a separate, approval-gated
+  feature for later.
+- Validation: 32 central collector tests, 11 parser fixtures, 11 app-page fixtures,
+  69 overlay PHP files linted, test runners linted, all exit 0 with stderr inspected.
+  Rendered the workspace and confirmed the pool shows critical with a named
+  condition and the updated legend.
+- Recovered from a version mix-up earlier in the day: work was briefly targeted at
+  0.6.25, which was already published; restored the published baseline and shipped
+  the tab/severity/stuck work as 0.6.26, then this pool-severity refinement as 0.6.27.
+
 ## 2026-08-24 (overlay 0.6.26: tab UX, machine severity, stuck disconnects)
 
 - Shipped roadmap Phase 1 (uniform tab summary headers via a shared renderer on the

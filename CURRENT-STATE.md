@@ -25,13 +25,13 @@ and private exports do not belong here.
 
 ## Current Releases
 
-- Overlay version: `0.6.26`
+- Overlay version: `0.6.27`
 - Windows agent version: `0.6.16`
-- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.26.tar.gz`
+- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.27.tar.gz`
 - Windows MSI: `artifacts/librenms-windows-agent-0.6.16.msi`
 - Versioned agent config: `artifacts/librenms-windows-agent-config-0.6.16-win.json`
 - Checksums: `SHA256SUMS`
-- Overlay SHA256: `10fcc0bb7687a10b85580950d0e4d47844708a79361c7d5111bb3fb65d165319`
+- Overlay SHA256: `86ccb34bc3f5a6c7056af09694023905b033d5beb215d894400045ae0fda3d05`
 - Windows MSI SHA256: `5a40c9965a44179b09c57e4e3951e55982b983bfd1fd83b4e93cbeaaf5811732`
 - Versioned config SHA256: `94fd8b56e0ac2ca15f50dd0ffff1d3f9167032b4717aeecd5b091f336fbe404b`
 - Public overlay installer: `install.sh`
@@ -42,7 +42,7 @@ adds explicit Horizon service expectedness plus active-certificate health. The b
 matching versioned config, checks prerequisites and port ownership, prepares
 configuration before service startup, leaves registered upgrades inside MSI
 rollback, retains verbose diagnostics, and verifies a live protocol response.
-Overlay release `0.6.26` brings the application page onto one uniform contract and completes the Horizon machine severity model. Every tab now leads with the same summary header — state, a plain-language verdict, up to six decision-grade tiles, and an attention list — above its detailed evidence. The Horizon machine inventory uses a three-colour severity model: red for genuinely down machines (agent unreachable, errors, already-used), yellow for machines intentionally out of service (maintenance, disabled), and unflagged for healthy machines (available, connected, and reconnectable disconnected sessions). A disconnected session is treated by age: a recent disconnect counts as in-session and is reconnectable, while a session disconnected past its reclaim window is stuck — unavailable to other users, reported red, with a message that the user has not reconnected in the elapsed time. The stuck threshold is each pool's own logoff-after-disconnect timer, read automatically from the bulk pool payload, capped by an adjustable global fallback so a Never policy still surfaces and no per-pool configuration is required. The machine filter reads All, In session, Available, and Unavailable. `0.6.25` made the machine inventory list group each row by the collector's placement decision so the list and its counters agree.
+Overlay release `0.6.27` refines pool severity and fixes a display bug. Pool conditions now show the pool's name instead of its internal id. Pool severity is capacity-first: fewer than the minimum ready spares (default two) with faulted or stuck machines present is critical; fewer than the minimum with nothing broken is a warning; more than one machine unavailable is a warning even when spare capacity remains. Overlay release `0.6.26` brings the application page onto one uniform contract and completes the Horizon machine severity model. Every tab now leads with the same summary header — state, a plain-language verdict, up to six decision-grade tiles, and an attention list — above its detailed evidence. The Horizon machine inventory uses a three-colour severity model: red for genuinely down machines (agent unreachable, errors, already-used), yellow for machines intentionally out of service (maintenance, disabled), and unflagged for healthy machines (available, connected, and reconnectable disconnected sessions). A disconnected session is treated by age: a recent disconnect counts as in-session and is reconnectable, while a session disconnected past its reclaim window is stuck — unavailable to other users, reported red, with a message that the user has not reconnected in the elapsed time. The stuck threshold is each pool's own logoff-after-disconnect timer, read automatically from the bulk pool payload, capped by an adjustable global fallback so a Never policy still surfaces and no per-pool configuration is required. The machine filter reads All, In session, Available, and Unavailable. `0.6.25` made the machine inventory list group each row by the collector's placement decision so the list and its counters agree.
 
 `0.6.24` recorded connected versus disconnected per session so only an active
 session counts a machine as in use. `0.6.23` introduced the occupied class and
@@ -102,7 +102,7 @@ For an intentional release:
 For an agent-only release that preserves the current overlay:
 
 ```powershell
-.\scripts\build-release.ps1 -Version 0.6.16 -AgentOnly -OverlayVersion 0.6.26 -UpdateChecksums
+.\scripts\build-release.ps1 -Version 0.6.16 -AgentOnly -OverlayVersion 0.6.27 -UpdateChecksums
 ```
 
 Before publishing, review the full committed snapshot for secrets, private
@@ -118,12 +118,12 @@ fixtures.
 
 ## Next Recommended Action
 
-Overlay `0.6.26` is published and is the installer default. Rollout timing
+Overlay `0.6.27` is published and is the installer default. Rollout timing
 belongs to the operator: publishing changes no deployed node, because the
 overlay reapply timer re-applies the locally staged copy and performs no
 download.
 
-Apply `0.6.26` to overlay nodes when convenient, then confirm on the Horizon
+Apply `0.6.27` to overlay nodes when convenient, then confirm on the Horizon
 machine inventory: a genuinely down machine (agent unreachable, error) reads red,
 a maintenance machine reads yellow, and healthy machines (available, connected,
 recently disconnected) are unflagged. A session disconnected past its reclaim

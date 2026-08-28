@@ -411,6 +411,10 @@ $humanize_horizon_reason = static function ($value): string {
     $labels = [
         // Pool capacity. Exhaustion and failure are deliberately worded so they
         // cannot be mistaken for each other.
+        'spare_capacity_critical' => 'Fewer than two spares, with machines unavailable',
+        'low_spare_capacity' => 'Fewer than two spare machines available',
+        'multiple_machines_unavailable' => 'More than one machine unavailable',
+        'one_machine_unavailable' => 'One machine unavailable',
         'no_placement_capacity' => 'Fully in use; no free capacity',
         'ready_spares_faulted' => 'No ready spares; remaining spares are faulted',
         'multiple_faulted_spares' => 'Multiple faulted spares',
@@ -1036,6 +1040,10 @@ if ($horizon_surface_available) {
         $reason = (string) ($pool['health_reason'] ?? 'inventory_incomplete');
         $severity = ['critical' => 40, 'warning' => 30, 'incomplete' => 25, 'info' => 10][$state] ?? 20;
         $next = match ($reason) {
+            'spare_capacity_critical' => 'Recover the unavailable machines to restore spare capacity.',
+            'low_spare_capacity' => 'Spare capacity is low; add capacity or free machines.',
+            'multiple_machines_unavailable' => 'Review the unavailable machines.',
+            'one_machine_unavailable' => 'Review the unavailable machine when convenient.',
             'no_placement_capacity' => 'Add capacity or end idle sessions. Nothing is faulted.',
             'ready_spares_faulted' => 'Recover the faulted machines; no ready spare remains.',
             'multiple_faulted_spares' => 'Review the faulted machines.',
@@ -1090,17 +1098,20 @@ if ($horizon_surface_available) {
             if (! is_array($condition)) continue;
             $state = strtolower((string) ($condition['severity'] ?? $condition['state'] ?? 'incomplete'));
             $scope = strtolower((string) ($condition['scope'] ?? 'pod'));
-            $object = (string) ($condition['object_ref'] ?? ucfirst($scope));
+            // Ref (id) drives the drawer/pool linkage hash; label is what the operator
+            // sees. A pool's id is an opaque hash, so never show it as the label.
+            $objectRef = (string) ($condition['object_ref'] ?? ucfirst($scope));
+            $object = (string) ($condition['object_name'] ?? $objectRef);
             $action = 'disclosure';
             $target = '#windows-agent-horizon-pod-details';
             $ref = '';
             $filter = 'all';
             if ($scope === 'server') {
                 $action = 'member';
-                $ref = substr(hash('sha256', strtolower($object)), 0, 12);
+                $ref = substr(hash('sha256', strtolower($objectRef)), 0, 12);
             } elseif ($scope === 'pool') {
                 $action = 'pool';
-                $ref = substr(hash('sha256', $object), 0, 12);
+                $ref = substr(hash('sha256', $objectRef), 0, 12);
                 $filter = 'unavailable';
             } elseif ($scope === 'collector') {
                 $target = '#windows-agent-horizon-collector-trend';
@@ -1208,7 +1219,7 @@ if ($horizon_surface_available) {
         $sortedPools = $issue_first($horizon_pools, static function (array $row): int {
             return ['critical' => 50, 'warning' => 40, 'incomplete' => 30, 'info' => 20, 'disabled' => 10, 'ok' => 0][strtolower((string) ($row['health_state'] ?? 'incomplete'))] ?? 30;
         }, 'name');
-        $horizon_details .= '<section class="windows-agent-horizon-section" id="windows-agent-horizon-pool-workspace"><div class="windows-agent-horizon-section-heading"><h4>Pool capacity</h4><span class="windows-agent-horizon-policy"><i class="windows-agent-horizon-dot windows-agent-horizon-dot-info"></i> 1 faulted + ready capacity = info <i class="windows-agent-horizon-dot windows-agent-horizon-dot-warning"></i> 2+ faulted, or no free capacity = warning <i class="windows-agent-horizon-dot windows-agent-horizon-dot-critical"></i> 0 ready + faulted = critical</span></div>';
+        $horizon_details .= '<section class="windows-agent-horizon-section" id="windows-agent-horizon-pool-workspace"><div class="windows-agent-horizon-section-heading"><h4>Pool capacity</h4><span class="windows-agent-horizon-policy"><i class="windows-agent-horizon-dot windows-agent-horizon-dot-info"></i> 1 unavailable = info <i class="windows-agent-horizon-dot windows-agent-horizon-dot-warning"></i> 2+ unavailable, or low spare = warning <i class="windows-agent-horizon-dot windows-agent-horizon-dot-critical"></i> low spare + machines down = critical</span></div>';
         $horizon_details .= '<div class="windows-agent-horizon-pool-head" aria-hidden="true"><span>Pool</span><span>State</span><span>Machines</span><span>In session</span><span>Available</span><span>Unavailable</span><span>Placement headroom</span><span>Demand</span></div>';
         foreach ($sortedPools as $pool) {
             $poolKey = (string) ($pool['id'] ?? $pool['name'] ?? '');

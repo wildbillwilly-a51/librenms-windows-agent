@@ -1461,20 +1461,20 @@ final class PodCollector
             $held = (int) ($pool['spare_maintenance'] ?? 0);
             $occupied = (int) ($pool['spare_occupied'] ?? 0);
 
-            // Order matters. Failure outranks exhaustion, and exhaustion is not a
-            // failure: a fully utilised pool with nothing broken is at capacity,
-            // not degraded. Benign pending and intentionally held spares never
-            // score worse than informational on their own.
+            // Capacity-first policy. A pool needs a minimum of ready spares to
+            // absorb new sessions; the minimum is configurable and defaults to two.
+            // Below the minimum WITH faulted or stuck machines is critical: the
+            // shortage is caused by machines that will not recover on their own.
+            // Below the minimum with nothing broken (a fully utilised or recycling
+            // pool) is only a warning. More than one machine unavailable is a
+            // warning even when spare capacity remains.
+            $minimumSpares = max(1, (int) ($config['pool_minimum_spares'] ?? 2));
             if ((int) $pool['enabled'] === 0) [$state, $reason] = ['disabled', 'pool_disabled'];
             elseif ($incomplete) [$state, $reason] = ['incomplete', 'inventory_incomplete'];
-            elseif ($ready === 0 && $faulted > 0) [$state, $reason] = ['critical', 'ready_spares_faulted'];
-            elseif ($faulted >= 2) [$state, $reason] = ['warning', 'multiple_faulted_spares'];
-            elseif ($faulted === 1) [$state, $reason] = ['info', 'faulted_spare_capacity_remains'];
-            elseif ((int) $pool['machines_total'] > 0 && $spares === 0) [$state, $reason] = ['warning', 'no_placement_capacity'];
-            elseif ($ready === 0 && $occupied > 0) [$state, $reason] = ['warning', 'no_placement_capacity'];
-            elseif ($ready === 0 && $pending > 0) [$state, $reason] = ['info', 'spares_pending_only'];
-            elseif ($ready === 0 && $held > 0) [$state, $reason] = ['info', 'spares_held_only'];
-            elseif ($ready === 0 && $spares > 0) [$state, $reason] = ['incomplete', 'spare_readiness_undetermined'];
+            elseif ($ready < $minimumSpares && $faulted > 0) [$state, $reason] = ['critical', 'spare_capacity_critical'];
+            elseif ($ready < $minimumSpares) [$state, $reason] = ['warning', 'low_spare_capacity'];
+            elseif ($unready >= 2) [$state, $reason] = ['warning', 'multiple_machines_unavailable'];
+            elseif ($unready === 1) [$state, $reason] = ['info', 'one_machine_unavailable'];
             else [$state, $reason] = ['ok', 'within_threshold'];
             $pool['health_state'] = $state;
             $pool['health_reason'] = $reason;
@@ -1633,6 +1633,7 @@ final class PodCollector
                 'state' => $state,
                 'reason_code' => (string) ($pool['health_reason'] ?? 'pool_capacity_degraded'),
                 'object_ref' => (string) ($pool['id'] ?? $pool['name'] ?? 'pool'),
+                'object_name' => (string) ($pool['display_name'] ?? $pool['name'] ?? 'Pool'),
                 'impact' => 'capacity',
                 'evidence' => (int) ($pool['spare_ready'] ?? 0) . ' ready; ' . (int) ($pool['spare_unready'] ?? 0) . ' unavailable',
             ];
