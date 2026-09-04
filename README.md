@@ -366,7 +366,7 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Install a specific overlay version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.27
+curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.28
 ```
 
 Preview without changing the node:

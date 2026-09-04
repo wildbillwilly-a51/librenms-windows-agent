@@ -1,5 +1,24 @@
 # Changelog
 
+## Overlay 0.6.28 - 2026-09-04
+
+Overlay-only release. Horizon condition rows now state the real reason, from field
+feedback on 0.6.27 (a Connection Server flagged for attention with no visible why).
+Windows agent `0.6.16` and its artifacts are unchanged.
+
+- Connection Server (member), standalone gateway, and directory conditions no longer
+  ship a hardcoded evidence sentence. Each condition's evidence is now built from the
+  affected object's own fields, so the "Conditions requiring attention" row states the
+  actual trigger. An invalid Connection Server certificate reads
+  `active certificate invalid · Horizon status=OK · role=… · v…` instead of the generic
+  "Connection Server health or redundancy is degraded"; a degraded gateway carries its
+  reported `status=`, type, version, and active-connection count.
+- The Connection Server drawer renders an invalid certificate in red and gives a
+  certificate-specific next action (renew or rebind the certificate).
+- Curated reason labels for the member and gateway condition codes (for example
+  `active_certificate_invalid` → "Active certificate is invalid") replace the previous
+  auto-title-cased fallback. No RRD schema, protocol, or application identity change.
+
 ## Overlay 0.6.27 - 2026-08-28
 
 Overlay-only release. Pool severity refinement and a conditions display fix, from

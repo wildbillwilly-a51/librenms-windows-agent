@@ -1,5 +1,32 @@
 # Work Log
 
+## 2026-09-04 (overlay 0.6.28: condition evidence states the real reason)
+
+- Field report: a Horizon tab flagged a Connection Server for attention with no
+  visible reason. Diagnosed first, then confirmed against the live collector snapshot
+  before changing anything.
+- Root cause: the affected host was a Connection Server with an embedded gateway role,
+  not a standalone gateway (`horizon_gateways` was empty). Its member row showed
+  `certificate_valid=0` → `active_certificate_invalid`, health_state critical, firing
+  for weeks. The condition row's reason did say "certificate," but the evidence line
+  was a hardcoded "Connection Server health or redundancy is degraded" that pointed the
+  operator at redundancy/services (all healthy), so the real cause was effectively
+  invisible. Same hardcoded-sentence bug class as the gateway path.
+- Fix: added `memberEvidence()` and `gatewayEvidence()` in the collector so member,
+  gateway (and reused for the info observation) conditions carry evidence built from
+  the object's own fields. Page: curated labels for the member/gateway reason codes, a
+  `$horizon_condition_next` helper for certificate/gateway-specific next actions, and
+  the Connection Server drawer now renders `Certificate: Invalid` in red with a
+  certificate next action.
+- Verified the exact post-deploy string by running the real affected member row
+  through the updated `memberEvidence()` via reflection:
+  `active certificate invalid · Horizon status=OK · role=connection server with
+  embedded gateway · v…`. Operator confirmed the invalid certificate is legitimate but
+  non-impairing; the fix only makes the reason legible.
+- Validation: 33 central collector tests (added a member-certificate evidence
+  assertion and a gateway evidence assertion), 11 parser fixtures, 11 app-page
+  fixtures, full overlay PHP lint, all exit 0 with stderr inspected.
+
 ## 2026-08-28 (overlay 0.6.27: pool severity + conditions fix)
 
 - Deployed 0.6.26 to the cluster and confirmed the stuck-disconnect feature works
@@ -66,7 +93,7 @@
 ## 2026-08-20 (Phase 0 complete)
 
 - Operator confirmed on the live pages that overlay 0.6.25 resolves the Horizon
-  capacity and machine-state correctness work. cew-RDMS is a genuine critical
+  capacity and machine-state correctness work. One pool is a genuine critical
   (0 ready, faulted spares), not saturation; the capacity scope now varies rather
   than holding its worst value; disconnected machines read as unavailable in both
   the pool counts and the machine list; every inventory filter agrees with its

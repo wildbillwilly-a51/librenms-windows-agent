@@ -595,6 +595,41 @@ $tests['replication and gateway failures require persistence'] = static function
     expect($sustained['horizon_configuration_replications'][0]['state'] === 'warning', 'sustained replication failure did not warn');
     expect($sustained['horizon_gateways'][0]['state'] === 'warning', 'sustained gateway failure did not warn');
     expect($sustained['horizon_health_summary']['platform_health_state'] === 'warning', 'sustained platform degradation did not warn');
+
+    $gatewayConditions = array_values(array_filter(
+        $sustained['horizon_conditions'] ?? [],
+        static fn (array $condition): bool => strpos((string) ($condition['reason_code'] ?? ''), 'gateway_') === 0
+    ));
+    expect($gatewayConditions !== [], 'sustained gateway warning produced no condition');
+    expect(
+        str_contains((string) ($gatewayConditions[0]['evidence'] ?? ''), 'status=STALE'),
+        'gateway condition evidence does not carry the reported status'
+    );
+    expect(
+        $gatewayConditions[0]['object_ref'] === 'abc-horizon-gw',
+        'gateway condition does not name the gateway'
+    );
+};
+$tests['an invalid connection server certificate condition states the real reason'] = static function (): void {
+    $responses = successfulResponses();
+    foreach ($responses['rest/monitor/v3/connection-servers'] as &$member) {
+        $member['certificate'] = ['valid' => false];
+    }
+    unset($member);
+    $credential = ['username' => 'reader', 'password' => str_repeat('x', 12)];
+    $collector = new PodCollector(static fn (): ApiSession => new FakeHorizonSession($responses));
+    $first = $collector->collect(testConfig(), $credential);
+    $sustained = $collector->collect(testConfig(), $credential, $first);
+
+    $certConditions = array_values(array_filter(
+        $sustained['horizon_conditions'] ?? [],
+        static fn (array $c): bool => ($c['scope'] ?? '') === 'server' && ($c['reason_code'] ?? '') === 'active_certificate_invalid'
+    ));
+    expect($certConditions !== [], 'invalid certificate produced no server condition');
+    $evidence = (string) ($certConditions[0]['evidence'] ?? '');
+    expect(str_contains($evidence, 'active certificate invalid'), 'certificate condition evidence does not state the certificate problem');
+    expect(stripos($evidence, 'redundancy') === false, 'certificate condition still uses the generic redundancy sentence');
+    expect(str_contains($evidence, 'status=OK'), 'certificate condition evidence dropped the Horizon status context');
 };
 $tests['optional vendor metrics are fail-soft and expose mismatch'] = static function (): void {
     $responses = successfulResponses();

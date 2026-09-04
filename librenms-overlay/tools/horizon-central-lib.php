@@ -1555,7 +1555,7 @@ final class PodCollector
                     $state,
                     (string) ($member['reason_code'] ?? 'connection_server_health_degraded'),
                     (string) ($member['name'] ?? 'connection-server'),
-                    'Connection Server health or redundancy is degraded.'
+                    self::memberEvidence($member)
                 );
             }
             foreach (is_array($member['service_observations'] ?? null) ? $member['service_observations'] : [] as $service) {
@@ -1606,13 +1606,14 @@ final class PodCollector
         foreach ($snapshot['horizon_gateways'] ?? [] as $gateway) {
             if (! is_array($gateway)) continue;
             $state = strtolower((string) ($gateway['state'] ?? 'incomplete'));
+            $gatewayEvidence = self::gatewayEvidence($gateway);
             if (self::stateRank($state) >= self::stateRank('incomplete')) {
                 $conditions[] = self::condition(
                     'pod',
                     $state,
                     (string) ($gateway['reason_code'] ?? 'gateway_health_degraded'),
                     (string) ($gateway['name'] ?? 'gateway'),
-                    'Gateway connectivity is degraded.'
+                    $gatewayEvidence
                 );
             } elseif ($state === 'info') {
                 $observations[] = [
@@ -1621,7 +1622,7 @@ final class PodCollector
                     'reason_code' => (string) ($gateway['reason_code'] ?? 'gateway_observation'),
                     'object_ref' => (string) ($gateway['name'] ?? 'gateway'),
                     'component' => 'standalone_gateway',
-                    'evidence' => 'status=' . (string) ($gateway['status'] ?? 'UNKNOWN'),
+                    'evidence' => $gatewayEvidence,
                 ];
             }
         }
@@ -1691,6 +1692,65 @@ final class PodCollector
             'impact' => $scope,
             'evidence' => $evidence,
         ];
+    }
+
+    /**
+     * Build human-facing evidence for a standalone gateway from the fields the
+     * gateway row already carries, so the Conditions row states the actual
+     * trigger (the reported status) instead of a generic sentence.
+     *
+     * @param array<string,mixed> $gateway
+     */
+    private static function gatewayEvidence(array $gateway): string
+    {
+        $parts = ['status=' . (string) ($gateway['status'] ?? 'UNKNOWN')];
+        $type = trim((string) ($gateway['type'] ?? ''));
+        if ($type !== '') $parts[] = 'type=' . $type;
+        $version = trim((string) ($gateway['version'] ?? ''));
+        if ($version !== '') $parts[] = 'v' . $version;
+        $parts[] = (string) (int) ($gateway['active_connections'] ?? 0) . ' active connection(s)';
+
+        return implode(" \u{00b7} ", $parts);
+    }
+
+    /**
+     * Build human-facing evidence for a Connection Server member from its own
+     * fields, so the Conditions row names the actual problem (an invalid
+     * certificate, unhealthy services, or replication) instead of a generic
+     * "health or redundancy is degraded" sentence that points at the wrong thing.
+     *
+     * @param array<string,mixed> $member
+     */
+    private static function memberEvidence(array $member): string
+    {
+        $reason = (string) ($member['reason_code'] ?? '');
+        $servicesUnhealthy = (int) ($member['services_unhealthy'] ?? 0);
+        $replicationsUnhealthy = (int) ($member['configuration_replications_unhealthy'] ?? 0);
+
+        if ((int) ($member['certificate_valid'] ?? 1) === 0 || $reason === 'active_certificate_invalid') {
+            $primary = 'active certificate invalid';
+        } elseif ($servicesUnhealthy > 0) {
+            $names = [];
+            foreach (is_array($member['unhealthy_services'] ?? null) ? $member['unhealthy_services'] : [] as $service) {
+                $name = trim((string) ($service['name'] ?? ''));
+                if ($name !== '') $names[] = $name;
+            }
+            $primary = $servicesUnhealthy . ' service(s) unhealthy'
+                . ($names !== [] ? ' (' . implode(', ', array_slice($names, 0, 3)) . ')' : '');
+        } elseif ($replicationsUnhealthy > 0) {
+            $primary = $replicationsUnhealthy . ' configuration replication(s) unhealthy';
+        } else {
+            $primary = $reason !== '' ? str_replace('_', ' ', $reason) : 'health degraded';
+        }
+
+        $sep = " \u{00b7} ";
+        $context = ['Horizon status=' . (string) ($member['status'] ?? 'UNKNOWN')];
+        $role = trim((string) ($member['server_type'] ?? ''));
+        if ($role !== '') $context[] = 'role=' . str_replace('_', ' ', $role);
+        $version = trim((string) ($member['version'] ?? ''));
+        if ($version !== '') $context[] = 'v' . $version;
+
+        return $primary . $sep . implode($sep, $context);
     }
 
     /**

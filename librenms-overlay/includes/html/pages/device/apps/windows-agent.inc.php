@@ -432,6 +432,17 @@ $humanize_horizon_reason = static function ($value): string {
         'pool_capacity_degraded' => 'Pool capacity degraded',
         'pool_capacity_observation' => 'Pool capacity observation',
         'pool_inventory_incomplete' => 'Pool inventory incomplete',
+        // Connection Server member states.
+        'active_certificate_invalid' => 'Active certificate is invalid',
+        'connection_server_health_degraded' => 'Connection Server health degraded',
+        'connection_server_service_degraded' => 'Connection Server service degraded',
+        'connection_server_redundancy_degraded' => 'Connection Server redundancy degraded',
+        'domain_access_degraded' => 'Directory (domain) access degraded',
+        // Standalone gateway states.
+        'gateway_contact_degraded' => 'Gateway not contacted (stale)',
+        'gateway_unhealthy' => 'Gateway reporting a problem',
+        'gateway_health_degraded' => 'Gateway health degraded',
+        'gateway_health_transient' => 'Gateway health degraded (transient)',
         // Machine states.
         'machine_healthy' => 'Ready for placement',
         'machine_in_use' => 'Serving a user session',
@@ -461,6 +472,22 @@ $humanize_horizon_reason = static function ($value): string {
     ];
 
     return $labels[$value] ?? ucwords(str_replace('_', ' ', $value === '' ? 'unknown' : $value));
+};
+
+// Reason-aware next action for a Horizon condition. Keeps the generic guidance
+// as the fallback but points cert and gateway conditions at the real remedy.
+$horizon_condition_next = static function (string $scope, string $reasonCode): string {
+    if ($scope === 'collector') {
+        return 'Review collector reliability and endpoint evidence.';
+    }
+    if ($reasonCode === 'active_certificate_invalid') {
+        return 'Renew or rebind the Horizon server certificate on this Connection Server.';
+    }
+    if (strpos($reasonCode, 'gateway_') === 0) {
+        return 'Review the gateway status and last contact in the Gateways table below.';
+    }
+
+    return 'Open the related evidence and review the affected Horizon component.';
 };
 
 $format_horizon_age = static function ($seconds): string {
@@ -1098,6 +1125,7 @@ if ($horizon_surface_available) {
             if (! is_array($condition)) continue;
             $state = strtolower((string) ($condition['severity'] ?? $condition['state'] ?? 'incomplete'));
             $scope = strtolower((string) ($condition['scope'] ?? 'pod'));
+            $reasonCode = (string) ($condition['reason_code'] ?? 'health_condition');
             // Ref (id) drives the drawer/pool linkage hash; label is what the operator
             // sees. A pool's id is an opaque hash, so never show it as the label.
             $objectRef = (string) ($condition['object_ref'] ?? ucfirst($scope));
@@ -1122,9 +1150,9 @@ if ($horizon_surface_available) {
                 'severity' => ['critical' => 40, 'warning' => 30, 'incomplete' => 25][$state] ?? 20,
                 'state' => $state,
                 'object' => $object,
-                'reason' => $humanize_horizon_reason($condition['reason_code'] ?? 'health_condition'),
+                'reason' => $humanize_horizon_reason($reasonCode),
                 'evidence' => (string) ($condition['evidence'] ?? ''),
-                'next' => $scope === 'collector' ? 'Review collector reliability and endpoint evidence.' : 'Open the related evidence and review the affected Horizon component.',
+                'next' => $horizon_condition_next($scope, $reasonCode),
                 'action' => $action,
                 'target' => $target,
                 'ref' => $ref,
@@ -1175,6 +1203,7 @@ if ($horizon_surface_available) {
             ? in_array($memberState, ['ok', 'info'], true)
             : ($memberServices === [] && (int) ($member['configuration_replications_unhealthy'] ?? 0) === 0 && (int) ($member['certificate_valid'] ?? 1) === 1);
         $horizon_details .= '<aside id="windows-agent-horizon-member-drawer-' . $esc($memberRef) . '" class="windows-agent-horizon-detail-drawer" data-horizon-drawer-panel="' . $esc($memberRef) . '" hidden><div class="windows-agent-horizon-drawer-header"><h4>Connection Server details</h4><button type="button" class="close" data-horizon-drawer-close aria-label="Close"><span aria-hidden="true">&times;</span></button></div>';
+        $memberCertInvalid = (int) ($member['certificate_valid'] ?? 1) === 0;
         $horizon_details .= '<h3>' . $esc($memberName) . '</h3><p class="' . ($memberHealthy ? 'text-success' : 'text-warning') . '"><span class="glyphicon ' . ($memberHealthy ? 'glyphicon-ok-sign' : 'glyphicon-exclamation-sign') . '" aria-hidden="true"></span> ' . ($memberHealthy ? 'Healthy' : 'Attention required') . '</p><dl>';
         foreach ([
             'Horizon status' => $member['status'] ?? 'unknown',
@@ -1182,10 +1211,13 @@ if ($horizon_surface_available) {
             'Version' => $member['version'] ?? 'unknown',
             'Connections' => $member['connections'] ?? 0,
             'API role' => ((int) ($member['local_api_target'] ?? 0) === 1) ? 'Current API target' : 'Peer',
-            'Certificate' => ((int) ($member['certificate_valid'] ?? 1) === 1) ? 'Valid' : 'Invalid',
+            'Certificate' => $memberCertInvalid ? 'Invalid' : 'Valid',
             'Replication issues' => $member['configuration_replications_unhealthy'] ?? 0,
         ] as $label => $value) {
-            $horizon_details .= '<dt>' . $esc($label) . '</dt><dd>' . $esc($value) . '</dd>';
+            $ddInvalid = $label === 'Certificate' && $memberCertInvalid;
+            $horizon_details .= '<dt>' . $esc($label) . '</dt><dd>'
+                . ($ddInvalid ? '<span class="text-danger"><strong>' . $esc($value) . '</strong></span>' : $esc($value))
+                . '</dd>';
         }
         $horizon_details .= '</dl><div class="windows-agent-horizon-drawer-evidence"><h4>Unhealthy services</h4>';
         if ($memberServices === []) {
@@ -1200,7 +1232,12 @@ if ($horizon_surface_available) {
         if ((int) ($member['unhealthy_services_truncated'] ?? 0) === 1) {
             $horizon_details .= '<p class="text-warning">Additional unhealthy services were truncated.</p>';
         }
-        $horizon_details .= '</div><div class="windows-agent-horizon-drawer-next"><h4>Next action</h4><p>' . ($memberHealthy ? 'No action required.' : 'Review the listed Horizon service and related Connection Server components.') . '</p></div></aside>';
+        $memberNext = $memberHealthy
+            ? 'No action required.'
+            : ($memberCertInvalid
+                ? 'The active certificate is invalid. Renew or rebind the Horizon server certificate on this Connection Server.'
+                : 'Review the listed Horizon service and related Connection Server components.');
+        $horizon_details .= '</div><div class="windows-agent-horizon-drawer-next"><h4>Next action</h4><p>' . $esc($memberNext) . '</p></div></aside>';
     }
     $horizon_details .= '<button type="button" class="windows-agent-horizon-drawer-backdrop" data-horizon-drawer-backdrop hidden aria-label="Close details"></button>';
 
