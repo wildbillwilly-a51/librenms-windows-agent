@@ -204,11 +204,79 @@ final class HorizonCentralRuntime
     /** @param array<string,mixed> $pod @param array<string,mixed> $snapshot */
     private static function publish(array $pod, array $snapshot): void
     {
-        $device = Device::findByHostname((string) $pod['display_device']);
+        $primaryHost = strtolower(trim((string) ($pod['display_device'] ?? '')));
+        $device = Device::findByHostname($primaryHost);
         if (! $device) throw new HorizonFailure('display_device_not_found');
-        $app = Application::query()->where('device_id', $device->device_id)->where('app_type', 'windows-agent')->where('app_instance', '')->whereNull('deleted_at')->first();
+        $app = self::windowsAgentApp((int) $device->device_id);
         if (! $app) throw new HorizonFailure('windows_agent_application_not_found');
 
+        // The display device is the authoritative target and must succeed.
+        self::publishToDevice($device, $app, $snapshot);
+
+        // Fan the same pod-wide snapshot out to every other pod member that runs the
+        // agent, so any member's page shows the identical pod view (status, pools,
+        // gateways, conditions) and no operator has to know which node is reporting.
+        // Members are best-effort: one that is not monitored, has no windows-agent
+        // application, or races a delete is skipped without failing the collection.
+        // The member's own poll preserves these central keys because the collector
+        // stamps horizon_central_meta.source=central, which the parser keys on.
+        foreach (self::publishTargets($pod, $snapshot) as $hostname) {
+            if ($hostname === $primaryHost) continue;
+            try {
+                $memberDevice = Device::findByHostname($hostname);
+                if (! $memberDevice) continue;
+                $memberApp = self::windowsAgentApp((int) $memberDevice->device_id);
+                if (! $memberApp) continue;
+                self::publishToDevice($memberDevice, $memberApp, $snapshot);
+            } catch (\Throwable $e) {
+                self::log((string) ($pod['site'] ?? 'pod'), 'member_publish_skipped:' . $hostname);
+            }
+        }
+    }
+
+    private static function windowsAgentApp(int $deviceId): ?Application
+    {
+        return Application::query()
+            ->where('device_id', $deviceId)
+            ->where('app_type', 'windows-agent')
+            ->where('app_instance', '')
+            ->whereNull('deleted_at')
+            ->first();
+    }
+
+    /**
+     * Deduped lowercase hostnames that should receive the pod-wide snapshot: the
+     * display device always, plus every reported pod member resolved to a hostname
+     * (member name, suffixed with the pod dns_suffix when it is a short name). A pod
+     * may opt out of member fan-out with publish_to_members=false.
+     *
+     * @param array<string,mixed> $pod
+     * @param array<string,mixed> $snapshot
+     * @return list<string>
+     */
+    public static function publishTargets(array $pod, array $snapshot): array
+    {
+        $suffix = strtolower(trim((string) ($pod['dns_suffix'] ?? ''), " \t\n."));
+        $targets = [];
+        $add = static function (string $host) use (&$targets): void {
+            $host = strtolower(trim($host));
+            if ($host !== '' && ! in_array($host, $targets, true)) $targets[] = $host;
+        };
+        $add((string) ($pod['display_device'] ?? ''));
+        if (($pod['publish_to_members'] ?? true)) {
+            foreach ($snapshot['horizon_pod_members'] ?? [] as $member) {
+                if (! is_array($member)) continue;
+                $name = strtolower(trim((string) ($member['name'] ?? '')));
+                if ($name === '') continue;
+                $add(str_contains($name, '.') || $suffix === '' ? $name : $name . '.' . $suffix);
+            }
+        }
+
+        return $targets;
+    }
+
+    private static function publishToDevice(Device $device, Application $app, array $snapshot): void
+    {
         DB::transaction(static function () use ($app, $snapshot): void {
             /** @var Application|null $locked */
             $locked = Application::query()->whereKey($app->app_id)->lockForUpdate()->first();

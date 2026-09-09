@@ -25,13 +25,13 @@ and private exports do not belong here.
 
 ## Current Releases
 
-- Overlay version: `0.6.28`
+- Overlay version: `0.6.29`
 - Windows agent version: `0.6.16`
-- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.28.tar.gz`
+- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.29.tar.gz`
 - Windows MSI: `artifacts/librenms-windows-agent-0.6.16.msi`
 - Versioned agent config: `artifacts/librenms-windows-agent-config-0.6.16-win.json`
 - Checksums: `SHA256SUMS`
-- Overlay SHA256: `0cec6b3c02087ee579ccebc4cdab85ad69d42cec5170192f2049d020c3333cff`
+- Overlay SHA256: `37e0df6434e6c722291270fc29b664090b734a8324a0f55513fdae13bf797805`
 - Windows MSI SHA256: `5a40c9965a44179b09c57e4e3951e55982b983bfd1fd83b4e93cbeaaf5811732`
 - Versioned config SHA256: `94fd8b56e0ac2ca15f50dd0ffff1d3f9167032b4717aeecd5b091f336fbe404b`
 - Public overlay installer: `install.sh`
@@ -42,7 +42,17 @@ adds explicit Horizon service expectedness plus active-certificate health. The b
 matching versioned config, checks prerequisites and port ownership, prepares
 configuration before service startup, leaves registered upgrades inside MSI
 rollback, retains verbose diagnostics, and verifies a live protocol response.
-Overlay release `0.6.28` makes Horizon condition rows state the real reason.
+Overlay release `0.6.29` makes the central Horizon pod view visible on every pod
+member, not just the collector's display device. The central collector now fans the
+same pod-wide snapshot (status, pools, members, gateways, conditions) out to every
+Connection Server in the pod that runs the agent, so an operator can open any member
+and see identical pod data with local host evidence alongside it. Each member's own
+poll preserves the fanned-out data because the collector stamps the central snapshot
+source, which the parser keys on; data and metrics are both written so member graphs
+populate too. Fan-out is on by default and can be disabled per pod with
+`publish_to_members: false`. The Horizon tab now also names the Connection Server that
+answered the API ("Collected … • via …"). No RRD schema, protocol, or application
+identity change. Overlay release `0.6.28` makes Horizon condition rows state the real reason.
 Connection Server, standalone gateway, and directory conditions no longer ship a
 hardcoded sentence: each now carries evidence built from the affected object's own
 fields, so an invalid Connection Server certificate reads
@@ -127,18 +137,20 @@ fixtures.
 
 ## Next Recommended Action
 
-Overlay `0.6.28` is published and is the installer default. Rollout timing
+Overlay `0.6.29` is published and is the installer default. Rollout timing
 belongs to the operator: publishing changes no deployed node, because the
 overlay reapply timer re-applies the locally staged copy and performs no
 download.
 
-Apply `0.6.28` to overlay nodes when convenient, then confirm on a Horizon tab
-that any Connection Server, gateway, or directory condition in the "Conditions
-requiring attention" list now states the real reason and evidence. The confirmed
-field case was a Connection Server with an embedded gateway role reporting an
-invalid active certificate: its row should read "Active certificate is invalid"
-with evidence of the form `active certificate invalid · Horizon status=OK ·
-role=… · v…`, and its member drawer should show `Certificate: Invalid` in red
-with a certificate-specific next action. An invalid certificate that does not
-impair Horizon still reports critical until the certificate on that Connection
-Server is renewed or rebound.
+Apply `0.6.29` to overlay nodes when convenient. After the next central
+collection (trigger on the display device's poll, or the five-minute fallback),
+confirm that opening any Connection Server member in a pod — not just the
+display device — shows the full pod view (status, pools, members, gateways,
+conditions) alongside that member's own local host evidence, and that the
+freshness line names the reporting Connection Server ("Collected … • via …").
+A member that does not run the agent is skipped silently; a pod can opt out with
+`publish_to_members: false` in `.horizon-pods.json`. The fan-out was verified
+against real pod topology before release (the pure target-resolver produced every
+member hostname from the reported members plus the pod DNS suffix), but the
+database write to member devices runs only inside a live collection, so first
+deployment should confirm a non-display member actually receives the pod data.

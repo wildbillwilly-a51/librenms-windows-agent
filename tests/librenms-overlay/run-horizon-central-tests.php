@@ -631,6 +631,27 @@ $tests['an invalid connection server certificate condition states the real reaso
     expect(stripos($evidence, 'redundancy') === false, 'certificate condition still uses the generic redundancy sentence');
     expect(str_contains($evidence, 'status=OK'), 'certificate condition evidence dropped the Horizon status context');
 };
+$tests['pod snapshot fans out to every member device by default'] = static function (): void {
+    $pod = ['site' => 'abc', 'dns_suffix' => 'example.test', 'display_device' => 'abc-vcs2.example.test'];
+    $snapshot = ['horizon_pod_members' => [
+        ['name' => 'ABC-VCS1'],
+        ['name' => 'ABC-VCS2'],                 // resolves to the display device; must dedupe
+        ['name' => 'ABC-HORIZON-GW'],
+        ['name' => 'abc-vcs1.example.test'],     // already an FQDN; must dedupe with ABC-VCS1
+        'not-an-array',
+        ['name' => ''],
+    ]];
+    $targets = HorizonCentralRuntime::publishTargets($pod, $snapshot);
+    expect(
+        $targets === ['abc-vcs2.example.test', 'abc-vcs1.example.test', 'abc-horizon-gw.example.test'],
+        'fan-out target set incorrect: ' . implode(',', $targets)
+    );
+    $optedOut = HorizonCentralRuntime::publishTargets($pod + ['publish_to_members' => false], $snapshot);
+    expect(
+        $optedOut === ['abc-vcs2.example.test'],
+        'publish_to_members=false did not restrict fan-out to the display device: ' . implode(',', $optedOut)
+    );
+};
 $tests['optional vendor metrics are fail-soft and expose mismatch'] = static function (): void {
     $responses = successfulResponses();
     $responses['rest/monitor/v1/health-metrics'] = ['warning_count' => 2, 'error_count' => 1];
@@ -820,10 +841,12 @@ $tests['discovery reports TLS auth identity and cross-site ambiguity failures'] 
 $tests['capability manifest advertises the stable private integration contract'] = static function (): void {
     $path = dirname(__DIR__, 2) . '/librenms-overlay/tools/capabilities.json';
     $manifest = json_decode((string) file_get_contents($path), true, flags: JSON_THROW_ON_ERROR);
-    expect($manifest['overlay_version'] === '0.6.27', 'overlay capability version mismatch');
+    expect($manifest['overlay_version'] === '0.6.29', 'overlay capability version mismatch');
     expect((int) ($manifest['capabilities']['horizon_machine_state_taxonomy'] ?? 0) === 1, 'machine state taxonomy capability not advertised');
     expect((int) ($manifest['capabilities']['horizon_uniform_tab_summaries'] ?? 0) === 1, 'uniform tab summaries capability not advertised');
     expect((int) ($manifest['capabilities']['horizon_disconnected_stuck_detection'] ?? 0) === 1, 'disconnected stuck detection capability not advertised');
+    expect((int) ($manifest['capabilities']['horizon_condition_reason_evidence'] ?? 0) === 1, 'condition reason evidence capability not advertised');
+    expect((int) ($manifest['capabilities']['horizon_pod_view_on_all_members'] ?? 0) === 1, 'pod-view-on-all-members capability not advertised');
     expect($manifest['configuration_schema_version'] === 2, 'configuration schema version mismatch');
     expect($manifest['capabilities']['horizon_trigger_producer'] === 1, 'trigger capability missing');
     expect($manifest['capabilities']['horizon_central_worker'] === 1, 'worker capability missing');

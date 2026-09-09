@@ -1,5 +1,33 @@
 # Work Log
 
+## 2026-09-09 (overlay 0.6.29: pod view on every member)
+
+- Field follow-up to 0.6.28: a newly added Connection Server showed its own local
+  Horizon evidence but the central pod workspace read "Incomplete / not configured,"
+  because central data is published only to the pod's display device. The operator
+  wants any member to show the same pod status/pools, with no need to know which node
+  is the reporting one.
+- Verified the enabling mechanism against the live data before designing: the polling
+  parser already preserves the central data keys across a device's own polls when the
+  stored snapshot carries source=central (which the collector stamps), so seeding a
+  member once makes its own polls keep the data — no flicker, and no page or parser
+  change needed. The parser's preserved-key list matches the collector's DATA_KEYS.
+- Change: the collector's publish path now fans the pod-wide snapshot out to every pod
+  member device (display device plus each reported member resolved by name + pod DNS
+  suffix), writing both data and metrics so member graphs populate. Members are
+  best-effort; a member without the agent app is skipped. Added a pure
+  publishTargets() resolver (unit-tested) and left the DB write in publish(). Default
+  on, with a per-pod publish_to_members=false opt-out (no config-schema change; the
+  validator ignores unknown keys). Also surfaced the reporting endpoint on the tab
+  ("Collected … • via …").
+- Validation: 34 central collector tests (added a fan-out target-resolution test;
+  refreshed the capability-manifest version pin, which had gone stale at 0.6.27 and was
+  missed during the 0.6.28 release), 11 parser fixtures, 11 app-page fixtures, full
+  overlay PHP lint, all exit 0. Verified publishTargets against real pod topology (it
+  produced every member hostname from the reported members plus the DNS suffix). The
+  live DB fan-out to member devices runs only inside a real collection and is called
+  out for confirmation on first deployment.
+
 ## 2026-09-04 (overlay 0.6.28: condition evidence states the real reason)
 
 - Field report: a Horizon tab flagged a Connection Server for attention with no

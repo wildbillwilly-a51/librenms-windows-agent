@@ -1,5 +1,27 @@
 # Changelog
 
+## Overlay 0.6.29 - 2026-09-09
+
+Overlay-only release. The central Horizon pod view is now visible on every pod member,
+not only the collector's display device, from field feedback on 0.6.28 (an operator has
+no way to know which node is the reporting one). Windows agent `0.6.16` and its
+artifacts are unchanged.
+
+- The central collector fans the same pod-wide snapshot (status, pools, members,
+  gateways, conditions) out to every Connection Server in the pod that runs the agent,
+  in addition to the display device. Opening any member now shows the identical pod
+  view with that member's own local host evidence alongside it. Members are best-effort:
+  one that is not monitored or has no windows-agent application is skipped without
+  failing the collection.
+- Both data and metrics are written to each member, so member graphs populate too. Each
+  member's own poll preserves the fanned-out data because the collector stamps the
+  central snapshot source, which the parser already keys on — no flicker between polls.
+- Fan-out is on by default; a pod can opt out with `publish_to_members: false` in the
+  pod configuration.
+- The Horizon tab freshness line now names the Connection Server that answered the API
+  ("Collected … • via …"), so the reporting node is visible on every member.
+- No RRD schema, protocol, or application identity change.
+
 ## Overlay 0.6.28 - 2026-09-04
 
 Overlay-only release. Horizon condition rows now state the real reason, from field

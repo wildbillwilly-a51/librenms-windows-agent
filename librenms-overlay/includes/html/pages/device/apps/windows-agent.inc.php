@@ -1030,7 +1030,9 @@ if ($horizon_surface_available) {
             && (int) ($horizon_api_summary['machine_issues_truncated'] ?? 0) === 0
             && (int) ($horizon_api_summary['service_details_truncated'] ?? 0) === 0));
     $coverage = $coverageComplete ? 'Complete snapshot' : 'Inventory incomplete';
-    $horizon_details .= '<div class="windows-agent-horizon-freshness">Collected ' . $esc($freshness) . ' <span aria-hidden="true">•</span> ' . $esc($coverage) . '</div></div>';
+    $horizon_source = trim((string) ($horizon_central_meta['source_endpoint'] ?? ''));
+    $horizon_source_html = $horizon_source !== '' ? ' <span aria-hidden="true">•</span> via ' . $esc($horizon_source) : '';
+    $horizon_details .= '<div class="windows-agent-horizon-freshness">Collected ' . $esc($freshness) . ' <span aria-hidden="true">•</span> ' . $esc($coverage) . $horizon_source_html . '</div></div>';
     $healthScopes = [
         'Overall' => $horizon_health_summary['overall_health_state'] ?? $horizon_api_summary['overall_health_state'] ?? $horizon_api_summary['health_state'] ?? 'incomplete',
         'Platform' => $horizon_health_summary['platform_health_state'] ?? $horizon_api_summary['platform_health_state'] ?? $horizon_pod_summary['state'] ?? 'incomplete',
