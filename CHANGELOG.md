@@ -1,5 +1,27 @@
 # Changelog
 
+## Overlay 0.6.30 - 2026-09-09
+
+Overlay-only release. Adds per-pool Horizon availability metrics so LibreNMS alert rules
+can target individual clone pools. Windows agent `0.6.16` and its artifacts are
+unchanged.
+
+- Each Horizon clone pool's availability numbers are flattened into `application_metrics`
+  as `horizon_pool_<measure>:<key>`, where the key is the pool name sanitized to
+  `[A-Za-z0-9_-]`. Alert rules compare a single metric to a constant, so per-pool
+  alerting was impossible while the per-pool numbers lived only in the application data
+  blob; this promotes them.
+- Seven measures per pool: `horizon_pool_ready` (available ready spares),
+  `horizon_pool_ready_percent` (of whole-pool machines), `horizon_pool_machines_total`,
+  `horizon_pool_state` (`ok=0 info=1 warning=2 critical=3`; `disabled=-1`,
+  `incomplete=-2` sit below `ok`), `horizon_pool_maintenance`,
+  `horizon_pool_spare_total`, and `horizon_pool_unready`. Qualifiers keep the trailing
+  colon so `horizon_pool_ready:` does not also match `horizon_pool_ready_percent:`.
+- A `horizon_pool_availability_metrics` capability advertises support in
+  `capabilities.json`.
+- Additive to application metrics only. No RRD schema, protocol, or application identity
+  change; new visibility stays non-alerting by default.
+
 ## Overlay 0.6.29 - 2026-09-09
 
 Overlay-only release. The central Horizon pod view is now visible on every pod member,
