@@ -88,12 +88,13 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
             var state = metrics.ClonePoolsCritical > 0 ? "critical"
                 : metrics.ClonePoolsWarning > 0 ? "warning"
                 : metrics.ClonePoolsIncomplete > 0 ? "incomplete"
+                : metrics.ClonePoolsInformational > 0 ? "info"
                 : metrics.ClonePoolsTotal > 0 && metrics.ClonePoolsDisabled == metrics.ClonePoolsTotal ? "disabled"
                 : metrics.ClonePoolsTotal > 0 ? "ok" : "not_detected";
             return Single("windows_agent_horizon_pools_summary", string.Format(
                 CultureInfo.InvariantCulture,
-                "state={0} pools_total={1} pools_healthy={2} pools_warning={3} pools_critical={4} pools_incomplete={5} pools_disabled={6} spare_total={7} spare_ready={8} spare_unready={9} warning_percent={10} critical_percent={11} minimum_sample={12}",
-                Kv(state), metrics.ClonePoolsTotal, metrics.ClonePoolsHealthy, metrics.ClonePoolsWarning,
+                "state={0} pools_total={1} pools_healthy={2} pools_informational={3} pools_warning={4} pools_critical={5} pools_incomplete={6} pools_disabled={7} spare_total={8} spare_ready={9} spare_unready={10} warning_percent={11} critical_percent={12} minimum_sample={13}",
+                Kv(state), metrics.ClonePoolsTotal, metrics.ClonePoolsHealthy, metrics.ClonePoolsInformational, metrics.ClonePoolsWarning,
                 metrics.ClonePoolsCritical, metrics.ClonePoolsIncomplete, metrics.ClonePoolsDisabled, metrics.SpareMachinesTotal,
                 metrics.SpareMachinesReady, metrics.SpareMachinesUnready, config.PoolWarningUnreadyPercent,
                 config.PoolCriticalUnreadyPercent, config.PoolMinimumSpareSample));

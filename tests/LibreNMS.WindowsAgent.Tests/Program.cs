@@ -50,6 +50,7 @@ namespace LibreNMS.WindowsAgent.Tests
                 ("shared Horizon health policy fixtures", SharedHorizonHealthPolicyFixtures),
                 ("horizon pool health warning threshold", HorizonPoolHealthWarningThreshold),
                 ("horizon pool health critical threshold", HorizonPoolHealthCriticalThreshold),
+                ("horizon pool health single unavailable is informational", HorizonPoolHealthSingleUnavailableIsInformational),
                 ("horizon pool health no ready spares", HorizonPoolHealthNoReadySpares),
                 ("horizon pool health no unused capacity", HorizonPoolHealthNoUnusedCapacity),
                 ("horizon pool health incomplete inventory", HorizonPoolHealthIncompleteInventory),
@@ -586,6 +587,22 @@ namespace LibreNMS.WindowsAgent.Tests
                 AssertEqual(row.GetProperty("expected_state").GetString(), result.State);
                 AssertEqual(row.GetProperty("reason_code").GetString(), result.ReasonCode);
             }
+        }
+
+        private static void HorizonPoolHealthSingleUnavailableIsInformational()
+        {
+            // A single unavailable spare while ready capacity remains is informational,
+            // not incomplete. The estate tally counts this as ClonePoolsInformational and
+            // emits pools_informational; it must never be miscounted as pools_incomplete.
+            var result = HorizonPoolHealth.Evaluate(new HorizonPoolHealthInput
+            {
+                MachinesTotal = 20,
+                SpareTotal = 10,
+                SpareReady = 9,
+                SpareUnready = 1
+            });
+            AssertEqual("info", result.State);
+            AssertEqual("one_unavailable_capacity_remains", result.Reason);
         }
 
         private static void HorizonPoolHealthNoReadySpares()

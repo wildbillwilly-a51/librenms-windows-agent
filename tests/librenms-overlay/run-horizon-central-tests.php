@@ -293,6 +293,30 @@ $tests['low spare capacity is critical with faults and a warning when merely bus
     expect((int) $fullyUsed['spare_faulted'] === 0, 'in-use machines must not be counted as faulted spares');
     expect((int) $fullyUsed['machines_with_sessions'] === 2, 'in-use machines were not counted as in use');
 };
+$tests['a single unavailable spare while capacity remains is informational, not incomplete'] = static function (): void {
+    // Exactly one unavailable machine while ready capacity remains is an
+    // informational observation, never a fault and never "incomplete". The estate
+    // rollup must count it under pools_informational (additive, non-alerting
+    // visibility) and leave pools_incomplete at zero.
+    $responses = successfulResponses();
+    $responses['rest/inventory/v1/desktop-pools'] = [
+        ['id' => 'one-down', 'name' => 'One Down', 'source' => 'INSTANT_CLONE', 'enabled' => true],
+    ];
+    $responses['rest/inventory/v1/sessions?page=1&size=100'] = [];
+    $responses['rest/inventory/v1/machines?page=1&size=100'] = [
+        ['id' => 'a1', 'desktop_pool_id' => 'one-down', 'state' => 'AVAILABLE'],
+        ['id' => 'a2', 'desktop_pool_id' => 'one-down', 'state' => 'AVAILABLE'],
+        ['id' => 'a3', 'desktop_pool_id' => 'one-down', 'state' => 'AGENT_UNREACHABLE'],
+    ];
+    $snapshot = (new PodCollector(static fn (): ApiSession => new FakeHorizonSession($responses)))->collect(testConfig(), ['username' => 'reader', 'password' => str_repeat('x', 12)]);
+    $pool = $snapshot['horizon_pools'][0];
+    expect($pool['health_state'] === 'info' && $pool['health_reason'] === 'one_machine_unavailable', 'a single unavailable spare with capacity remaining should be informational');
+    expect((int) $pool['spare_ready'] === 2 && (int) $pool['spare_unready'] === 1, 'ready/unready spare counts were not as expected for the informational case');
+    $summary = $snapshot['horizon_pools_summary'];
+    expect($summary['pools_informational'] === 1, 'the informational pool was not counted in the estate rollup');
+    expect($summary['pools_incomplete'] === 0, 'an informational pool must never be counted as incomplete');
+    expect($summary['state'] === 'info', 'an estate with only an informational pool should roll up to info');
+};
 $tests['machine state taxonomy classifies placement health and issues independently'] = static function (): void {
     // Ready and in-use are both healthy; only one is free capacity.
     $ready = PodCollector::classifyMachineState('AVAILABLE', false, false);
