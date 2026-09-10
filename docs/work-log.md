@@ -1,5 +1,29 @@
 # Work Log
 
+## 2026-09-10 (pending release: count Horizon `info` pools in the estate rollup)
+
+- Objective: close the pre-existing gap logged under 0.6.30 — the agent never emitted
+  the `horizon_pools_informational` estate rollup, and `info` pools (one unavailable
+  spare while ready capacity remains) were miscounted as `pools_incomplete`.
+- Change (agent): added a `ClonePoolsInformational` counter on `HorizonApiMetrics`,
+  incremented it on per-pool `health_state == "info"` (removing `info` from the `else`
+  that fed `ClonePoolsIncomplete`), and added `pools_informational=` to the
+  `windows_agent_horizon_pools_summary` line. The estate `state` on that line now rolls
+  up to `info` when only informational pools remain, mirroring the central-lib ladder.
+  Additive and non-alerting: `OverallHealth` still warns only on `ClonePoolsIncomplete`,
+  so `info` pools no longer trigger a false estate warning.
+- Change (overlay): no poller change needed — `windows_agent.inc.php` already reads
+  `pools_informational` and maps per-pool `info` → `horizon_pool_state = 1`. The app
+  page already renders `info` per pool and correctly excludes it from the "Pool issues"
+  count. Updated the stale bug note in `docs/horizon-monitoring.md`.
+- Tests: added a .NET `HorizonPoolHealth` `info` classification test; extended the
+  `horizon-detected` parser/app-page fixture with an `info` pool; added a central test
+  asserting a single-unavailable-spare pool scores `info`/`one_machine_unavailable` and
+  rolls up to `pools_informational=1`, `pools_incomplete=0`.
+- Validation: `dotnet` agent suite 61/61 (Release); overlay parser 11/11, central 35/35,
+  app-page 11/11 on PHP 8.3 (via WSL). No version bump, no build/publish — left to a
+  separate release step.
+
 ## 2026-09-09 (overlay 0.6.30: per-pool Horizon availability metrics)
 
 - Objective: emit per-pool Horizon availability metrics so LibreNMS alert rules (which

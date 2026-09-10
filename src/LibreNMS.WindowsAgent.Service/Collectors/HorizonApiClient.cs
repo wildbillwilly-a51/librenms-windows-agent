@@ -43,6 +43,7 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
         public bool MachinesTruncated { get; set; }
         public int ClonePoolsTotal { get; set; }
         public int ClonePoolsHealthy { get; set; }
+        public int ClonePoolsInformational { get; set; }
         public int ClonePoolsWarning { get; set; }
         public int ClonePoolsCritical { get; set; }
         public int ClonePoolsIncomplete { get; set; }
@@ -405,6 +406,7 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
                 metrics.SpareMachinesReady += pool.SpareReady;
                 metrics.SpareMachinesUnready += pool.SpareUnready;
                 if (pool.HealthState == "ok") metrics.ClonePoolsHealthy++;
+                else if (pool.HealthState == "info") metrics.ClonePoolsInformational++;
                 else if (pool.HealthState == "warning") metrics.ClonePoolsWarning++;
                 else if (pool.HealthState == "critical") metrics.ClonePoolsCritical++;
                 else if (pool.HealthState == "disabled") metrics.ClonePoolsDisabled++;

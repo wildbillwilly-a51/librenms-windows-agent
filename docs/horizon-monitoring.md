@@ -383,10 +383,12 @@ capacity remains — a heads-up, not a page. `disabled` (`-1`) and `incomplete`
 purpose: an intentionally-disabled pool must not page, and a pool whose
 inventory could not be fully read has an *unknown* severity, not a bad one.
 The per-pool `state` value comes straight from the collector's per-pool
-`health_state`, so it reflects `info` even though the estate-wide
-`horizon_pools_informational` rollup does not yet count it. "A pool stopped
-reporting entirely" is a distinct event — detect it with the estate-wide
-`horizon_pools_incomplete > 0` rollup, not by watching a per-pool row disappear.
+`health_state`, and the estate-wide `horizon_pools_informational` rollup counts
+those `info` pools directly (the agent emits `pools_informational` on the pool
+summary line, and an `info` pool is no longer miscounted as
+`horizon_pools_incomplete`). "A pool stopped reporting entirely" is a distinct
+event — detect it with the estate-wide `horizon_pools_incomplete > 0` rollup,
+not by watching a per-pool row disappear.
 
 **Self-scoping.** A per-pool row exists only on devices that actually report
 that pool, so a pool-specific rule matches only the right device — unlike the
