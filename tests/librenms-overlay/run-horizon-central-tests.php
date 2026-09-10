@@ -841,12 +841,13 @@ $tests['discovery reports TLS auth identity and cross-site ambiguity failures'] 
 $tests['capability manifest advertises the stable private integration contract'] = static function (): void {
     $path = dirname(__DIR__, 2) . '/librenms-overlay/tools/capabilities.json';
     $manifest = json_decode((string) file_get_contents($path), true, flags: JSON_THROW_ON_ERROR);
-    expect($manifest['overlay_version'] === '0.6.29', 'overlay capability version mismatch');
+    expect($manifest['overlay_version'] === '0.6.30', 'overlay capability version mismatch');
     expect((int) ($manifest['capabilities']['horizon_machine_state_taxonomy'] ?? 0) === 1, 'machine state taxonomy capability not advertised');
     expect((int) ($manifest['capabilities']['horizon_uniform_tab_summaries'] ?? 0) === 1, 'uniform tab summaries capability not advertised');
     expect((int) ($manifest['capabilities']['horizon_disconnected_stuck_detection'] ?? 0) === 1, 'disconnected stuck detection capability not advertised');
     expect((int) ($manifest['capabilities']['horizon_condition_reason_evidence'] ?? 0) === 1, 'condition reason evidence capability not advertised');
     expect((int) ($manifest['capabilities']['horizon_pod_view_on_all_members'] ?? 0) === 1, 'pod-view-on-all-members capability not advertised');
+    expect((int) ($manifest['capabilities']['horizon_pool_availability_metrics'] ?? 0) === 1, 'pool availability metrics capability not advertised');
     expect($manifest['configuration_schema_version'] === 2, 'configuration schema version mismatch');
     expect($manifest['capabilities']['horizon_trigger_producer'] === 1, 'trigger capability missing');
     expect($manifest['capabilities']['horizon_central_worker'] === 1, 'worker capability missing');

@@ -1,5 +1,25 @@
 # Work Log
 
+## 2026-09-09 (overlay 0.6.30: per-pool Horizon availability metrics)
+
+- Objective: emit per-pool Horizon availability metrics so LibreNMS alert rules (which
+  compare one metric to a constant) can target individual clone pools. Requested by a
+  downstream alerting project.
+- Change: the overlay poller flattens each `$horizon_pools` row into `application_metrics`
+  as `horizon_pool_<measure>:<key>` (key = pool name sanitized to `[A-Za-z0-9_-]`), seven
+  measures per pool. `horizon_pool_state` maps the collector's per-pool `health_state` to
+  an ordinal (`ok=0 info=1 warning=2 critical=3`; `disabled=-1`, `incomplete=-2`).
+  Overlay-only, additive to `$fields`; no agent/protocol change. Added the
+  `horizon_pool_availability_metrics` capability. Extended the `horizon-detected` parser
+  fixture and documented the contract in `docs/horizon-monitoring.md` and
+  `docs/suggested-alerts.md`.
+- Validation: overlay parser, app-page, and central fixtures all pass on PHP 8.3; the
+  `dotnet` agent test suite passes via the release build; `bash -n install.sh` clean.
+- Notes: publishing does not deploy — overlay nodes change only when the operator runs
+  the installer. Pre-existing gap logged separately: the collector never emits
+  `horizon_pools_informational`, so `info` pools are miscounted as incomplete in the
+  estate rollup, while the new per-pool `state` reports `info` correctly.
+
 ## 2026-09-09 (overlay 0.6.29: pod view on every member)
 
 - Field follow-up to 0.6.28: a newly added Connection Server showed its own local

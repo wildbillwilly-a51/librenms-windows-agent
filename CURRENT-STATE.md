@@ -25,13 +25,13 @@ and private exports do not belong here.
 
 ## Current Releases
 
-- Overlay version: `0.6.29`
+- Overlay version: `0.6.30`
 - Windows agent version: `0.6.16`
-- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.29.tar.gz`
+- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.30.tar.gz`
 - Windows MSI: `artifacts/librenms-windows-agent-0.6.16.msi`
 - Versioned agent config: `artifacts/librenms-windows-agent-config-0.6.16-win.json`
 - Checksums: `SHA256SUMS`
-- Overlay SHA256: `37e0df6434e6c722291270fc29b664090b734a8324a0f55513fdae13bf797805`
+- Overlay SHA256: `8791e8b35a721c77837973bc513fcb7afeda99c7ceda7d09e215d3c5a2d8c2a3`
 - Windows MSI SHA256: `5a40c9965a44179b09c57e4e3951e55982b983bfd1fd83b4e93cbeaaf5811732`
 - Versioned config SHA256: `94fd8b56e0ac2ca15f50dd0ffff1d3f9167032b4717aeecd5b091f336fbe404b`
 - Public overlay installer: `install.sh`
@@ -42,7 +42,15 @@ adds explicit Horizon service expectedness plus active-certificate health. The b
 matching versioned config, checks prerequisites and port ownership, prepares
 configuration before service startup, leaves registered upgrades inside MSI
 rollback, retains verbose diagnostics, and verifies a live protocol response.
-Overlay release `0.6.29` makes the central Horizon pod view visible on every pod
+Overlay release `0.6.30` adds per-pool Horizon availability metrics. Each clone pool's
+availability numbers are flattened into `application_metrics` as
+`horizon_pool_<measure>:<key>` (key = pool name sanitized to `[A-Za-z0-9_-]`), so
+LibreNMS alert rules — which compare a single metric to a constant — can target an
+individual pool's ready count, ready percent, or collector severity. Seven measures per
+pool (`ready`, `ready_percent`, `machines_total`, `state`, `maintenance`, `spare_total`,
+`unready`); a `horizon_pool_availability_metrics` capability advertises support.
+Additive to application metrics only, non-alerting by default, no RRD/protocol/identity
+change. Overlay release `0.6.29` makes the central Horizon pod view visible on every pod
 member, not just the collector's display device. The central collector now fans the
 same pod-wide snapshot (status, pools, members, gateways, conditions) out to every
 Connection Server in the pod that runs the agent, so an operator can open any member
@@ -137,20 +145,18 @@ fixtures.
 
 ## Next Recommended Action
 
-Overlay `0.6.29` is published and is the installer default. Rollout timing
+Overlay `0.6.30` is published and is the installer default. Rollout timing
 belongs to the operator: publishing changes no deployed node, because the
 overlay reapply timer re-applies the locally staged copy and performs no
 download.
 
-Apply `0.6.29` to overlay nodes when convenient. After the next central
-collection (trigger on the display device's poll, or the five-minute fallback),
-confirm that opening any Connection Server member in a pod — not just the
-display device — shows the full pod view (status, pools, members, gateways,
-conditions) alongside that member's own local host evidence, and that the
-freshness line names the reporting Connection Server ("Collected … • via …").
-A member that does not run the agent is skipped silently; a pod can opt out with
-`publish_to_members: false` in `.horizon-pods.json`. The fan-out was verified
-against real pod topology before release (the pure target-resolver produced every
-member hostname from the reported members plus the pod DNS suffix), but the
-database write to member devices runs only inside a live collection, so first
-deployment should confirm a non-display member actually receives the pod data.
+Apply `0.6.30` to the overlay nodes that poll Windows-agent devices when
+convenient. After the next poll of a device that reports Horizon clone pools,
+confirm the per-pool metrics appear in `application_metrics` — for example one
+`horizon_pool_ready:<pool>` row per reporting pool, plus the companion
+`horizon_pool_ready_percent`, `horizon_pool_machines_total`, `horizon_pool_state`
+(`ok=0 info=1 warning=2 critical=3`), `horizon_pool_maintenance`,
+`horizon_pool_spare_total`, and `horizon_pool_unready`. The emission was validated
+against the overlay parser fixtures on PHP 8.3; these rows exist only on devices
+that actually report a pool, so verification requires a live poll of a Horizon
+device.
