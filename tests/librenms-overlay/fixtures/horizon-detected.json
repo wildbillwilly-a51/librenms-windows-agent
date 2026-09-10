@@ -75,7 +75,21 @@
       "horizon_pools_total": 2,
       "horizon_pools_warning": 1,
       "horizon_spare_ready": 15,
-      "horizon_spare_unready": 5
+      "horizon_spare_unready": 5,
+      "horizon_pool_ready:instant-pool-a": 10,
+      "horizon_pool_ready_percent:instant-pool-a": 20,
+      "horizon_pool_machines_total:instant-pool-a": 50,
+      "horizon_pool_state:instant-pool-a": 0,
+      "horizon_pool_maintenance:instant-pool-a": 0,
+      "horizon_pool_spare_total:instant-pool-a": 10,
+      "horizon_pool_unready:instant-pool-a": 0,
+      "horizon_pool_ready:instant-pool-b": 5,
+      "horizon_pool_ready_percent:instant-pool-b": 12.5,
+      "horizon_pool_machines_total:instant-pool-b": 40,
+      "horizon_pool_state:instant-pool-b": 2,
+      "horizon_pool_maintenance:instant-pool-b": 1,
+      "horizon_pool_spare_total:instant-pool-b": 10,
+      "horizon_pool_unready:instant-pool-b": 5
     },
     "data": {
       "horizon_summary.state": "ok",

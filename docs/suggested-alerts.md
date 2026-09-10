@@ -37,6 +37,34 @@ these as recommended starting points and tune thresholds for the local estate.
 | Horizon Connection Server health | `horizon_health_issues` | `> 0` on server-side Horizon hosts | Critical |
 | FactoryTalk core service health | `factorytalk_health_issues` | `> 0` on FactoryTalk hosts | Warning |
 
+## Horizon Per-Pool Availability
+
+Per-pool metrics are keyed `horizon_pool_<measure>:<key>`, where `<key>` is the
+sanitized pool name (see `docs/horizon-monitoring.md`). Rules select pools by
+qualifying the metric name; always include the trailing colon.
+
+| Purpose | Metric qualifier | Suggested condition | Severity |
+| --- | --- | --- | --- |
+| One pool below N ready | `= "horizon_pool_ready:FTVW11SE"` | `< N` | Warning/Critical |
+| One pool below X% ready | `= "horizon_pool_ready_percent:FTVW11SE"` | `< X` | Warning/Critical |
+| Any pool at a site below N ready | `contains "horizon_pool_ready:FTVW11"` | `< N` | Warning |
+| Collector says pool critical | `contains "horizon_pool_state:"` | `>= 3` | Critical |
+| Collector says warning or worse | `contains "horizon_pool_state:"` | `>= 2` | Warning |
+| Suppress drained pools | `contains "horizon_pool_maintenance:"` | pair as `... && ...maintenance = 0` | — |
+| A pool stopped reporting | `horizon_pools_incomplete` (estate rollup) | `> 0` | Warning |
+
+- These rows are self-scoping: a `horizon_pool_*:<key>` row exists only on the
+  device that reports that pool, so pool-specific rules match only the right
+  host. Do not use the estate-wide summary rollups (which default to `0`
+  everywhere) for pool-level conditions.
+- `horizon_pool_state` is a severity ordinal (`ok=0, info=1, warning=2,
+  critical=3`); `disabled=-1` and `incomplete=-2` sit below `ok`, so `>= 2` /
+  `>= 3` rules skip them. `info` is a single unavailable spare while ready
+  capacity remains — usually not worth paging. Detecting "a pool went dark" is
+  the job of `horizon_pools_incomplete`, not a vanished per-pool row.
+- Require the condition to persist for at least two polls so instant-clone
+  replacement waves do not page from a single sample.
+
 ## Certificate And Backup Health
 
 | Purpose | Metric | Suggested condition | Severity |

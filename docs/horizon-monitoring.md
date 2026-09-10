@@ -339,6 +339,71 @@ spare set with zero ready machines is critical, and an enabled non-empty pool
 with every machine in session is critical for capacity exhaustion. These
 states are visibility only; no alert rules are installed or enabled.
 
+## Per-Pool Alerting Metrics
+
+LibreNMS alert rules can only evaluate the flat `application_metrics` table: a
+single numeric metric compared against a constant. The estate-wide Horizon
+rollups (`horizon_pools_total/informational/warning/critical/incomplete`,
+`horizon_spare_total/ready/unready`) live there, but the per-pool numbers
+otherwise live only inside the application `data` blob, which alert rules cannot
+query. The overlay poller therefore flattens each pool's measures into
+`application_metrics` under a stable naming contract so downstream systems
+(e.g. AlertOps) can build per-pool availability rules.
+
+**Naming contract:** `horizon_pool_<measure>:<key>`.
+
+- `<key>` is the Horizon pool `name` (already token-like, e.g. `FTVW11SE`),
+  sanitized to `[A-Za-z0-9_-]` — any other character becomes `_`. Clean names
+  pass through unchanged. Match on this sanitized key, not the display name.
+- The colon delimiter is safe here because these values go through
+  `update_application()` into `application_metrics` (a varchar column), not
+  through an RRD dataset, so RRD field-name limits do not apply.
+- Qualifiers **must** include the trailing colon so prefixes do not collide:
+  `contains "horizon_pool_ready:"` matches all pools' ready counts without also
+  matching `horizon_pool_ready_percent:`. Selection modes: exact
+  (`= "horizon_pool_ready:FTVW11SE"`), keyword (`contains "horizon_pool_ready:FTVW11"`),
+  all pools (`contains "horizon_pool_ready:"`).
+
+| Metric | Value | Notes |
+| --- | --- | --- |
+| `horizon_pool_ready:<key>` | `spare_ready` | "available" = ready spares (`AVAILABLE`) that can accept a session now |
+| `horizon_pool_ready_percent:<key>` | `round(spare_ready * 100 / machines_total, 1)` | denominator is whole-pool `machines_total`; `0` when the pool has no machines |
+| `horizon_pool_machines_total:<key>` | `machines_total` | denominator / capacity context |
+| `horizon_pool_state:<key>` | severity ordinal | `ok=0, info=1, warning=2, critical=3`; `disabled=-1`, `incomplete=-2` sit below `ok` |
+| `horizon_pool_maintenance:<key>` | `spare_maintenance` | count of spares in maintenance; test `> 0` for a boolean |
+| `horizon_pool_spare_total:<key>` | `spare_total` | |
+| `horizon_pool_unready:<key>` | `spare_unready` | provisioning/powering/errored spares |
+
+**State encoding rationale.** `horizon_pool_state` carries only the positive
+severity axis, matching the count-based model in *Clone-Pool Health Semantics*:
+`ok < info < warning < critical`, so `>= 2` means "warning or worse" and `= 3`
+(or `>= 3`) means "critical". `info` (`1`) is one unavailable spare while ready
+capacity remains — a heads-up, not a page. `disabled` (`-1`) and `incomplete`
+(`-2`) are sentinels below `ok`, kept out of every positive-threshold rule on
+purpose: an intentionally-disabled pool must not page, and a pool whose
+inventory could not be fully read has an *unknown* severity, not a bad one.
+The per-pool `state` value comes straight from the collector's per-pool
+`health_state`, so it reflects `info` even though the estate-wide
+`horizon_pools_informational` rollup does not yet count it. "A pool stopped
+reporting entirely" is a distinct event — detect it with the estate-wide
+`horizon_pools_incomplete > 0` rollup, not by watching a per-pool row disappear.
+
+**Self-scoping.** A per-pool row exists only on devices that actually report
+that pool, so a pool-specific rule matches only the right device — unlike the
+summary rollups, which default to `0` on every host. The trade-off: if a pool
+stops reporting, an exact-match per-pool rule silently stops matching, which is
+why `horizon_pools_incomplete` remains the coarse "went dark" guard.
+
+**Cardinality.** Seven measures per pool. These are indexed DB rows, not RRD
+files, so a pod with a few dozen pools adds a few hundred rows to a table that
+already holds ~180 entries per device — acceptable.
+
+**Collision assumption.** Pool `name` is unique within a pod and normally
+already matches `[A-Za-z0-9_-]`, so sanitization is a no-op in practice. Two
+names that sanitized to the same key would collide (last write wins); this is an
+accepted, documented risk rather than a guarded case, because the pool line does
+not currently carry a pool id to disambiguate with.
+
 ## Live Validation and Later Scope
 
 Release validation covers generic fixtures, while site deployment remains a
