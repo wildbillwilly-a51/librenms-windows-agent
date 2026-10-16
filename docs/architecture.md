@@ -100,8 +100,15 @@ and diagnostics.
   `windows_agent_performance_network`, and `windows_agent_performance_processes`: bounded local
   pressure evidence for CPU queue, memory/paging, disk latency/queue, network
   errors, and top CPU/memory process context.
-- `windows_agent_sql_server_summary` and `windows_agent_sql_server_instances`: local SQL Server
-  service/instance/listener visibility without SQL login.
+- `windows_agent_sql_server_summary`, `windows_agent_sql_server_instances`, and
+  `windows_agent_sql_server_components`: local SQL Server instance, SQL Agent, and
+  component visibility without a SQL login. Instance identity, edition, patch level,
+  and TCP endpoints come from the registry under
+  `HKLM\SOFTWARE\Microsoft\Microsoft SQL Server`, so named instances report their real
+  port instead of a 1433/1434 guess. Engine services are mapped to their
+  `sqlservr.exe` process id, and engine processes no detected service owns are counted.
+  SQL Agent, component, and SQL Browser verdicts are expectedness-aware, using the same
+  `expected`/`severity`/`reason`/`impact` vocabulary as the Horizon collector.
 - `windows_agent_iis_summary`, `windows_agent_iis_sites`, `windows_agent_iis_app_pools`, and
   `windows_agent_iis_bindings`: local IIS role, site, app pool, binding, and certificate
   thumbprint visibility.

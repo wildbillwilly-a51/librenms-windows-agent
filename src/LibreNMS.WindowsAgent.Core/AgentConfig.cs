@@ -155,6 +155,12 @@ namespace LibreNMS.WindowsAgent.Core
     public sealed class SqlServerConfig
     {
         public string Mode { get; set; } = "auto";
+
+        /// <summary>Emit non-engine SQL Server component services (SSAS, SSRS, Full-Text, Launchpad, VSS writer).</summary>
+        public bool IncludeComponents { get; set; } = true;
+
+        /// <summary>Map engine services to their sqlservr.exe process ids and report unowned engine processes.</summary>
+        public bool IncludeProcessMapping { get; set; } = true;
     }
 
     public sealed class IisConfig

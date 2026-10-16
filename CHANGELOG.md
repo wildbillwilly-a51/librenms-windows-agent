@@ -1,5 +1,53 @@
 # Changelog
 
+## Unreleased
+
+SQL Server surface collector correctness. Agent and overlay change together; no
+version has been cut and no artifact has been rebuilt.
+
+- Per-instance TCP endpoints are now read from the registry
+  (`HKLM\SOFTWARE\Microsoft\Microsoft SQL Server\<key>\MSSQLServer\SuperSocketNetLib\Tcp\IPAll`)
+  instead of filtering host listeners to ports 1433 and 1434. The old filter stamped the
+  same guessed port list onto every instance, which was wrong for any named instance on a
+  dynamic port. Rows now carry `listener_ports`, `port_source`
+  (`static` / `dynamic` / `dynamic_unassigned` / `disabled` / `unknown`), `tcp_enabled`,
+  and `listener_active`, the last verified against the live listener table.
+- Engine services are mapped to their `sqlservr.exe` process id (`pid` per instance).
+  `unmapped_engine_processes` in the summary counts engine processes that no detected
+  service owns, which previously left a silent discrepancy between the process list and
+  the instance list.
+- Non-engine SQL components are surfaced in a new
+  `windows_agent_sql_server_components` section: Analysis Services, Reporting Services,
+  Integration Services, Full-Text, Launchpad, PolyBase, the VSS writer, and telemetry,
+  each with its component, instance, and state. Previously only the database engine
+  became a row, so a stopped SSAS was invisible.
+- SQL Agent, component, and SQL Browser state are now expectedness-aware, using the
+  same `expected` / `severity` / `reason` / `impact` vocabulary as the Horizon
+  collector. A SQL Agent set to `Auto` but stopped while its engine runs is an issue
+  (`agents_expected_not_running`); one left on `Manual` or `Disabled` is reported
+  separately as `agents_not_expected_running` and does not alert. The SQL Browser is
+  only treated as required when a named instance depends on dynamic port resolution.
+- Instance rows gained `edition`, `patch_level`, `product_version`, and `login_mode`
+  from the registry `Setup` and `MSSQLServer` keys. The existing `version` field
+  (the `sqlservr.exe` file version) is unchanged.
+- The summary's `health_issues` now rolls up engine, SQL Agent, component, and Browser
+  verdicts rather than echoing `instances_not_running`. `instances_total`,
+  `instances_running`, `instances_not_running`, and `detected` keep their existing
+  meaning, so the documented `sql_instances_not_running` alert is unaffected.
+  `listener_ports_total` now counts distinct resolved instance ports.
+- Overlay: new `windows-agent-sql-server-health` RRD family (health issues, engines
+  down, agent totals, component totals, instances without a listener, listener ports,
+  unmapped engines) with a matching graph. The existing `windows-agent-sql-server` RRD
+  schema is untouched. The app page SQL table now shows edition, patch level, port
+  source, listener state, and pid, adds a component table, and raises attention rows
+  for stopped agents, stopped components, missing listeners, and unmapped engine
+  processes. New visibility is non-alerting by default.
+- `docs/sql-collector-expansion.md` records the investigation behind these fixes and
+  surveys the remaining credential-free and DMV-based depth, which is not implemented.
+- New config: `collectors.sqlServer.includeComponents` and
+  `collectors.sqlServer.includeProcessMapping`, both default `true`.
+- No protocol rename, no application identity change, no RRD schema change.
+
 ## Overlay 0.6.30 - 2026-09-09
 
 Overlay-only release. Adds per-pool Horizon availability metrics so LibreNMS alert rules

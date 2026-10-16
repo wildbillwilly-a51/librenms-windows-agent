@@ -228,6 +228,9 @@ namespace LibreNMS.WindowsAgent.Core
         public string StartMode { get; set; } = string.Empty;
         public string StartName { get; set; } = string.Empty;
         public string PathName { get; set; } = string.Empty;
+
+        /// <summary>Owning process id, or 0 when the service is not running.</summary>
+        public long ProcessId { get; set; }
     }
 
     public sealed class ClassifiedService

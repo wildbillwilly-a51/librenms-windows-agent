@@ -31,11 +31,33 @@ these as recommended starting points and tune thresholds for the local estate.
 | DC account lockout burst | `ad_dc_security_lockouts` | `> estate baseline` | Warning |
 | DC authentication failure burst | `ad_dc_security_auth_failures` | `> estate baseline` | Warning |
 | DC privileged group changes | `ad_dc_security_privileged_changes` | `> 0` outside a change window | Warning |
-| SQL service or Agent stopped | `sql_instances_not_running` | `> 0` when SQL is expected | Warning |
+| SQL database engine stopped | `sql_instances_not_running` | `> 0` when SQL is expected | Warning |
+| SQL Agent stopped when expected | `sql_agents_expected_not_running` | `> 0` when SQL is expected | Warning |
+| SQL component service stopped | `sql_components_expected_not_running` | `> 0` when SQL is expected | Warning |
+| SQL instance with no active listener | `sql_instances_without_listener` | `> 0` when SQL is expected | Warning |
+| SQL surface health rollup | `sql_health_issues` | `> 0` when SQL is expected | Warning |
 | IIS site stopped | `iis_sites_stopped` | `> 0` when IIS is expected | Warning |
 | IIS app pool stopped | `iis_app_pools_stopped` | `> 0` when IIS is expected | Warning |
 | Horizon Connection Server health | `horizon_health_issues` | `> 0` on server-side Horizon hosts | Critical |
 | FactoryTalk core service health | `factorytalk_health_issues` | `> 0` on FactoryTalk hosts | Warning |
+
+The SQL counters above are expectedness-aware, so they stay quiet on hosts that
+are configured not to run a component:
+
+- `sql_agents_expected_not_running` counts a stopped SQL Server Agent only when
+  its start mode is `Auto` and the paired database engine is running. A SQL
+  Agent left on `Manual` or `Disabled` is reported as
+  `sql_agents_not_expected_running` instead, which is informational and should
+  not be alerted on without local knowledge that the host expects it running.
+- `sql_components_expected_not_running` counts stopped `Auto` component services
+  (Analysis Services, Reporting Services, Integration Services, Full-Text,
+  Launchpad, VSS writer). Telemetry is never counted.
+- `sql_health_issues` is the rollup of the engine, agent, component, and SQL
+  Browser verdicts. Alert on it instead of the individual counters when one
+  SQL rule per host is enough.
+- `sql_unmapped_engine_processes` is diagnostic, not a failure: it counts
+  `sqlservr.exe` processes that no detected service owns, which means instance
+  discovery is incomplete on that host.
 
 ## Horizon Per-Pool Availability
 

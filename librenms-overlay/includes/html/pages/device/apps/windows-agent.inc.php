@@ -38,6 +38,7 @@ $performance_network = $data['performance_network'] ?? [];
 $performance_processes = $data['performance_processes'] ?? [];
 $sql_server_summary = $data['sql_server_summary'] ?? [];
 $sql_server_instances = $data['sql_server_instances'] ?? [];
+$sql_server_components = $data['sql_server_components'] ?? [];
 $iis_summary = $data['iis_summary'] ?? [];
 $iis_sites = $data['iis_sites'] ?? [];
 $iis_app_pools = $data['iis_app_pools'] ?? [];
@@ -774,8 +775,8 @@ $sections = [
     ],
     'sql' => [
         'title' => 'SQL',
-        'state' => $section_state($sql_server_summary['state'] ?? 'not_detected', (int) ($sql_server_summary['instances_not_running'] ?? 0)),
-        'summary' => $metric('Instances', $sql_server_summary['instances_total'] ?? '0') . ' ' . $metric('Down', $sql_server_summary['instances_not_running'] ?? '0'),
+        'state' => $section_state($sql_server_summary['state'] ?? 'not_detected', (int) ($sql_server_summary['health_issues'] ?? $sql_server_summary['instances_not_running'] ?? 0)),
+        'summary' => $metric('Instances', $sql_server_summary['instances_total'] ?? '0') . ' ' . $metric('Down', $sql_server_summary['instances_not_running'] ?? '0') . ' ' . $metric('Agents down', $sql_server_summary['agents_expected_not_running'] ?? '0') . ' ' . $metric('Issues', $sql_server_summary['health_issues'] ?? '0'),
     ],
     'iis' => [
         'title' => 'IIS',
@@ -909,9 +910,59 @@ if ($has_role_details($performance_summary, $performance_processes)) {
     });
 }
 
-$sql_details = $has_role_details($sql_server_summary, $sql_server_instances) ? $table(['Instance', 'Service', 'State', 'Start mode', 'Agent', 'Browser', 'Ports'], $issue_first($sql_server_instances, static fn (array $row): int => strtolower((string) ($row['state'] ?? '')) === 'running' ? 0 : 1, 'instance'), static function ($row) use ($esc, $state_label): string {
-    return '<td>' . $esc($row['instance'] ?? '') . '</td><td>' . $esc($row['service'] ?? '') . '</td><td>' . $state_label($row['state'] ?? 'unknown') . '</td><td>' . $esc($row['start_mode'] ?? '') . '</td><td>' . $esc($row['agent_state'] ?? '') . '</td><td>' . $esc($row['browser_state'] ?? '') . '</td><td>' . $esc($row['listener_ports'] ?? '') . '</td>';
+// Higher scores sort first; a stopped engine outranks a stopped SQL Agent.
+$sql_instance_issue = static function (array $row): int {
+    if (strtolower((string) ($row['state'] ?? '')) !== 'running') {
+        return 2;
+    }
+
+    return in_array(strtolower((string) ($row['agent_severity'] ?? 'ok')), ['warning', 'critical'], true) ? 1 : 0;
+};
+
+$sql_details = $has_role_details($sql_server_summary, $sql_server_instances) ? $table(['Instance', 'Edition', 'Patch level', 'State', 'Start mode', 'Agent', 'Browser', 'Ports', 'Listening', 'PID'], $issue_first($sql_server_instances, $sql_instance_issue, 'instance'), static function ($row) use ($esc, $state_label): string {
+    $ports = (string) ($row['listener_ports'] ?? '');
+    $source = (string) ($row['port_source'] ?? '');
+    if ($ports === '') {
+        $ports = $source === '' ? '-' : $source;
+    } elseif ($source !== '') {
+        $ports .= ' (' . $source . ')';
+    }
+
+    $agent = (string) ($row['agent_state'] ?? '');
+    $agent_reason = (string) ($row['agent_reason'] ?? '');
+    if (in_array(strtolower((string) ($row['agent_severity'] ?? 'ok')), ['warning', 'critical'], true)) {
+        $agent = $state_label($agent === '' ? 'unknown' : $agent) . ' <small>' . $esc($agent_reason) . '</small>';
+    } else {
+        $agent = $esc($agent);
+    }
+
+    $listening = array_key_exists('listener_active', $row)
+        ? (((int) $row['listener_active']) === 1 ? 'yes' : 'no')
+        : '-';
+
+    return '<td>' . $esc($row['instance'] ?? '') . '</td>'
+        . '<td>' . $esc($row['edition'] ?? '') . '</td>'
+        . '<td>' . $esc($row['patch_level'] ?? $row['version'] ?? '') . '</td>'
+        . '<td>' . $state_label($row['state'] ?? 'unknown') . '</td>'
+        . '<td>' . $esc($row['start_mode'] ?? '') . '</td>'
+        . '<td>' . $agent . '</td>'
+        . '<td>' . $esc($row['browser_state'] ?? '') . '</td>'
+        . '<td>' . $esc($ports) . '</td>'
+        . '<td>' . $esc($listening) . '</td>'
+        . '<td>' . $esc($row['pid'] ?? '') . '</td>';
 }) : '';
+
+if ($has_role_details($sql_server_summary, $sql_server_components)) {
+    $sql_details .= $table(['Component', 'Service', 'Instance', 'State', 'Start mode', 'Expected', 'Reason'], $issue_first($sql_server_components, static fn (array $row): int => in_array(strtolower((string) ($row['severity'] ?? 'ok')), ['warning', 'critical'], true) ? 1 : 0, 'name'), static function ($row) use ($esc, $state_label): string {
+        return '<td>' . $esc($row['component'] ?? '') . '</td>'
+            . '<td>' . $esc($row['name'] ?? '') . '</td>'
+            . '<td>' . $esc($row['instance'] ?? '-') . '</td>'
+            . '<td>' . $state_label($row['state'] ?? 'unknown') . '</td>'
+            . '<td>' . $esc($row['start_mode'] ?? '') . '</td>'
+            . '<td>' . (((int) ($row['expected'] ?? 0)) === 1 ? 'yes' : 'no') . '</td>'
+            . '<td>' . $esc($row['reason'] ?? '') . '</td>';
+    });
+}
 
 $iis_details = '';
 $iis_rows = [];
@@ -2069,11 +2120,27 @@ if ($horizon_surface_available) {
 $sql_detected = ! in_array(strtolower((string) ($sql_server_summary['state'] ?? 'not_detected')), ['not_detected', 'disabled', 'unsupported', 'not_applicable'], true);
 $iis_detected = ! in_array(strtolower((string) ($iis_summary['state'] ?? 'not_detected')), ['not_detected', 'disabled', 'unsupported', 'not_applicable'], true);
 $sql_down = (int) ($sql_server_summary['instances_not_running'] ?? 0);
+$sql_agents_down = (int) ($sql_server_summary['agents_expected_not_running'] ?? 0);
+$sql_components_down = (int) ($sql_server_summary['components_expected_not_running'] ?? 0);
+$sql_no_listener = (int) ($sql_server_summary['instances_without_listener'] ?? 0);
+$sql_unmapped_engines = (int) ($sql_server_summary['unmapped_engine_processes'] ?? 0);
 $iis_stopped = (int) ($iis_summary['sites_stopped'] ?? 0) + (int) ($iis_summary['app_pools_stopped'] ?? 0);
 $roles_detected_count = count(array_filter($roles, static fn (array $r): bool => (int) ($r['detected'] ?? 0) === 1));
 $roles_attention = [];
 if ($sql_detected && $sql_down > 0) {
     $roles_attention[] = ['title' => $sql_down . ' SQL Server instance(s) not running', 'detail' => (string) ($sql_server_summary['instances_total'] ?? '0') . ' instance(s) detected.', 'action' => 'Review the SQL Server inventory below.'];
+}
+if ($sql_detected && $sql_agents_down > 0) {
+    $roles_attention[] = ['title' => $sql_agents_down . ' SQL Server Agent service(s) stopped', 'detail' => 'Set to start automatically but not running; scheduled backups and maintenance jobs are not executing.', 'action' => 'Start the SQL Server Agent service on the affected instance(s).'];
+}
+if ($sql_detected && $sql_components_down > 0) {
+    $roles_attention[] = ['title' => $sql_components_down . ' SQL Server component service(s) stopped', 'detail' => 'Automatic SQL Server components are not running.', 'action' => 'Review the SQL Server component inventory below.'];
+}
+if ($sql_detected && $sql_no_listener > 0) {
+    $roles_attention[] = ['title' => $sql_no_listener . ' SQL Server instance(s) with no active listener', 'detail' => 'TCP is enabled but no configured port is listening.', 'action' => 'Confirm the TCP listener configuration for the affected instance(s).'];
+}
+if ($sql_detected && $sql_unmapped_engines > 0) {
+    $roles_attention[] = ['title' => $sql_unmapped_engines . ' unmapped sqlservr.exe process(es)', 'detail' => 'Database engine processes that no detected SQL Server service owns.', 'action' => 'Investigate the unowned SQL Server engine process(es).'];
 }
 if ($iis_detected && $iis_stopped > 0) {
     $roles_attention[] = ['title' => $iis_stopped . ' IIS site(s) or app pool(s) stopped', 'detail' => (string) ($iis_summary['sites_total'] ?? '0') . ' site(s), ' . (string) ($iis_summary['app_pools_total'] ?? '0') . ' pool(s).', 'action' => 'Review the IIS inventory below.'];
@@ -2088,7 +2155,7 @@ $roles_tab = $render_tab_summary([
     'next' => $roles_attention[0]['action'] ?? '',
     'collected' => (string) ($data['last_agent_utc'] ?? ''),
     'tiles' => [
-        ['SQL Server', $sql_detected ? 'Detected' : 'Not detected', $sql_detected ? ((string) ($sql_server_summary['instances_total'] ?? '0') . ' instance(s), ' . $sql_down . ' down') : 'No SQL instance'],
+        ['SQL Server', $sql_detected ? 'Detected' : 'Not detected', $sql_detected ? ((string) ($sql_server_summary['instances_total'] ?? '0') . ' instance(s), ' . $sql_down . ' down, ' . $sql_agents_down . ' agent(s) down') : 'No SQL instance'],
         ['IIS', $iis_detected ? 'Detected' : 'Not detected', $iis_detected ? ((string) ($iis_summary['sites_total'] ?? '0') . ' site(s), ' . $iis_stopped . ' stopped') : 'No web server'],
         ['Detected roles', $roles_detected_count, count($roles) . ' evaluated'],
         ['Logged-on sessions', count($logged_on_user_sessions), 'Interactive and remote'],

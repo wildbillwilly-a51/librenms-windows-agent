@@ -1,0 +1,97 @@
+{
+  "name": "sql server multi instance fixture",
+  "device": {
+    "device_id": 1004,
+    "hostname": "windows-agent-sqlhost.example.test"
+  },
+  "app_id": 2004,
+  "agent_data": {
+    "windows_agent": "version=0.6.17.0 protocol=checkmk host=windows-agent-sqlhost utc=2026-10-16T18:00:00Z",
+    "windows_agent_windows_os": "caption=\"Microsoft Windows Server 2019 Standard\"",
+    "windows_agent_pending_reboot": "pending=0 sources=",
+    "windows_agent_windows_update": "reboot_required=0 service_state=Running",
+    "windows_agent_services": "installed_count=0",
+    "windows_agent_roles": "role=sql_server detected=1 confidence=medium source=services health_issues=0 evidence=services health_scope=inventory next_action=\"Review role-specific section for health evidence.\"",
+    "windows_agent_performance": "type=summary collect_duration_ms=2100 collectors_run=16 collectors_failed=0 collectors_timed_out=0 payload_bytes=18000 process_working_set_bytes=44000000 process_private_bytes=33000000",
+    "windows_agent_performance_summary": "state=ok cpu_queue_length=0 cpu_pressure=0 memory_available_mb=8192 memory_committed_percent=55 memory_pressure=0 pages_per_sec=0 paging_pressure=0 disk_read_ms_max=0 disk_write_ms_max=0 disk_queue_length_max=0 disk_pressure=0 network_bytes_per_sec_total=0 network_errors_total=0 network_issue=0 pressure_issues=0",
+    "windows_agent_sql_server_summary": "state=ok detected=1 instances_total=3 instances_running=3 instances_not_running=0 listener_ports_total=2 health_issues=3 engines_expected_not_running=0 agents_total=3 agents_running=1 agents_expected_not_running=1 agents_not_expected_running=1 components_total=3 components_expected_not_running=1 instances_without_listener=1 registry_instances=3 unmapped_engine_processes=1 browser_state=Stopped browser_required=1 browser_severity=warning browser_reason=browser_not_running_with_dynamic_port_instances evidence=instances=3;listeners=2;agents_down=1;components_down=1 health_scope=scored next_action=\"Start the stopped SQL Server Agent service; scheduled backups and maintenance jobs are not running.\"",
+    "windows_agent_sql_server_instances": "instance=MSSQLSERVER service=MSSQLSERVER display=\"SQL Server (MSSQLSERVER)\" state=Running start_mode=Auto path_exists=1 version=\"2019.0150.4360.02\" agent_service=SQLSERVERAGENT agent_state=Running browser_state=Stopped listener_ports=1433 pid=1972 edition=\"Standard Edition\" patch_level=15.0.4360.2 product_version=15.0.2000.5 login_mode=mixed tcp_enabled=1 port_source=static listener_active=1 requires_browser=0 agent_start_mode=Auto agent_expected=1 agent_severity=ok agent_reason=agent_running expected=1 severity=ok reason=engine_running impact=none\ninstance=APPDB service=MSSQL$APPDB display=\"SQL Server (APPDB)\" state=Running start_mode=Auto path_exists=1 version=\"2019.0150.4360.02\" agent_service=SQLAgent$APPDB agent_state=Stopped browser_state=Stopped listener_ports=51000 pid=1808 edition=\"Standard Edition\" patch_level=15.0.4360.2 product_version=15.0.2000.5 login_mode=windows tcp_enabled=1 port_source=dynamic listener_active=1 requires_browser=1 agent_start_mode=Auto agent_expected=1 agent_severity=critical agent_reason=agent_not_running expected=1 severity=ok reason=engine_running impact=none\ninstance=REPORTS service=MSSQL$REPORTS display=\"SQL Server (REPORTS)\" state=Running start_mode=Auto path_exists=1 version=\"2019.0150.4360.02\" agent_service=SQLAgent$REPORTS agent_state=Stopped browser_state=Stopped listener_ports=\"\" pid=7100 edition=\"Developer Edition\" patch_level=15.0.4360.2 product_version=15.0.2000.5 login_mode=windows tcp_enabled=1 port_source=dynamic_unassigned listener_active=0 requires_browser=1 agent_start_mode=Manual agent_expected=0 agent_severity=info agent_reason=agent_not_expected_running expected=1 severity=ok reason=engine_running impact=none",
+    "windows_agent_sql_server_components": "name=MSSQLServerOLAPService display=\"SQL Server Analysis Services (MSSQLSERVER)\" component=analysis_services instance=MSSQLSERVER state=Stopped start_mode=Auto pid=0 expected=1 severity=warning reason=component_not_running impact=analysis_services\nname=MSSQLFDLauncher display=\"SQL Full-text Filter Daemon Launcher (MSSQLSERVER)\" component=fulltext instance=MSSQLSERVER state=Running start_mode=Manual pid=4512 expected=0 severity=ok reason=component_running impact=none\nname=SQLTELEMETRY display=\"SQL Server CEIP service (MSSQLSERVER)\" component=telemetry instance=MSSQLSERVER state=Stopped start_mode=Auto pid=0 expected=0 severity=info reason=component_not_required impact=observation",
+    "windows_agent_iis_summary": "state=not_detected sites_total=0 sites_running=0 sites_stopped=0 app_pools_total=0 app_pools_running=0 app_pools_stopped=0 bindings_total=0",
+    "windows_agent_horizon_summary": "state=not_detected detected=0 services_total=0 services_not_running=0 processes_total=0 ports_total=0 ports_listening=0 ports_missing=0 certificates_total=0 certificates_expired=0 certificates_expiring=0 health_issues=0",
+    "windows_agent_factorytalk_summary": "state=not_detected detected=0 products_total=0 services_total=0 services_not_running=0 core_services_not_running=0 processes_total=0 ports_total=0 ports_listening=0 health_issues=0",
+    "windows_agent_tls_certificates_summary": "state=ok store_count=1 certificate_count=0 expired_count=0 expiring_warning_count=0 expiring_critical_count=0 not_yet_valid_count=0 invalid_chain_count=0 weak_key_count=0 weak_signature_count=0 missing_private_key_count=0 bound_count=0 binding_missing_count=0 unhealthy_count=0",
+    "windows_agent_backup_storage_summary": "state=not_detected vss_writers_total=0 vss_writers_stable=0 vss_writers_failed=0 vss_writers_retryable_failed=0 vss_writers_non_retryable_failed=0 backup_services_total=0 backup_services_not_running=0",
+    "windows_agent_datto_backup_summary": "state=not_detected detected=0 service_running=0 provider_present=0 provider_issue=0 processes_total=0 evidence_state=unknown recent_errors=0 recent_critical_failures=0 last_success_age_hours=-1 stale_warning=0 stale_critical=0 health_issues=0",
+    "windows_agent_ad_dc_health_summary": "state=not_applicable reason=not_domain_controller dc_detected=0 core_services_total=0 core_services_not_running=0 dns_service_present=0 dns_service_running=0 dns_service_issue=0 sysvol_share_present=0 netlogon_share_present=0 shares_missing=0 time_state=not_applicable time_service_running=0 time_issues=0 health_issues=0"
+  },
+  "expect": {
+    "status_prefix": "OK:",
+    "status_contains": [
+      "sql_down=0",
+      "sql_agents_down=1"
+    ],
+    "fields": {
+      "sql_instances_total": 3,
+      "sql_instances_not_running": 0,
+      "sql_health_issues": 3,
+      "sql_engines_expected_not_running": 0,
+      "sql_agents_total": 3,
+      "sql_agents_running": 1,
+      "sql_agents_expected_not_running": 1,
+      "sql_agents_not_expected_running": 1,
+      "sql_components_total": 3,
+      "sql_components_expected_not_running": 1,
+      "sql_instances_without_listener": 1,
+      "sql_listener_ports_total": 2,
+      "sql_registry_instances": 3,
+      "sql_unmapped_engine_processes": 1
+    },
+    "data": {
+      "sql_server_summary.state": "ok",
+      "sql_server_summary.browser_reason": "browser_not_running_with_dynamic_port_instances",
+      "sql_server_components.0.component": "analysis_services",
+      "sql_server_components.0.severity": "warning",
+      "sql_server_instances.0.instance": "MSSQLSERVER",
+      "sql_server_instances.0.port_source": "static",
+      "sql_server_instances.1.instance": "APPDB",
+      "sql_server_instances.1.port_source": "dynamic",
+      "sql_server_instances.1.listener_ports": "51000",
+      "sql_server_instances.1.agent_reason": "agent_not_running",
+      "sql_server_instances.2.instance": "REPORTS",
+      "sql_server_instances.2.port_source": "dynamic_unassigned"
+    },
+    "datastore": {
+      "windows-agent-sql-server.instances_total": 3,
+      "windows-agent-sql-server.not_running": 0,
+      "windows-agent-sql-server-health.health_issues": 3,
+      "windows-agent-sql-server-health.engines_down": 0,
+      "windows-agent-sql-server-health.agents_total": 3,
+      "windows-agent-sql-server-health.agents_down": 1,
+      "windows-agent-sql-server-health.agents_off": 1,
+      "windows-agent-sql-server-health.components": 3,
+      "windows-agent-sql-server-health.components_down": 1,
+      "windows-agent-sql-server-health.no_listener": 1,
+      "windows-agent-sql-server-health.listener_ports": 2,
+      "windows-agent-sql-server-health.unmapped_engines": 1
+    },
+    "app_page": {
+      "contains": [
+        "Agents down",
+        "SQL Server Agent service(s) stopped",
+        "SQL Server component service(s) stopped",
+        "no active listener",
+        "unmapped sqlservr.exe process(es)",
+        "agent_not_running",
+        "analysis_services",
+        "51000 (dynamic)",
+        "dynamic_unassigned",
+        "Standard Edition",
+        "Patch level"
+      ],
+      "not_contains": [
+        "data-type=\"application_windows-agent_sql_server\""
+      ]
+    }
+  }
+}

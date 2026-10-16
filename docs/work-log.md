@@ -1,5 +1,52 @@
 # Work Log
 
+## 2026-10-16 (unreleased: SQL Server surface collector correctness)
+
+- Objective: investigate what the SQL role can collect, then fix the defects the
+  investigation found in the existing surface collector. Depth tiers (performance
+  counters, ERRORLOG evidence, DMV queries) were surveyed but deliberately not built.
+- Investigation: pulled the live agent payload from a multi-instance SQL Server 2017
+  test host and compared it against an SSRP query to that host's SQL Browser. Five
+  defects confirmed, written up in `docs/sql-collector-expansion.md` together with the
+  Tier 1–3 survey. A read-only on-box probe script was written to close the remaining
+  verification gap; it has not been run.
+- Change (agent core): new `SqlServerPolicy` holds the pure logic — service-to-component
+  identity, engine/agent/component/Browser classification in the Horizon
+  `expected`/`severity`/`reason`/`impact` vocabulary, registry port resolution, and
+  next-action selection. `ServiceInventoryRecord` gained `ProcessId`.
+- Change (agent service): new `SqlServerRegistryReader` reads instance inventory,
+  `Setup` (edition, patch level, version, collation, data root), `MSSQLServer`
+  (login mode), and `SuperSocketNetLib\Tcp` + `Tcp\IPAll` (enabled, TcpPort,
+  TcpDynamicPorts) from the 64-bit view, falling back to the 32-bit view. Failures are
+  swallowed to an empty map so the collector degrades to service evidence alone.
+  `SqlServerCollector` was rewritten around these: per-instance ports verified against
+  the live listener table, engine-to-pid mapping with an `unmapped_engine_processes`
+  count, a third `windows_agent_sql_server_components` section, and a `health_issues`
+  rollup that no longer just echoes `instances_not_running`. Existing summary and
+  instance keys were preserved.
+- Change (overlay): parse the new section, expose eleven new `sql_*` fields, add a new
+  `windows-agent-sql-server-health` RRD family and graph (the existing
+  `windows-agent-sql-server` schema is untouched, per the add-a-family rule), widen the
+  app page SQL table, add a component table, and raise attention rows for stopped
+  agents, stopped components, missing listeners, and unmapped engine processes.
+- Config: `collectors.sqlServer.includeComponents` and
+  `collectors.sqlServer.includeProcessMapping`, both default `true`.
+- Tests: 16 new `SqlServerPolicy` unit tests (identity for default/named/host-wide
+  services, non-SQL rejection, engine/agent/component/Browser classification including
+  the Manual and engine-down cases, all four port-resolution sources, next-action
+  precedence) plus two config-default assertions — 77 agent tests pass, exit 0. New
+  `sql-server-multi-instance` overlay fixture covering three instances, a critical
+  agent, an informational agent, a warning component, a dynamic-unassigned port, and a
+  stopped Browser; it runs in both the parser and app-page suites.
+- Validation: `dotnet build -c Release` 0 warnings / 0 errors; agent tests exit 0
+  (77 pass / 0 fail); `run-parser-fixtures`, `run-app-page-fixtures` and
+  `run-horizon-central-tests` each exit 0 (12 / 12 / 35 pass, 0 fail); overlay PHP lint
+  via WSL PHP 8.3.6 across 70 files, 70 ok / 0 fail; `bash -n ./install.sh` exit 0.
+- Validation skipped: no MSI build and no deployment, so the new collector has not run
+  on a real SQL host. Registry reads, port resolution, and process mapping are covered
+  by unit tests over synthetic inputs only. No version bump and no artifact rebuild —
+  per the one-version-per-batch rule, the bump happens when this is published.
+
 ## 2026-09-10 (pending release: count Horizon `info` pools in the estate rollup)
 
 - Objective: close the pre-existing gap logged under 0.6.30 — the agent never emitted

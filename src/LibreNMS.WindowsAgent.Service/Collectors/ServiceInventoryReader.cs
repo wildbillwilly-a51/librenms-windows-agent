@@ -9,7 +9,7 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
         public static List<ServiceInventoryRecord> Read(CancellationToken cancellationToken)
         {
             var services = new List<ServiceInventoryRecord>();
-            foreach (var item in Wmi.Query("SELECT Name,DisplayName,State,StartMode,StartName,PathName FROM Win32_Service"))
+            foreach (var item in Wmi.Query("SELECT Name,DisplayName,State,StartMode,StartName,PathName,ProcessId FROM Win32_Service"))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 using (item)
@@ -22,6 +22,7 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
                         StartMode = Wmi.StringValue(item, "StartMode"),
                         StartName = Wmi.StringValue(item, "StartName"),
                         PathName = Wmi.StringValue(item, "PathName"),
+                        ProcessId = (long)Wmi.UInt64Value(item, "ProcessId"),
                     });
                 }
             }

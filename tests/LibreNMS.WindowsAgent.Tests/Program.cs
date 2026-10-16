@@ -77,7 +77,23 @@ namespace LibreNMS.WindowsAgent.Tests
                 ("datto recent failure evidence", DattoRecentFailureEvidence),
                 ("datto vss writer failure", DattoVssWriterFailure),
                 ("tls certificate health scope", TlsCertificateHealthScope),
-                ("logged on user parser active and disconnected", LoggedOnUserParserActiveAndDisconnected)
+                ("logged on user parser active and disconnected", LoggedOnUserParserActiveAndDisconnected),
+                ("sql policy identifies default instance services", SqlPolicyIdentifiesDefaultInstanceServices),
+                ("sql policy identifies named instance services", SqlPolicyIdentifiesNamedInstanceServices),
+                ("sql policy identifies host wide components", SqlPolicyIdentifiesHostWideComponents),
+                ("sql policy ignores non sql services", SqlPolicyIgnoresNonSqlServices),
+                ("sql policy engine classification", SqlPolicyEngineClassification),
+                ("sql policy agent stopped automatic is an issue", SqlPolicyAgentStoppedAutomaticIsAnIssue),
+                ("sql policy agent stopped manual is informational", SqlPolicyAgentStoppedManualIsInformational),
+                ("sql policy agent stopped with engine down is informational", SqlPolicyAgentStoppedWithEngineDownIsInformational),
+                ("sql policy browser required only for dynamic ports", SqlPolicyBrowserRequiredOnlyForDynamicPorts),
+                ("sql policy component classification", SqlPolicyComponentClassification),
+                ("sql policy telemetry is never required", SqlPolicyTelemetryIsNeverRequired),
+                ("sql policy resolves static port", SqlPolicyResolvesStaticPort),
+                ("sql policy resolves dynamic port", SqlPolicyResolvesDynamicPort),
+                ("sql policy resolves unassigned dynamic port", SqlPolicyResolvesUnassignedDynamicPort),
+                ("sql policy resolves disabled tcp", SqlPolicyResolvesDisabledTcp),
+                ("sql policy next action prioritises engine over agent", SqlPolicyNextActionPrioritisesEngineOverAgent)
             };
 
             var failed = 0;
@@ -397,6 +413,8 @@ namespace LibreNMS.WindowsAgent.Tests
             AssertEqual(240, config.Listener.CacheRefreshSeconds);
             AssertEqual(2, config.Listener.InitialCacheWaitSeconds);
             AssertEqual("auto", config.Collectors.SqlServer.Mode);
+            AssertTrue(config.Collectors.SqlServer.IncludeComponents, "SQL component visibility should be included by default");
+            AssertTrue(config.Collectors.SqlServer.IncludeProcessMapping, "SQL process mapping should be included by default");
             AssertEqual("auto", config.Collectors.Iis.Mode);
             AssertTrue(config.Collectors.Iis.IncludeSites, "IIS sites should be included by default");
             AssertTrue(config.Collectors.Iis.IncludeAppPools, "IIS app pools should be included by default");
@@ -1066,6 +1084,197 @@ namespace LibreNMS.WindowsAgent.Tests
             {
                 throw new InvalidOperationException($"Expected to find '{needle}' in '{haystack}'.");
             }
+        }
+
+        private static void SqlPolicyIdentifiesDefaultInstanceServices()
+        {
+            var engine = SqlServerPolicy.Identify("MSSQLSERVER");
+            AssertEqual(SqlServerPolicy.ComponentEngine, engine.Component);
+            AssertEqual("MSSQLSERVER", engine.Instance);
+            AssertTrue(engine.InstanceScoped, "default engine should be instance scoped");
+
+            var agent = SqlServerPolicy.Identify("SQLSERVERAGENT");
+            AssertEqual(SqlServerPolicy.ComponentAgent, agent.Component);
+            AssertEqual("MSSQLSERVER", agent.Instance);
+
+            AssertEqual(SqlServerPolicy.ComponentFullText, SqlServerPolicy.Identify("MSSQLFDLauncher").Component);
+            AssertEqual(SqlServerPolicy.ComponentAnalysisServices, SqlServerPolicy.Identify("MSSQLServerOLAPService").Component);
+            AssertEqual(SqlServerPolicy.ComponentMachineLearning, SqlServerPolicy.Identify("MSSQLLaunchpad").Component);
+            AssertEqual(SqlServerPolicy.ComponentTelemetry, SqlServerPolicy.Identify("SQLTELEMETRY").Component);
+        }
+
+        private static void SqlPolicyIdentifiesNamedInstanceServices()
+        {
+            var engine = SqlServerPolicy.Identify("MSSQL$APPDB");
+            AssertEqual(SqlServerPolicy.ComponentEngine, engine.Component);
+            AssertEqual("APPDB", engine.Instance);
+
+            var agent = SqlServerPolicy.Identify("SQLAgent$APPDB");
+            AssertEqual(SqlServerPolicy.ComponentAgent, agent.Component);
+            AssertEqual("APPDB", agent.Instance);
+
+            var fullText = SqlServerPolicy.Identify("MSSQLFDLauncher$APPDB");
+            AssertEqual(SqlServerPolicy.ComponentFullText, fullText.Component);
+            AssertEqual("APPDB", fullText.Instance);
+
+            var olap = SqlServerPolicy.Identify("MSOLAP$APPDB");
+            AssertEqual(SqlServerPolicy.ComponentAnalysisServices, olap.Component);
+            AssertEqual("APPDB", olap.Instance);
+
+            var reporting = SqlServerPolicy.Identify("ReportServer$APPDB");
+            AssertEqual(SqlServerPolicy.ComponentReportingServices, reporting.Component);
+            AssertEqual("APPDB", reporting.Instance);
+        }
+
+        private static void SqlPolicyIdentifiesHostWideComponents()
+        {
+            var browser = SqlServerPolicy.Identify("SQLBrowser");
+            AssertEqual(SqlServerPolicy.ComponentBrowser, browser.Component);
+            AssertFalse(browser.InstanceScoped, "SQL Browser is host wide");
+            AssertEqual(string.Empty, browser.Instance);
+
+            AssertEqual(SqlServerPolicy.ComponentVssWriter, SqlServerPolicy.Identify("SQLWriter").Component);
+            AssertEqual(SqlServerPolicy.ComponentIntegrationServices, SqlServerPolicy.Identify("MsDtsServer140").Component);
+            AssertEqual(SqlServerPolicy.ComponentReportingServices, SqlServerPolicy.Identify("SQLServerReportingServices").Component);
+        }
+
+        private static void SqlPolicyIgnoresNonSqlServices()
+        {
+            AssertTrue(SqlServerPolicy.Identify("MSDTC") == null, "MSDTC is not a SQL Server service");
+            AssertTrue(SqlServerPolicy.Identify("Spooler") == null, "Spooler is not a SQL Server service");
+            AssertTrue(SqlServerPolicy.Identify("") == null, "empty service name should not identify");
+            AssertTrue(SqlServerPolicy.Identify(null) == null, "null service name should not identify");
+        }
+
+        private static void SqlPolicyEngineClassification()
+        {
+            var running = SqlServerPolicy.ClassifyEngine("Running", "Auto");
+            AssertEqual("ok", running.State);
+            AssertFalse(running.IsHealthIssue, "running engine is not an issue");
+
+            var stopped = SqlServerPolicy.ClassifyEngine("Stopped", "Auto");
+            AssertEqual("critical", stopped.State);
+            AssertEqual("engine_not_running", stopped.ReasonCode);
+            AssertTrue(stopped.IsHealthIssue, "automatic engine stopped is an issue");
+
+            var disabled = SqlServerPolicy.ClassifyEngine("Stopped", "Disabled");
+            AssertEqual("info", disabled.State);
+            AssertFalse(disabled.IsHealthIssue, "disabled engine is not an issue");
+        }
+
+        private static void SqlPolicyAgentStoppedAutomaticIsAnIssue()
+        {
+            var result = SqlServerPolicy.ClassifyAgent("Stopped", "Auto", true);
+            AssertEqual("critical", result.State);
+            AssertEqual("agent_not_running", result.ReasonCode);
+            AssertEqual("scheduled_work", result.Impact);
+            AssertTrue(result.IsHealthIssue, "automatic SQL Agent stopped while the engine runs is an issue");
+        }
+
+        private static void SqlPolicyAgentStoppedManualIsInformational()
+        {
+            var result = SqlServerPolicy.ClassifyAgent("Stopped", "Manual", true);
+            AssertEqual("info", result.State);
+            AssertEqual("agent_not_expected_running", result.ReasonCode);
+            AssertFalse(result.IsHealthIssue, "manual SQL Agent stopped should stay non-alerting");
+        }
+
+        private static void SqlPolicyAgentStoppedWithEngineDownIsInformational()
+        {
+            var result = SqlServerPolicy.ClassifyAgent("Stopped", "Auto", false);
+            AssertEqual("info", result.State);
+            AssertEqual("engine_not_running", result.ReasonCode);
+            AssertFalse(result.IsHealthIssue, "a stopped agent under a stopped engine is a consequence, not a second issue");
+        }
+
+        private static void SqlPolicyBrowserRequiredOnlyForDynamicPorts()
+        {
+            var staticPorts = SqlServerPolicy.ResolvePorts("1433", string.Empty, true);
+            AssertFalse(SqlServerPolicy.RequiresBrowser("APPDB", staticPorts), "a static port named instance does not need the Browser");
+            AssertFalse(SqlServerPolicy.RequiresBrowser("MSSQLSERVER", staticPorts), "the default instance never needs the Browser");
+
+            var dynamicPorts = SqlServerPolicy.ResolvePorts(string.Empty, "56217", true);
+            AssertTrue(SqlServerPolicy.RequiresBrowser("APPDB", dynamicPorts), "a dynamic port named instance needs the Browser");
+
+            var stopped = SqlServerPolicy.ClassifyBrowser("Stopped", "Auto", true);
+            AssertEqual("warning", stopped.State);
+            AssertTrue(stopped.IsHealthIssue, "Browser stopped with dynamic port instances is an issue");
+
+            var notNeeded = SqlServerPolicy.ClassifyBrowser("Stopped", "Manual", false);
+            AssertEqual("info", notNeeded.State);
+            AssertFalse(notNeeded.IsHealthIssue, "Browser stopped without dynamic port instances is not an issue");
+        }
+
+        private static void SqlPolicyComponentClassification()
+        {
+            var stopped = SqlServerPolicy.ClassifyComponent(SqlServerPolicy.ComponentAnalysisServices, "Stopped", "Auto", true);
+            AssertEqual("warning", stopped.State);
+            AssertEqual("component_not_running", stopped.ReasonCode);
+            AssertTrue(stopped.IsHealthIssue, "automatic SSAS stopped is an issue");
+
+            var manual = SqlServerPolicy.ClassifyComponent(SqlServerPolicy.ComponentAnalysisServices, "Stopped", "Manual", true);
+            AssertEqual("info", manual.State);
+            AssertFalse(manual.IsHealthIssue, "manual SSAS stopped is not an issue");
+
+            var engineDown = SqlServerPolicy.ClassifyComponent(SqlServerPolicy.ComponentFullText, "Stopped", "Auto", false);
+            AssertEqual("info", engineDown.State);
+            AssertEqual("engine_not_running", engineDown.ReasonCode);
+        }
+
+        private static void SqlPolicyTelemetryIsNeverRequired()
+        {
+            var result = SqlServerPolicy.ClassifyComponent(SqlServerPolicy.ComponentTelemetry, "Stopped", "Auto", true);
+            AssertEqual("info", result.State);
+            AssertEqual("component_not_required", result.ReasonCode);
+            AssertFalse(result.IsHealthIssue, "telemetry is never required for database health");
+        }
+
+        private static void SqlPolicyResolvesStaticPort()
+        {
+            var result = SqlServerPolicy.ResolvePorts("1433", "0", true);
+            AssertEqual("static", result.Source);
+            AssertEqual("1433", result.Ports);
+            AssertEqual(1, result.PortNumbers.Count);
+        }
+
+        private static void SqlPolicyResolvesDynamicPort()
+        {
+            var result = SqlServerPolicy.ResolvePorts(string.Empty, "56217", true);
+            AssertEqual("dynamic", result.Source);
+            AssertEqual("56217", result.Ports);
+            AssertEqual(56217, result.PortNumbers[0]);
+        }
+
+        private static void SqlPolicyResolvesUnassignedDynamicPort()
+        {
+            var result = SqlServerPolicy.ResolvePorts(string.Empty, "0", true);
+            AssertEqual("dynamic_unassigned", result.Source);
+            AssertEqual(string.Empty, result.Ports);
+            AssertEqual(0, result.PortNumbers.Count);
+        }
+
+        private static void SqlPolicyResolvesDisabledTcp()
+        {
+            var result = SqlServerPolicy.ResolvePorts("1433", "0", false);
+            AssertEqual("disabled", result.Source);
+            AssertEqual(string.Empty, result.Ports);
+            AssertEqual(0, result.PortNumbers.Count);
+        }
+
+        private static void SqlPolicyNextActionPrioritisesEngineOverAgent()
+        {
+            AssertEqual(
+                "Start the stopped SQL Server database engine service and review its SQL Server error log.",
+                SqlServerPolicy.NextAction("ok", 1, 1, 1, 1, 1));
+            AssertEqual(
+                "Start the stopped SQL Server Agent service; scheduled backups and maintenance jobs are not running.",
+                SqlServerPolicy.NextAction("ok", 0, 1, 1, 1, 1));
+            AssertEqual(
+                "No action; surface SQL evidence is healthy.",
+                SqlServerPolicy.NextAction("ok", 0, 0, 0, 0, 0));
+            AssertEqual(
+                "No action; SQL service evidence was not detected.",
+                SqlServerPolicy.NextAction("not_detected", 0, 0, 0, 0, 0));
         }
 
         private static void AssertEqual(string expected, string actual)

@@ -81,6 +81,7 @@ $performance_network_raw = $agent_data['windows_agent_performance_network'] ?? '
 $performance_processes_raw = $agent_data['windows_agent_performance_processes'] ?? '';
 $sql_summary_raw = $agent_data['windows_agent_sql_server_summary'] ?? '';
 $sql_instances_raw = $agent_data['windows_agent_sql_server_instances'] ?? '';
+$sql_components_raw = $agent_data['windows_agent_sql_server_components'] ?? '';
 $iis_summary_raw = $agent_data['windows_agent_iis_summary'] ?? '';
 $iis_sites_raw = $agent_data['windows_agent_iis_sites'] ?? '';
 $iis_app_pools_raw = $agent_data['windows_agent_iis_app_pools'] ?? '';
@@ -425,6 +426,7 @@ $performance_disks = $parse_rows($performance_disks_raw, 'name');
 $performance_network = $parse_rows($performance_network_raw, 'name');
 $performance_processes = $parse_rows($performance_processes_raw, 'name');
 $sql_instances = $parse_rows($sql_instances_raw, 'instance');
+$sql_components = $parse_rows($sql_components_raw, 'name');
 $iis_summary = $parse_windows_agent_kv($iis_summary_raw);
 $iis_sites = $parse_rows($iis_sites_raw, 'name');
 $iis_app_pools = $parse_rows($iis_app_pools_raw, 'name');
@@ -636,6 +638,18 @@ $fields = [
     'perf_pressure_issues' => (int) ($performance_summary['pressure_issues'] ?? 0),
     'sql_instances_total' => (int) ($sql_summary['instances_total'] ?? 0),
     'sql_instances_not_running' => (int) ($sql_summary['instances_not_running'] ?? 0),
+    'sql_health_issues' => (int) ($sql_summary['health_issues'] ?? 0),
+    'sql_engines_expected_not_running' => (int) ($sql_summary['engines_expected_not_running'] ?? 0),
+    'sql_agents_total' => (int) ($sql_summary['agents_total'] ?? 0),
+    'sql_agents_running' => (int) ($sql_summary['agents_running'] ?? 0),
+    'sql_agents_expected_not_running' => (int) ($sql_summary['agents_expected_not_running'] ?? 0),
+    'sql_agents_not_expected_running' => (int) ($sql_summary['agents_not_expected_running'] ?? 0),
+    'sql_components_total' => (int) ($sql_summary['components_total'] ?? 0),
+    'sql_components_expected_not_running' => (int) ($sql_summary['components_expected_not_running'] ?? 0),
+    'sql_instances_without_listener' => (int) ($sql_summary['instances_without_listener'] ?? 0),
+    'sql_listener_ports_total' => (int) ($sql_summary['listener_ports_total'] ?? 0),
+    'sql_registry_instances' => (int) ($sql_summary['registry_instances'] ?? 0),
+    'sql_unmapped_engine_processes' => (int) ($sql_summary['unmapped_engine_processes'] ?? 0),
     'iis_sites_total' => (int) ($iis_summary['sites_total'] ?? 0),
     'iis_sites_stopped' => (int) ($iis_summary['sites_stopped'] ?? 0),
     'iis_app_pools_total' => (int) ($iis_summary['app_pools_total'] ?? 0),
@@ -826,6 +840,7 @@ $status_parts = [
     'agent_impact=' . (['unknown', 'low', 'moderate', 'high'][$agent_resource_impact_level + 1] ?? 'unknown'),
     'perf_pressure=' . ($fields['perf_pressure_issues'] ?? 0),
     'sql_down=' . ($fields['sql_instances_not_running'] ?? 0),
+    'sql_agents_down=' . ($fields['sql_agents_expected_not_running'] ?? 0),
     'iis_sites_down=' . ($fields['iis_sites_stopped'] ?? 0),
     'iis_pools_down=' . ($fields['iis_app_pools_stopped'] ?? 0),
     'horizon_state=' . ($horizon_summary['state'] ?? 'not_detected'),
@@ -907,6 +922,7 @@ $windows_agent_app->data = [
     'performance_processes' => $performance_processes,
     'sql_server_summary' => $sql_summary,
     'sql_server_instances' => $sql_instances,
+    'sql_server_components' => $sql_components,
     'iis_summary' => $iis_summary,
     'iis_sites' => $iis_sites,
     'iis_app_pools' => $iis_app_pools,
@@ -1154,6 +1170,38 @@ app('Datastore')->put($device, 'app', [
 ], [
     'instances_total' => $fields['sql_instances_total'],
     'not_running' => $fields['sql_instances_not_running'],
+]);
+
+// New family rather than extra datasets on windows-agent-sql-server, so existing
+// RRD files keep their schema.
+$sql_health_rrd_def = RrdDefinition::make()
+    ->addDataset('health_issues', 'GAUGE', 0)
+    ->addDataset('engines_down', 'GAUGE', 0)
+    ->addDataset('agents_total', 'GAUGE', 0)
+    ->addDataset('agents_down', 'GAUGE', 0)
+    ->addDataset('agents_off', 'GAUGE', 0)
+    ->addDataset('components', 'GAUGE', 0)
+    ->addDataset('components_down', 'GAUGE', 0)
+    ->addDataset('no_listener', 'GAUGE', 0)
+    ->addDataset('listener_ports', 'GAUGE', 0)
+    ->addDataset('unmapped_engines', 'GAUGE', 0);
+
+app('Datastore')->put($device, 'app', [
+    'name' => 'windows-agent-sql-server-health',
+    'app_id' => $windows_agent_app->app_id,
+    'rrd_name' => ['app', 'windows-agent-sql-server-health', $windows_agent_app->app_id],
+    'rrd_def' => $sql_health_rrd_def,
+], [
+    'health_issues' => $fields['sql_health_issues'],
+    'engines_down' => $fields['sql_engines_expected_not_running'],
+    'agents_total' => $fields['sql_agents_total'],
+    'agents_down' => $fields['sql_agents_expected_not_running'],
+    'agents_off' => $fields['sql_agents_not_expected_running'],
+    'components' => $fields['sql_components_total'],
+    'components_down' => $fields['sql_components_expected_not_running'],
+    'no_listener' => $fields['sql_instances_without_listener'],
+    'listener_ports' => $fields['sql_listener_ports_total'],
+    'unmapped_engines' => $fields['sql_unmapped_engine_processes'],
 ]);
 
 $iis_rrd_def = RrdDefinition::make()

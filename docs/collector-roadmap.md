@@ -38,10 +38,15 @@ Default shape:
 - Event Log summary through `windows_agent_event_logs`.
 - Watched process count/resource summary through `windows_agent_processes`.
 - Watched local TCP listener state through `windows_agent_tcp_ports`.
-- SQL Server first-pass visibility through `windows_agent_sql_server_*` sections.
-  This remains surface-only: services, instance evidence, SQL Agent state,
-  Browser state, listener ports, and executable version/path evidence without
-  database queries or credentials.
+- SQL Server surface visibility through `windows_agent_sql_server_*` sections:
+  per-instance engine state, registry-sourced edition/patch level/TCP endpoints,
+  engine-to-process mapping, expectedness-aware SQL Agent and component verdicts,
+  SQL Browser requirement, and non-engine components (Analysis Services,
+  Reporting Services, Integration Services, Full-Text, Launchpad, VSS writer,
+  telemetry). Still no database queries and no credentials: nothing here needs a
+  SQL login. Depth that requires a connection — backup age, job outcome,
+  database state, wait and file-IO statistics — is item 5 below and is surveyed
+  in `docs/sql-collector-expansion.md`.
 - IIS visibility through `windows_agent_iis_*` sections.
 - VMware Horizon visibility through `windows_agent_horizon_*` sections, using local
   service/process/listener/certificate evidence only.
@@ -85,8 +90,11 @@ noise by itself.
    the bounded runtime and Counter Monitor sections; continue avoiding project
    files, controller subscriptions, and raw diagnostics by default.
 4. Hyper-V: VM state, integration service state, replication health.
-5. Deeper SQL Server: optional local integrated queries for database/job/backup
-   state after credential and permission handling is explicitly designed.
+5. Deeper SQL Server, in the order surveyed in `docs/sql-collector-expansion.md`:
+   server-level performance counters through PDH (credential-free), then bounded
+   ERRORLOG and event-log evidence, then capped per-database counters, then
+   optional local integrated queries for database/job/backup state after
+   credential and permission handling is explicitly designed.
 
 ## Collector Acceptance Criteria
 
