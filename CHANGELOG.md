@@ -48,6 +48,60 @@ version has been cut and no artifact has been rebuilt.
   `collectors.sqlServer.includeProcessMapping`, both default `true`.
 - No protocol rename, no application identity change, no RRD schema change.
 
+SQL Server server-level performance counters (Tier 1 of
+`docs/sql-collector-expansion.md`). Agent and overlay change together; no version
+has been cut and no artifact has been rebuilt.
+
+- New `windows_agent_sql_server_performance` section, one row per detected engine
+  instance, carrying server-level counters read through PDH
+  (`System.Diagnostics.PerformanceCounterCategory` / `PerformanceCounter`) by the
+  account the agent already runs as. No SQL login and no new credential surface.
+  PDH rather than WMI because the `Win32_PerfRawData_*` classes mangle a named
+  instance into the class name, while the literal object name
+  (`SQLServer:` / `MSSQL$<INSTANCE>:`, `SQLAgent:` / `SQLAgent$<INSTANCE>:`) does not.
+- Counters collected: Memory Manager total/target server memory and memory grants
+  pending; Buffer Manager page life expectancy, cache hit ratio, free list stalls,
+  lazy writes and checkpoint pages; General Statistics user connections, processes
+  blocked, logins and logouts; SQL Statistics batch requests, compilations and
+  re-compilations; `Locks(_Total)` waits, wait time, average wait time, deadlocks
+  and timeouts; Access Methods full scans, page splits and forwarded records;
+  Latches average wait time; Transactions longest running time, tempdb free space
+  and version store size; `Databases(_Total)` transactions, log growths, log bytes
+  flushed and log flush wait time; `Database Replica(_Total)` log send and recovery
+  queue when an Availability Group is present; and `SQLAgent:Jobs` failed,
+  successful, active and queued job counts plus job success rate.
+- SQL Agent job counts run from Agent process start, so they are emitted as deltas
+  between polls rather than as levels; a backwards step is treated as an Agent
+  restart and the current value becomes the delta. `agent_jobs_delta_available`
+  says whether a delta exists yet and `agent_jobs_reset` flags the restart.
+- Rate counters are sampled twice, with one short window shared by every instance
+  on the host, so the sampling cost does not scale with instance count. The window
+  is clamped to 250–3000 ms and to a quarter of the collector timeout.
+- A counter, counter instance, or performance object that is not present is
+  reported as `-1`, never as a measured zero, and never raises pressure. Counter
+  availability has not been observed on a real SQL host, so the collector treats
+  the documented counter list as a hypothesis: every read degrades to a shorter
+  row or an empty section rather than failing the collector.
+- Derived per instance: `memory_used_percent` (total versus target server memory),
+  `compilation_percent` (compilations as a share of batch requests, ignored below
+  10 batches/sec so an idle instance does not read as a plan cache problem), and
+  `memory_pressure` / `buffer_pressure` / `blocking_pressure` / `compile_pressure` /
+  `deadlock_pressure` flags rolled into `pressure_issues`.
+- Overlay: new `windows-agent-sql-server-performance` RRD family and graph. Both
+  `windows-agent-sql-server` and `windows-agent-sql-server-health` are untouched,
+  per the add-a-family rule. Device-level `sql_perf_*` fields carry the host
+  aggregates, and per-instance metrics are flattened as `sql_perf_<measure>:<key>`
+  — the same contract the Horizon pools use — so an alert rule can target a single
+  instance. The app page SQL section gains a counter table and attention rows for
+  blocked sessions, pending memory grants, low page life expectancy, and SQL Agent
+  job failures. New visibility is non-alerting by default; suggested rules are
+  documented in `docs/suggested-alerts.md` and none is enabled.
+- New config, all under `collectors.sqlServer`: `includeCounters` (default `true`),
+  `counterSampleMs` (default `1000`), `pageLifeExpectancyWarning` (default `300`),
+  `memoryGrantsPendingWarning` (default `1`), `processesBlockedWarning`
+  (default `1`), and `compilationPercentWarning` (default `10`).
+- Per-database counters, ERRORLOG evidence, and DMV queries remain unimplemented.
+
 ## Overlay 0.6.30 - 2026-09-09
 
 Overlay-only release. Adds per-pool Horizon availability metrics so LibreNMS alert rules

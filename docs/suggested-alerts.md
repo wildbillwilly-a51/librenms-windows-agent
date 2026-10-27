@@ -59,6 +59,48 @@ are configured not to run a component:
   `sqlservr.exe` processes that no detected service owns, which means instance
   discovery is incomplete on that host.
 
+## SQL Server Performance Counters
+
+`windows_agent_sql_server_performance` is new visibility and ships non-alerting:
+none of the rules below is enabled anywhere, and none should be turned on before
+the numbers have been watched on the hosts in question for long enough to know
+their normal range. Counter availability has also not yet been confirmed on a
+real SQL host, so treat a missing metric as "not published here" first.
+
+| Purpose | Metric | Suggested condition | Severity |
+| --- | --- | --- | --- |
+| Blocked sessions on any instance | `sql_perf_blocked_max` | `> 0` sustained across several polls | Warning |
+| Queries queued for workspace memory | `sql_perf_grants_pending_max` | `> 0` sustained across several polls | Warning |
+| Buffer pool turning over too fast | `sql_perf_ple_min` | `< 300` and `>= 0` | Warning |
+| SQL Agent job failures | `sql_perf_jobs_failed_total` | `> 0` | Warning |
+| Counter pressure rollup | `sql_perf_pressure_issues` | `> 0` when SQL is expected | Warning |
+
+Notes that change how these should be written:
+
+- Every counter metric carries `-1` when the agent could not read it. A rule must
+  exclude `-1` explicitly (`>= 0` alongside the real condition) or it will fire on
+  hosts that publish nothing, which is the opposite of the intent.
+- `sql_perf_blocked_max` and `sql_perf_grants_pending_max` are instantaneous
+  samples taken once per poll. A single non-zero sample is normal on a busy
+  instance; only a sustained one is an incident. Use a multi-poll condition.
+- `sql_perf_ple_min` is the minimum across instances, so one small instance with a
+  cold cache drags it down for the host. Prefer the per-instance key below when a
+  host runs instances of very different sizes.
+- `sql_perf_jobs_failed_total` counts failures since the SQL Server Agent process
+  last started, not since midnight, and the agent reports it as a delta between
+  polls. It is zero on the first poll after an agent restart, by design.
+- The 300-second page life expectancy threshold is the historical rule of thumb for
+  a small buffer pool and is far too low for a large one. It is the collector
+  default (`pageLifeExpectancyWarning`) and should be raised per host rather than
+  alerted on as shipped.
+
+Per-instance metrics are keyed `sql_perf_<measure>:<key>`, where `<key>` is the SQL
+instance name sanitized to `[A-Za-z0-9_-]` — the same contract the Horizon pools
+use. Available measures are `state`, `blocked`, `grants_pending`, `ple`,
+`connections`, `batches`, `jobs_failed`, and `pressure`. `sql_perf_state:<key>` is a
+severity ordinal: `0` ok, `1` info, `2` warning, `3` critical, with `-1` disabled and
+`-2` counters unreadable, so a `>= 2` rule skips an instance that published nothing.
+
 ## Horizon Per-Pool Availability
 
 Per-pool metrics are keyed `horizon_pool_<measure>:<key>`, where `<key>` is the

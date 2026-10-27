@@ -1,0 +1,114 @@
+{
+  "name": "sql server performance counters fixture",
+  "device": {
+    "device_id": 1005,
+    "hostname": "windows-agent-sqlperf.example.test"
+  },
+  "app_id": 2005,
+  "agent_data": {
+    "windows_agent": "version=0.6.17.0 protocol=checkmk host=windows-agent-sqlperf utc=2026-10-16T19:00:00Z",
+    "windows_agent_windows_os": "caption=\"Microsoft Windows Server 2022 Standard\"",
+    "windows_agent_pending_reboot": "pending=0 sources=",
+    "windows_agent_windows_update": "reboot_required=0 service_state=Running",
+    "windows_agent_services": "installed_count=0",
+    "windows_agent_roles": "role=sql_server detected=1 confidence=medium source=services health_issues=0 evidence=services health_scope=inventory next_action=\"Review role-specific section for health evidence.\"",
+    "windows_agent_performance": "type=summary collect_duration_ms=2600 collectors_run=16 collectors_failed=0 collectors_timed_out=0 payload_bytes=21000 process_working_set_bytes=44000000 process_private_bytes=33000000",
+    "windows_agent_performance_summary": "state=ok cpu_queue_length=0 cpu_pressure=0 memory_available_mb=8192 memory_committed_percent=55 memory_pressure=0 pages_per_sec=0 paging_pressure=0 disk_read_ms_max=0 disk_write_ms_max=0 disk_queue_length_max=0 disk_pressure=0 network_bytes_per_sec_total=0 network_errors_total=0 network_issue=0 pressure_issues=0",
+    "windows_agent_sql_server_summary": "state=ok detected=1 instances_total=2 instances_running=2 instances_not_running=0 listener_ports_total=2 health_issues=0 engines_expected_not_running=0 agents_total=2 agents_running=2 agents_expected_not_running=0 agents_not_expected_running=0 components_total=0 components_expected_not_running=0 instances_without_listener=0 registry_instances=2 unmapped_engine_processes=0 browser_state=Running browser_required=1 browser_severity=ok browser_reason=browser_running evidence=instances=2;listeners=2;agents_down=0;components_down=0 health_scope=scored next_action=\"No action; surface SQL evidence is healthy.\"",
+    "windows_agent_sql_server_instances": "instance=MSSQLSERVER service=MSSQLSERVER display=\"SQL Server (MSSQLSERVER)\" state=Running start_mode=Auto path_exists=1 version=\"2022.0160.1000.06\" agent_service=SQLSERVERAGENT agent_state=Running browser_state=Running listener_ports=1433 pid=2104 edition=\"Enterprise Edition\" patch_level=16.0.1000.6 product_version=16.0.1000.6 login_mode=mixed tcp_enabled=1 port_source=static listener_active=1 requires_browser=0 agent_start_mode=Auto agent_expected=1 agent_severity=ok agent_reason=agent_running expected=1 severity=ok reason=engine_running impact=none\ninstance=APPDB service=MSSQL$APPDB display=\"SQL Server (APPDB)\" state=Running start_mode=Auto path_exists=1 version=\"2022.0160.1000.06\" agent_service=SQLAgent$APPDB agent_state=Running browser_state=Running listener_ports=51000 pid=2288 edition=\"Standard Edition\" patch_level=16.0.1000.6 product_version=16.0.1000.6 login_mode=windows tcp_enabled=1 port_source=dynamic listener_active=1 requires_browser=1 agent_start_mode=Auto agent_expected=1 agent_severity=ok agent_reason=agent_running expected=1 severity=ok reason=engine_running impact=none",
+    "windows_agent_sql_server_components": "",
+    "windows_agent_sql_server_performance": "instance=MSSQLSERVER state=warning counters_read=36 counters_missing=0 agent_counters=1 total_server_memory_kb=4194304 target_server_memory_kb=8388608 memory_grants_pending=2 page_life_expectancy=142 buffer_cache_hit_ratio=99.1 free_list_stalls_per_sec=0.4 lazy_writes_per_sec=11.2 checkpoint_pages_per_sec=64.8 user_connections=96 processes_blocked=4 logins_per_sec=3.1 logouts_per_sec=2.9 batch_requests_per_sec=820.5 compilations_per_sec=41.2 recompilations_per_sec=3.4 lock_waits_per_sec=12.75 lock_wait_time_ms=318 lock_average_wait_time_ms=24 deadlocks_per_sec=0 lock_timeouts_per_sec=0.5 full_scans_per_sec=7.2 page_splits_per_sec=18.6 forwarded_records_per_sec=0.1 latch_average_wait_time_ms=1.8 longest_transaction_seconds=412 tempdb_free_space_kb=1048576 version_store_size_kb=20480 transactions_per_sec=190.3 log_growths=2 log_bytes_flushed_per_sec=918272 log_flush_wait_time_ms=3 ag_log_send_queue_kb=-1 ag_redo_queue_kb=-1 agent_active_jobs=1 agent_queued_jobs=0 agent_job_success_rate=94 agent_failed_jobs=2 agent_successful_jobs=37 agent_jobs_delta_available=1 agent_jobs_reset=0 memory_used_percent=50 compilation_percent=5.02 memory_pressure=1 buffer_pressure=1 blocking_pressure=1 compile_pressure=0 deadlock_pressure=0 pressure_issues=3\ninstance=APPDB state=unavailable counters_read=0 counters_missing=31 agent_counters=0 total_server_memory_kb=-1 target_server_memory_kb=-1 memory_grants_pending=-1 page_life_expectancy=-1 buffer_cache_hit_ratio=-1 free_list_stalls_per_sec=-1 lazy_writes_per_sec=-1 checkpoint_pages_per_sec=-1 user_connections=-1 processes_blocked=-1 logins_per_sec=-1 logouts_per_sec=-1 batch_requests_per_sec=-1 compilations_per_sec=-1 recompilations_per_sec=-1 lock_waits_per_sec=-1 lock_wait_time_ms=-1 lock_average_wait_time_ms=-1 deadlocks_per_sec=-1 lock_timeouts_per_sec=-1 full_scans_per_sec=-1 page_splits_per_sec=-1 forwarded_records_per_sec=-1 latch_average_wait_time_ms=-1 longest_transaction_seconds=-1 tempdb_free_space_kb=-1 version_store_size_kb=-1 transactions_per_sec=-1 log_growths=-1 log_bytes_flushed_per_sec=-1 log_flush_wait_time_ms=-1 ag_log_send_queue_kb=-1 ag_redo_queue_kb=-1 agent_active_jobs=-1 agent_queued_jobs=-1 agent_job_success_rate=-1 agent_failed_jobs=-1 agent_successful_jobs=-1 agent_jobs_delta_available=0 agent_jobs_reset=0 memory_used_percent=-1 compilation_percent=-1 memory_pressure=0 buffer_pressure=0 blocking_pressure=0 compile_pressure=0 deadlock_pressure=0 pressure_issues=0",
+    "windows_agent_iis_summary": "state=not_detected sites_total=0 sites_running=0 sites_stopped=0 app_pools_total=0 app_pools_running=0 app_pools_stopped=0 bindings_total=0",
+    "windows_agent_horizon_summary": "state=not_detected detected=0 services_total=0 services_not_running=0 processes_total=0 ports_total=0 ports_listening=0 ports_missing=0 certificates_total=0 certificates_expired=0 certificates_expiring=0 health_issues=0",
+    "windows_agent_factorytalk_summary": "state=not_detected detected=0 products_total=0 services_total=0 services_not_running=0 core_services_not_running=0 processes_total=0 ports_total=0 ports_listening=0 health_issues=0",
+    "windows_agent_tls_certificates_summary": "state=ok store_count=1 certificate_count=0 expired_count=0 expiring_warning_count=0 expiring_critical_count=0 not_yet_valid_count=0 invalid_chain_count=0 weak_key_count=0 weak_signature_count=0 missing_private_key_count=0 bound_count=0 binding_missing_count=0 unhealthy_count=0",
+    "windows_agent_backup_storage_summary": "state=not_detected vss_writers_total=0 vss_writers_stable=0 vss_writers_failed=0 vss_writers_retryable_failed=0 vss_writers_non_retryable_failed=0 backup_services_total=0 backup_services_not_running=0",
+    "windows_agent_datto_backup_summary": "state=not_detected detected=0 service_running=0 provider_present=0 provider_issue=0 processes_total=0 evidence_state=unknown recent_errors=0 recent_critical_failures=0 last_success_age_hours=-1 stale_warning=0 stale_critical=0 health_issues=0",
+    "windows_agent_ad_dc_health_summary": "state=not_applicable reason=not_domain_controller dc_detected=0 core_services_total=0 core_services_not_running=0 dns_service_present=0 dns_service_running=0 dns_service_issue=0 sysvol_share_present=0 netlogon_share_present=0 shares_missing=0 time_state=not_applicable time_service_running=0 time_issues=0 health_issues=0"
+  },
+  "expect": {
+    "status_prefix": "OK:",
+    "status_contains": [
+      "sql_down=0",
+      "sql_agents_down=0"
+    ],
+    "fields": {
+      "sql_instances_total": 2,
+      "sql_health_issues": 0,
+      "sql_perf_instances": 2,
+      "sql_perf_counters_ok": 1,
+      "sql_perf_blocked_max": 4,
+      "sql_perf_grants_pending_max": 2,
+      "sql_perf_ple_min": 142,
+      "sql_perf_memory_percent_max": 50,
+      "sql_perf_connections_total": 96,
+      "sql_perf_batches_total": 820.5,
+      "sql_perf_compiles_total": 41.2,
+      "sql_perf_recompiles_total": 3.4,
+      "sql_perf_deadlocks_total": 0,
+      "sql_perf_lock_waits_total": 12.75,
+      "sql_perf_jobs_failed_total": 2,
+      "sql_perf_pressure_issues": 3,
+      "sql_perf_blocking_instances": 1,
+      "sql_perf_memory_instances": 1,
+      "sql_perf_buffer_instances": 1,
+      "sql_perf_state:MSSQLSERVER": 2,
+      "sql_perf_state:APPDB": -2,
+      "sql_perf_blocked:MSSQLSERVER": 4,
+      "sql_perf_ple:MSSQLSERVER": 142,
+      "sql_perf_connections:MSSQLSERVER": 96,
+      "sql_perf_jobs_failed:MSSQLSERVER": 2,
+      "sql_perf_pressure:MSSQLSERVER": 3,
+      "sql_perf_blocked:APPDB": -1,
+      "sql_perf_ple:APPDB": -1,
+      "sql_perf_jobs_failed:APPDB": 0,
+      "sql_perf_pressure:APPDB": 0
+    },
+    "data": {
+      "sql_server_performance.0.instance": "MSSQLSERVER",
+      "sql_server_performance.0.state": "warning",
+      "sql_server_performance.0.page_life_expectancy": "142",
+      "sql_server_performance.0.ag_log_send_queue_kb": "-1",
+      "sql_server_performance.0.agent_jobs_delta_available": "1",
+      "sql_server_performance.1.instance": "APPDB",
+      "sql_server_performance.1.state": "unavailable",
+      "sql_server_performance.1.processes_blocked": "-1",
+        "sql_server_performance.1.agent_failed_jobs": "-1"
+    },
+    "datastore": {
+      "windows-agent-sql-server-performance.instances": 2,
+      "windows-agent-sql-server-performance.counters_ok": 1,
+      "windows-agent-sql-server-performance.blocked": 4,
+      "windows-agent-sql-server-performance.grants": 2,
+      "windows-agent-sql-server-performance.ple_min": 142,
+      "windows-agent-sql-server-performance.mem_percent": 50,
+      "windows-agent-sql-server-performance.connections": 96,
+      "windows-agent-sql-server-performance.batches": 820.5,
+      "windows-agent-sql-server-performance.compiles": 41.2,
+      "windows-agent-sql-server-performance.recompiles": 3.4,
+      "windows-agent-sql-server-performance.deadlocks": 0,
+      "windows-agent-sql-server-performance.lock_waits": 12.75,
+      "windows-agent-sql-server-performance.jobs_failed": 2,
+      "windows-agent-sql-server-performance.pressure": 3,
+      "windows-agent-sql-server-health.health_issues": 0
+    },
+    "app_page": {
+      "contains": [
+        "Blocked",
+        "PLE min",
+        "Grants pending",
+        "Page life",
+        "blocked sessions",
+        "pending memory grants",
+        "low page life expectancy",
+        "SQL Server Agent job failure(s)",
+        "Counters",
+        "36 read, 0 missing",
+        "unavailable"
+      ],
+      "not_contains": [
+        "data-type=\"application_windows-agent_sql_server\""
+      ]
+    }
+  }
+}

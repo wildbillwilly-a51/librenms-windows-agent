@@ -100,8 +100,9 @@ and diagnostics.
   `windows_agent_performance_network`, and `windows_agent_performance_processes`: bounded local
   pressure evidence for CPU queue, memory/paging, disk latency/queue, network
   errors, and top CPU/memory process context.
-- `windows_agent_sql_server_summary`, `windows_agent_sql_server_instances`, and
-  `windows_agent_sql_server_components`: local SQL Server instance, SQL Agent, and
+- `windows_agent_sql_server_summary`, `windows_agent_sql_server_instances`,
+  `windows_agent_sql_server_components`, and `windows_agent_sql_server_performance`:
+  local SQL Server instance, SQL Agent, and
   component visibility without a SQL login. Instance identity, edition, patch level,
   and TCP endpoints come from the registry under
   `HKLM\SOFTWARE\Microsoft\Microsoft SQL Server`, so named instances report their real
@@ -109,6 +110,15 @@ and diagnostics.
   `sqlservr.exe` process id, and engine processes no detected service owns are counted.
   SQL Agent, component, and SQL Browser verdicts are expectedness-aware, using the same
   `expected`/`severity`/`reason`/`impact` vocabulary as the Horizon collector.
+  `windows_agent_sql_server_performance` adds one row per instance of server-level
+  performance counters read through PDH
+  (`System.Diagnostics.PerformanceCounterCategory`), not WMI: the object name is
+  `SQLServer:` for the default instance and `MSSQL$<INSTANCE>:` for a named one, which
+  the `Win32_PerfRawData_*` classes mangle. Rate counters are sampled twice with one
+  short window shared by every instance on the host, and SQL Agent job counts are
+  emitted as deltas because they run from Agent process start. A counter or object that
+  is not present is reported as `-1`, never as a measured zero, so an absent counter
+  cannot be mistaken for a healthy reading.
 - `windows_agent_iis_summary`, `windows_agent_iis_sites`, `windows_agent_iis_app_pools`, and
   `windows_agent_iis_bindings`: local IIS role, site, app pool, binding, and certificate
   thumbprint visibility.

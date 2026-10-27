@@ -39,6 +39,7 @@ $performance_processes = $data['performance_processes'] ?? [];
 $sql_server_summary = $data['sql_server_summary'] ?? [];
 $sql_server_instances = $data['sql_server_instances'] ?? [];
 $sql_server_components = $data['sql_server_components'] ?? [];
+$sql_server_performance = $data['sql_server_performance'] ?? [];
 $iis_summary = $data['iis_summary'] ?? [];
 $iis_sites = $data['iis_sites'] ?? [];
 $iis_app_pools = $data['iis_app_pools'] ?? [];
@@ -747,6 +748,43 @@ $factorytalk_section_summary = $factorytalk_detected
     ? $metric('Health issues', $factorytalk_health_issue_count) . ' ' . $metric('Core down', $factorytalk_core_services_not_running) . ' ' . $metric('Runtime CPU', empty($factorytalk_runtime_summary) ? 'N/A' : $format_percent($factorytalk_runtime_summary['cpu_percent'] ?? 0)) . ' ' . $metric('Active connections', $factorytalk_active_connections)
     : $metric('Detected', '0') . ' ' . $metric('Products', $factorytalk_summary['products_total'] ?? '0');
 
+// Counter pressure is shown beside the service inventory, but only once counters were
+// actually readable: an instance that published none must not read as "0 blocked".
+$sql_counter_rows_available = 0;
+$sql_counter_pressure_issues = 0;
+$sql_counter_blocking_instances = 0;
+$sql_counter_memory_instances = 0;
+$sql_counter_buffer_instances = 0;
+$sql_counter_jobs_failed = 0;
+$sql_counter_blocked_max = -1;
+$sql_counter_ple_min = -1;
+foreach ($sql_server_performance as $sql_counter_row) {
+    if (strtolower((string) ($sql_counter_row['state'] ?? 'unavailable')) === 'unavailable') {
+        continue;
+    }
+
+    $sql_counter_rows_available++;
+    $sql_counter_pressure_issues += max(0, (int) ($sql_counter_row['pressure_issues'] ?? 0));
+    $sql_counter_blocking_instances += ((int) ($sql_counter_row['blocking_pressure'] ?? 0)) === 1 ? 1 : 0;
+    $sql_counter_memory_instances += ((int) ($sql_counter_row['memory_pressure'] ?? 0)) === 1 ? 1 : 0;
+    $sql_counter_buffer_instances += ((int) ($sql_counter_row['buffer_pressure'] ?? 0)) === 1 ? 1 : 0;
+    $sql_counter_jobs_failed += max(0, (int) ($sql_counter_row['agent_failed_jobs'] ?? 0));
+
+    $sql_counter_blocked = (float) ($sql_counter_row['processes_blocked'] ?? -1);
+    if ($sql_counter_blocked >= 0) {
+        $sql_counter_blocked_max = $sql_counter_blocked_max < 0 ? $sql_counter_blocked : max($sql_counter_blocked_max, $sql_counter_blocked);
+    }
+
+    $sql_counter_ple = (float) ($sql_counter_row['page_life_expectancy'] ?? -1);
+    if ($sql_counter_ple >= 0) {
+        $sql_counter_ple_min = $sql_counter_ple_min < 0 ? $sql_counter_ple : min($sql_counter_ple_min, $sql_counter_ple);
+    }
+}
+
+$sql_counter_summary_metrics = $sql_counter_rows_available > 0
+    ? ' ' . $metric('Blocked', $sql_counter_blocked_max < 0 ? '-' : (string) (int) $sql_counter_blocked_max) . ' ' . $metric('PLE min', $sql_counter_ple_min < 0 ? '-' : (string) (int) $sql_counter_ple_min)
+    : '';
+
 $sections = [
     'agent' => [
         'title' => 'Agent',
@@ -776,7 +814,7 @@ $sections = [
     'sql' => [
         'title' => 'SQL',
         'state' => $section_state($sql_server_summary['state'] ?? 'not_detected', (int) ($sql_server_summary['health_issues'] ?? $sql_server_summary['instances_not_running'] ?? 0)),
-        'summary' => $metric('Instances', $sql_server_summary['instances_total'] ?? '0') . ' ' . $metric('Down', $sql_server_summary['instances_not_running'] ?? '0') . ' ' . $metric('Agents down', $sql_server_summary['agents_expected_not_running'] ?? '0') . ' ' . $metric('Issues', $sql_server_summary['health_issues'] ?? '0'),
+        'summary' => $metric('Instances', $sql_server_summary['instances_total'] ?? '0') . ' ' . $metric('Down', $sql_server_summary['instances_not_running'] ?? '0') . ' ' . $metric('Agents down', $sql_server_summary['agents_expected_not_running'] ?? '0') . ' ' . $metric('Issues', $sql_server_summary['health_issues'] ?? '0') . $sql_counter_summary_metrics,
     ],
     'iis' => [
         'title' => 'IIS',
@@ -962,6 +1000,41 @@ if ($has_role_details($sql_server_summary, $sql_server_components)) {
             . '<td>' . (((int) ($row['expected'] ?? 0)) === 1 ? 'yes' : 'no') . '</td>'
             . '<td>' . $esc($row['reason'] ?? '') . '</td>';
     });
+}
+
+// Server-level performance counters, read through PDH with no SQL login. A counter the
+// agent could not read arrives as -1 and renders as "-", never as a zero.
+if ($has_role_details($sql_server_summary, $sql_server_performance)) {
+    $sql_counter_value = static function ($value, int $decimals = 0) use ($esc): string {
+        if (! is_numeric($value) || ((float) $value) < 0) {
+            return '-';
+        }
+
+        return $esc($decimals > 0 ? number_format((float) $value, $decimals) : (string) (int) round((float) $value));
+    };
+
+    $sql_details .= $table(
+        ['Instance', 'Counters', 'Blocked', 'Grants pending', 'Page life', 'Connections', 'Batches/s', 'Compile %', 'Memory vs target %', 'Deadlocks/s', 'Jobs failed', 'Pressure'],
+        $issue_first($sql_server_performance, static fn (array $row): int => max(0, (int) ($row['pressure_issues'] ?? 0)), 'instance'),
+        static function ($row) use ($esc, $state_label, $sql_counter_value): string {
+            $counters = strtolower((string) ($row['state'] ?? 'unavailable')) === 'unavailable'
+                ? $state_label('unavailable')
+                : $esc(($row['counters_read'] ?? '0') . ' read, ' . ($row['counters_missing'] ?? '0') . ' missing');
+
+            return '<td>' . $esc($row['instance'] ?? '') . '</td>'
+                . '<td>' . $counters . '</td>'
+                . '<td>' . $sql_counter_value($row['processes_blocked'] ?? -1) . '</td>'
+                . '<td>' . $sql_counter_value($row['memory_grants_pending'] ?? -1) . '</td>'
+                . '<td>' . $sql_counter_value($row['page_life_expectancy'] ?? -1) . '</td>'
+                . '<td>' . $sql_counter_value($row['user_connections'] ?? -1) . '</td>'
+                . '<td>' . $sql_counter_value($row['batch_requests_per_sec'] ?? -1, 1) . '</td>'
+                . '<td>' . $sql_counter_value($row['compilation_percent'] ?? -1, 1) . '</td>'
+                . '<td>' . $sql_counter_value($row['memory_used_percent'] ?? -1, 1) . '</td>'
+                . '<td>' . $sql_counter_value($row['deadlocks_per_sec'] ?? -1, 2) . '</td>'
+                . '<td>' . (((int) ($row['agent_jobs_delta_available'] ?? 0)) === 1 ? $esc((string) (int) ($row['agent_failed_jobs'] ?? 0)) : '-') . '</td>'
+                . '<td>' . $esc((string) (int) ($row['pressure_issues'] ?? 0)) . '</td>';
+        }
+    );
 }
 
 $iis_details = '';
@@ -2141,6 +2214,18 @@ if ($sql_detected && $sql_no_listener > 0) {
 }
 if ($sql_detected && $sql_unmapped_engines > 0) {
     $roles_attention[] = ['title' => $sql_unmapped_engines . ' unmapped sqlservr.exe process(es)', 'detail' => 'Database engine processes that no detected SQL Server service owns.', 'action' => 'Investigate the unowned SQL Server engine process(es).'];
+}
+if ($sql_detected && $sql_counter_blocking_instances > 0) {
+    $roles_attention[] = ['title' => $sql_counter_blocking_instances . ' SQL Server instance(s) with blocked sessions', 'detail' => 'Sessions are waiting on locks held by another session.', 'action' => 'Investigate the blocking chain on the affected instance(s).'];
+}
+if ($sql_detected && $sql_counter_memory_instances > 0) {
+    $roles_attention[] = ['title' => $sql_counter_memory_instances . ' SQL Server instance(s) with pending memory grants', 'detail' => 'Queries are queued waiting for workspace memory.', 'action' => 'Review SQL Server memory configuration on the affected instance(s).'];
+}
+if ($sql_detected && $sql_counter_buffer_instances > 0) {
+    $roles_attention[] = ['title' => $sql_counter_buffer_instances . ' SQL Server instance(s) with low page life expectancy', 'detail' => 'The buffer pool is turning over faster than the configured threshold allows.', 'action' => 'Review buffer pool pressure on the affected instance(s).'];
+}
+if ($sql_detected && $sql_counter_jobs_failed > 0) {
+    $roles_attention[] = ['title' => $sql_counter_jobs_failed . ' SQL Server Agent job failure(s)', 'detail' => 'Counted since the SQL Server Agent process last started, not since midnight.', 'action' => 'Review SQL Server Agent job history on the affected instance(s).'];
 }
 if ($iis_detected && $iis_stopped > 0) {
     $roles_attention[] = ['title' => $iis_stopped . ' IIS site(s) or app pool(s) stopped', 'detail' => (string) ($iis_summary['sites_total'] ?? '0') . ' site(s), ' . (string) ($iis_summary['app_pools_total'] ?? '0') . ' pool(s).', 'action' => 'Review the IIS inventory below.'];

@@ -297,10 +297,16 @@ credential-free posture.
    ports from the registry, instance↔PID mapping, SSAS/SSRS/Full-Text as their
    own rows, SQL Agent expectedness, registry edition/patch level. No new
    credential surface and no new dependency.
-2. **Tier 1 server-level counters** via PDH into a new
-   `windows_agent_sql_server_performance` section, `_Total` and per-instance
-   only. New RRD family, non-alerting by default, per the "add new RRD graph
-   families" rule.
+2. ~~**Tier 1 server-level counters** via PDH into a new
+   `windows_agent_sql_server_performance` section.~~ **Done.** One row per
+   instance, `_Total` where the object is instanced, read through
+   `PerformanceCounterCategory` / `PerformanceCounter`. New
+   `windows-agent-sql-server-performance` RRD family and graph, per-instance
+   `sql_perf_<measure>:<key>` application metrics for alert targeting, and
+   non-alerting by default. A counter or object that is not present is reported
+   as `-1`, never as a measured zero. **Counter availability is still unverified
+   on a real SQL host** — the list below is product knowledge, and the collector
+   is written to degrade rather than to assume it.
 3. **Tier 2 ERRORLOG and event-log evidence** into
    `windows_agent_sql_server_evidence` — bounded pattern counts, no raw log.
 4. **Tier 1 per-database counters**, gated and capped, with the
@@ -321,6 +327,8 @@ credential-free posture.
 | SQL Agent stopped does not raise `health_issues` | Live payload: two Agents `Stopped`, summary `state=ok health_issues=0` |
 | SSAS / Launchpad / Full-Text present but absent from instance rows | Live payload service list vs `windows_agent_sql_server_instances` |
 | Counter availability, registry contents, ERRORLOG readability, LocalSystem SQL access | **Not verified.** Remote WMI, WinRM, and SQL login to the test host were all denied to the investigating account. `probe-sql-sources.ps1` must be run on the host to confirm |
+| The Tier 1 counter collector builds, passes unit tests, and passes overlay fixtures | `dotnet build` 0 warnings / 0 errors; 91 agent tests pass (exit 0); `run-parser-fixtures`, `run-app-page-fixtures`, `run-horizon-central-tests` all exit 0; 71/71 overlay PHP files lint clean |
+| The Tier 1 counter collector reads a real counter | **Not verified.** No PDH read has been executed against a SQL Server instance. The counter names, object prefixes, and `_Total` instance choices are from product knowledge; the naming and threshold logic is unit tested, the I/O is not |
 | The defect fixes build, pass unit tests, and pass overlay fixtures | `dotnet build` 0 warnings / 0 errors; 77 agent tests pass (exit 0); `run-parser-fixtures`, `run-app-page-fixtures`, `run-horizon-central-tests` all exit 0; 70/70 overlay PHP files lint clean |
 | The defect fixes produce correct output on a real SQL host | **Not verified.** The new collector has not been built into an MSI or run on a host. Registry reads, port resolution, and PID mapping are covered by unit tests over synthetic inputs only |
 

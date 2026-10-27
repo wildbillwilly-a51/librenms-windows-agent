@@ -93,7 +93,21 @@ namespace LibreNMS.WindowsAgent.Tests
                 ("sql policy resolves dynamic port", SqlPolicyResolvesDynamicPort),
                 ("sql policy resolves unassigned dynamic port", SqlPolicyResolvesUnassignedDynamicPort),
                 ("sql policy resolves disabled tcp", SqlPolicyResolvesDisabledTcp),
-                ("sql policy next action prioritises engine over agent", SqlPolicyNextActionPrioritisesEngineOverAgent)
+                ("sql policy next action prioritises engine over agent", SqlPolicyNextActionPrioritisesEngineOverAgent),
+                ("sql counter object names use pdh instance prefixes", SqlCounterObjectNamesUsePdhInstancePrefixes),
+                ("sql counter specs declare rate and cumulative counters", SqlCounterSpecsDeclareRateAndCumulativeCounters),
+                ("sql counter object names are deduplicated", SqlCounterObjectNamesAreDeduplicated),
+                ("sql counter delta is unavailable on first sample", SqlCounterDeltaIsUnavailableOnFirstSample),
+                ("sql counter delta subtracts consecutive samples", SqlCounterDeltaSubtractsConsecutiveSamples),
+                ("sql counter delta treats a backwards step as a restart", SqlCounterDeltaTreatsBackwardsStepAsRestart),
+                ("sql counter delta propagates an unreadable counter", SqlCounterDeltaPropagatesUnreadableCounter),
+                ("sql counter health is unknown without counters", SqlCounterHealthIsUnknownWithoutCounters),
+                ("sql counter health flags blocking and memory grants", SqlCounterHealthFlagsBlockingAndMemoryGrants),
+                ("sql counter health ignores absent counters", SqlCounterHealthIgnoresAbsentCounters),
+                ("sql counter health ignores compile ratio on an idle instance", SqlCounterHealthIgnoresCompileRatioOnIdleInstance),
+                ("sql counter health derives memory and compile percentages", SqlCounterHealthDerivesPercentages),
+                ("sql counter state ordinal keeps sentinels below ok", SqlCounterStateOrdinalKeepsSentinelsBelowOk),
+                ("sql counter sample window stays inside the collector budget", SqlCounterSampleWindowStaysInsideCollectorBudget)
             };
 
             var failed = 0;
@@ -1275,6 +1289,217 @@ namespace LibreNMS.WindowsAgent.Tests
             AssertEqual(
                 "No action; SQL service evidence was not detected.",
                 SqlServerPolicy.NextAction("not_detected", 0, 0, 0, 0, 0));
+        }
+
+        private static void SqlCounterObjectNamesUsePdhInstancePrefixes()
+        {
+            AssertEqual(
+                "SQLServer:Buffer Manager",
+                SqlServerCounterPolicy.ObjectName("MSSQLSERVER", SqlCounterScope.Engine, "Buffer Manager"));
+            AssertEqual(
+                "MSSQL$APPDB:Buffer Manager",
+                SqlServerCounterPolicy.ObjectName("APPDB", SqlCounterScope.Engine, "Buffer Manager"));
+            AssertEqual(
+                "SQLAgent:Jobs",
+                SqlServerCounterPolicy.ObjectName("MSSQLSERVER", SqlCounterScope.Agent, "Jobs"));
+            AssertEqual(
+                "SQLAgent$APPDB:Jobs",
+                SqlServerCounterPolicy.ObjectName("APPDB", SqlCounterScope.Agent, "Jobs"));
+
+            // An empty instance name is the default instance, not a malformed prefix.
+            AssertEqual("SQLServer:", SqlServerCounterPolicy.ObjectPrefix(string.Empty, SqlCounterScope.Engine));
+            AssertEqual(string.Empty, SqlServerCounterPolicy.ObjectName("APPDB", SqlCounterScope.Engine, "   "));
+        }
+
+        private static void SqlCounterSpecsDeclareRateAndCumulativeCounters()
+        {
+            AssertTrue(SqlServerCounterPolicy.Specs.Count > 0, "counter specs should not be empty");
+
+            var ple = SqlCounterSpecFor("page_life_expectancy");
+            AssertEqual("Buffer Manager", ple.ObjectSuffix);
+            AssertEqual("Page life expectancy", ple.CounterName);
+            AssertEqual(string.Empty, ple.CounterInstance);
+            AssertFalse(ple.IsRate, "page life expectancy is a level, not a rate");
+
+            AssertTrue(SqlCounterSpecFor("batch_requests_per_sec").IsRate, "batch requests per second needs two samples");
+            AssertEqual(SqlServerCounterPolicy.TotalCounterInstance, SqlCounterSpecFor("deadlocks_per_sec").CounterInstance);
+
+            var failed = SqlCounterSpecFor("agent_failed_jobs");
+            AssertTrue(failed.Scope == SqlCounterScope.Agent, "failed jobs lives on the SQLAgent object");
+            AssertTrue(failed.Cumulative, "agent job counts reset on agent restart and are reported as deltas");
+            AssertTrue(failed.Optional, "the SQLAgent object is absent while the agent is stopped");
+
+            // Availability Group objects only exist on a replica host.
+            AssertTrue(SqlCounterSpecFor("ag_log_send_queue_kb").Optional, "AG counters are absent without an availability group");
+        }
+
+        private static void SqlCounterObjectNamesAreDeduplicated()
+        {
+            var names = SqlServerCounterPolicy.ObjectNames("APPDB");
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var name in names)
+            {
+                AssertTrue(seen.Add(name), "object '" + name + "' should be probed once");
+                AssertTrue(
+                    name.StartsWith("MSSQL$APPDB:", StringComparison.Ordinal) ||
+                    name.StartsWith("SQLAgent$APPDB:", StringComparison.Ordinal),
+                    "unexpected object name '" + name + "'");
+            }
+
+            AssertTrue(names.Count < SqlServerCounterPolicy.Specs.Count, "several counters share one performance object");
+        }
+
+        private static void SqlCounterDeltaIsUnavailableOnFirstSample()
+        {
+            var delta = SqlServerCounterPolicy.ResolveDelta(false, 0, 12);
+            AssertFalse(delta.Available, "there is nothing to subtract from on the first sample");
+            AssertEqual(0, (int) delta.Value);
+            AssertFalse(delta.Reset, "a first sample is not a restart");
+        }
+
+        private static void SqlCounterDeltaSubtractsConsecutiveSamples()
+        {
+            var delta = SqlServerCounterPolicy.ResolveDelta(true, 12, 15);
+            AssertTrue(delta.Available, "a second sample yields a delta");
+            AssertEqual(3, (int) delta.Value);
+            AssertFalse(delta.Reset, "a rising counter did not restart");
+        }
+
+        private static void SqlCounterDeltaTreatsBackwardsStepAsRestart()
+        {
+            var delta = SqlServerCounterPolicy.ResolveDelta(true, 40, 2);
+            AssertTrue(delta.Available, "a restart still yields a usable delta");
+            AssertEqual(2, (int) delta.Value);
+            AssertTrue(delta.Reset, "a counter that went backwards means the agent restarted");
+        }
+
+        private static void SqlCounterDeltaPropagatesUnreadableCounter()
+        {
+            var delta = SqlServerCounterPolicy.ResolveDelta(true, 10, SqlServerCounterPolicy.Unavailable);
+            AssertFalse(delta.Available, "an unreadable counter has no delta");
+            AssertEqual((int) SqlServerCounterPolicy.Unavailable, (int) delta.Value);
+        }
+
+        private static void SqlCounterHealthIsUnknownWithoutCounters()
+        {
+            var result = SqlServerCounterPolicy.Evaluate(new SqlServerCounterHealthInput { CountersAvailable = false });
+            AssertEqual("unknown", result.State);
+            AssertEqual(0, result.PressureIssues);
+        }
+
+        private static void SqlCounterHealthFlagsBlockingAndMemoryGrants()
+        {
+            var result = SqlServerCounterPolicy.Evaluate(new SqlServerCounterHealthInput
+            {
+                CountersAvailable = true,
+                ProcessesBlocked = 3,
+                MemoryGrantsPending = 1,
+                PageLifeExpectancy = 120,
+                DeadlocksPerSec = 0.5,
+            });
+
+            AssertEqual("warning", result.State);
+            AssertEqual(1, result.BlockingPressure);
+            AssertEqual(1, result.MemoryPressure);
+            AssertEqual(1, result.BufferPressure);
+            AssertEqual(1, result.DeadlockPressure);
+            AssertEqual(4, result.PressureIssues);
+        }
+
+        private static void SqlCounterHealthIgnoresAbsentCounters()
+        {
+            // Every counter unreadable: the sentinel must not read as a healthy zero
+            // and must not raise pressure. Counter availability is unverified on a host.
+            var result = SqlServerCounterPolicy.Evaluate(new SqlServerCounterHealthInput
+            {
+                CountersAvailable = true,
+                ProcessesBlocked = SqlServerCounterPolicy.Unavailable,
+                MemoryGrantsPending = SqlServerCounterPolicy.Unavailable,
+                PageLifeExpectancy = SqlServerCounterPolicy.Unavailable,
+                DeadlocksPerSec = SqlServerCounterPolicy.Unavailable,
+                TotalServerMemoryKb = SqlServerCounterPolicy.Unavailable,
+                TargetServerMemoryKb = SqlServerCounterPolicy.Unavailable,
+                BatchRequestsPerSec = SqlServerCounterPolicy.Unavailable,
+                CompilationsPerSec = SqlServerCounterPolicy.Unavailable,
+            });
+
+            AssertEqual("ok", result.State);
+            AssertEqual(0, result.PressureIssues);
+            AssertEqual(-1, (int) result.MemoryUsedPercent);
+            AssertEqual(-1, (int) result.CompilationPercent);
+        }
+
+        private static void SqlCounterHealthIgnoresCompileRatioOnIdleInstance()
+        {
+            var idle = SqlServerCounterPolicy.Evaluate(new SqlServerCounterHealthInput
+            {
+                CountersAvailable = true,
+                BatchRequestsPerSec = 2,
+                CompilationsPerSec = 2,
+            });
+
+            AssertEqual(100, (int) idle.CompilationPercent);
+            AssertEqual(0, idle.CompilePressure);
+            AssertEqual("ok", idle.State);
+
+            var busy = SqlServerCounterPolicy.Evaluate(new SqlServerCounterHealthInput
+            {
+                CountersAvailable = true,
+                BatchRequestsPerSec = 400,
+                CompilationsPerSec = 200,
+            });
+
+            AssertEqual(1, busy.CompilePressure);
+            AssertEqual("warning", busy.State);
+        }
+
+        private static void SqlCounterHealthDerivesPercentages()
+        {
+            var result = SqlServerCounterPolicy.Evaluate(new SqlServerCounterHealthInput
+            {
+                CountersAvailable = true,
+                TotalServerMemoryKb = 4194304,
+                TargetServerMemoryKb = 8388608,
+                BatchRequestsPerSec = 200,
+                CompilationsPerSec = 10,
+            });
+
+            AssertEqual(50, (int) result.MemoryUsedPercent);
+            AssertEqual(5, (int) result.CompilationPercent);
+            AssertEqual(0, result.CompilePressure);
+        }
+
+        private static void SqlCounterStateOrdinalKeepsSentinelsBelowOk()
+        {
+            AssertEqual(0, SqlServerCounterPolicy.StateOrdinal("ok"));
+            AssertEqual(2, SqlServerCounterPolicy.StateOrdinal("warning"));
+            AssertEqual(-1, SqlServerCounterPolicy.StateOrdinal("disabled"));
+            AssertEqual(-2, SqlServerCounterPolicy.StateOrdinal("unavailable"));
+            AssertEqual(-2, SqlServerCounterPolicy.StateOrdinal("unknown"));
+        }
+
+        private static void SqlCounterSampleWindowStaysInsideCollectorBudget()
+        {
+            AssertEqual(1000, SqlServerCounterPolicy.ClampSampleMs(1000, 10));
+            AssertEqual(SqlServerCounterPolicy.MinimumSampleMs, SqlServerCounterPolicy.ClampSampleMs(0, 10));
+            AssertEqual(SqlServerCounterPolicy.MaximumSampleMs, SqlServerCounterPolicy.ClampSampleMs(60000, 60));
+
+            // A short collector timeout wins over the configured window.
+            AssertEqual(500, SqlServerCounterPolicy.ClampSampleMs(3000, 2));
+            AssertEqual(SqlServerCounterPolicy.MinimumSampleMs, SqlServerCounterPolicy.ClampSampleMs(3000, 1));
+        }
+
+        private static SqlCounterSpec SqlCounterSpecFor(string key)
+        {
+            foreach (var spec in SqlServerCounterPolicy.Specs)
+            {
+                if (string.Equals(spec.Key, key, StringComparison.Ordinal))
+                {
+                    return spec;
+                }
+            }
+
+            throw new InvalidOperationException("No counter spec declared for '" + key + "'.");
         }
 
         private static void AssertEqual(string expected, string actual)

@@ -44,9 +44,16 @@ Default shape:
   SQL Browser requirement, and non-engine components (Analysis Services,
   Reporting Services, Integration Services, Full-Text, Launchpad, VSS writer,
   telemetry). Still no database queries and no credentials: nothing here needs a
-  SQL login. Depth that requires a connection — backup age, job outcome,
-  database state, wait and file-IO statistics — is item 5 below and is surveyed
-  in `docs/sql-collector-expansion.md`.
+  SQL login.
+- SQL Server server-level performance counters through
+  `windows_agent_sql_server_performance`: memory grants, page life expectancy,
+  blocked processes, batch/compile rates, lock and latch waits, deadlocks, tempdb
+  and version store, log flush activity, optional Availability Group queue depth,
+  and SQL Agent job counts as deltas. Read through PDH by the account the agent
+  already runs as, so this still needs no SQL login. Per-database counters remain
+  deferred for cardinality; depth that requires a connection — backup age, job
+  outcome, database state, wait and file-IO statistics — is item 5 below and is
+  surveyed in `docs/sql-collector-expansion.md`.
 - IIS visibility through `windows_agent_iis_*` sections.
 - VMware Horizon visibility through `windows_agent_horizon_*` sections, using local
   service/process/listener/certificate evidence only.
@@ -90,11 +97,13 @@ noise by itself.
    the bounded runtime and Counter Monitor sections; continue avoiding project
    files, controller subscriptions, and raw diagnostics by default.
 4. Hyper-V: VM state, integration service state, replication health.
-5. Deeper SQL Server, in the order surveyed in `docs/sql-collector-expansion.md`:
-   server-level performance counters through PDH (credential-free), then bounded
-   ERRORLOG and event-log evidence, then capped per-database counters, then
-   optional local integrated queries for database/job/backup state after
-   credential and permission handling is explicitly designed.
+5. Deeper SQL Server, in the order surveyed in `docs/sql-collector-expansion.md`.
+   Server-level performance counters through PDH are done and shipped as
+   `windows_agent_sql_server_performance`, though counter availability has not yet
+   been observed on a real SQL host. What remains, in order: bounded ERRORLOG and
+   event-log evidence, then capped per-database counters, then optional local
+   integrated queries for database/job/backup state after credential and
+   permission handling is explicitly designed.
 
 ## Collector Acceptance Criteria
 

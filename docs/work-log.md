@@ -1,5 +1,67 @@
 # Work Log
 
+## 2026-10-16 (unreleased: SQL Server server-level performance counters)
+
+- Objective: implement Tier 1 server-level performance counters from
+  `docs/sql-collector-expansion.md`. Scope was server-level only — per-database
+  counters, ERRORLOG/event-log evidence, and DMV work were explicitly out and
+  remain unimplemented.
+- Change (agent core): new `SqlServerCounterPolicy` holds everything pure — the
+  counter spec table (object suffix, counter name, counter instance, rate /
+  cumulative / optional flags), object-name construction (`SQLServer:` versus
+  `MSSQL$<INSTANCE>:`, `SQLAgent:` versus `SQLAgent$<INSTANCE>:`), deduplicated
+  object probing, cumulative-counter delta resolution with restart detection,
+  the sampling-window clamp, the severity ordinal, and threshold evaluation.
+  `SqlServerConfig` gained `IncludeCounters`, `CounterSampleMs`,
+  `PageLifeExpectancyWarning`, `MemoryGrantsPendingWarning`,
+  `ProcessesBlockedWarning`, and `CompilationPercentWarning`.
+- Change (agent service): new `SqlServerCounterReader` does the PDH I/O —
+  `PerformanceCounterCategory.Exists` once per object (cached across instances),
+  `PerformanceCounter` per spec, two passes with a single shared `Task.Delay`
+  between them so the sampling window costs the same for one instance or five.
+  `SqlServerCollector` became async, emits the fourth
+  `windows_agent_sql_server_performance` section, and keeps the SQL Agent job
+  counts' previous reading in an instance field so they can be reported as
+  deltas. The existing `_summary`, `_instances`, and `_components` sections are
+  byte-for-byte unchanged.
+- Degradation was the design constraint, not an afterthought: every PDH failure
+  mode (absent category, absent counter, absent counter instance, corrupted
+  counter registry, no rights, platform unsupported) yields `-1` for that
+  counter, and a total failure yields an empty section. `-1` never raises
+  pressure and is never averaged into an aggregate, so an absent counter cannot
+  read as a healthy zero.
+- Change (overlay): parse the new section, add seventeen device-level
+  `sql_perf_*` fields, flatten per-instance metrics as `sql_perf_<measure>:<key>`
+  using the Horizon pool contract, add a new
+  `windows-agent-sql-server-performance` RRD family (14 datasets; those that can
+  carry the `-1` sentinel declare a minimum of `-1`) with a matching graph file,
+  add a counter table to the app page SQL section, and add four attention rows
+  (blocked sessions, pending memory grants, low page life expectancy, SQL Agent
+  job failures). Neither existing SQL RRD family was touched.
+- Tests: 14 new `SqlServerCounterPolicy` unit tests — object-name prefixes for
+  default and named instances across both scopes, spec table shape, object
+  deduplication, delta behaviour on first sample / normal step / restart /
+  unreadable counter, health evaluation including the all-sentinel case and the
+  idle-instance compile-ratio suppression, derived percentages, state ordinals,
+  and the sampling-window clamp against a short collector timeout. 91 agent tests
+  pass, exit 0 (was 77). New `sql-server-performance-counters` overlay fixture
+  covering a pressured instance and a second instance that published no counters
+  at all; it runs in both the parser and app-page suites.
+- Validation: `dotnet build .\LibreNMS.WindowsAgent.sln -c Release` 0 warnings /
+  0 errors; agent tests exit 0 (91 pass / 0 fail); `run-parser-fixtures` and
+  `run-app-page-fixtures` exit 0 (13 / 13 pass) and `run-horizon-central-tests`
+  exit 0; overlay PHP lint via WSL PHP 8.3.6 across 71 files, 71 ok / 0 fail.
+- Validation skipped / not done: no PDH read has ever been executed against a
+  real SQL Server instance, by this collector or by the probe script. The counter
+  names, object prefixes, and `_Total` instance choices are product knowledge,
+  not observation — the naming and threshold logic is unit tested, the I/O is
+  not. The sampling window's real cost on a SQL host is therefore also
+  unmeasured; `includeCounters` defaults to `true` on the reasoning that one
+  shared window per refresh inside a 10-second collector budget is cheap, which
+  is an argument, not a measurement. No MSI build, no deployment, no
+  `bash -n ./install.sh` (nothing in the installer changed). No version bump and
+  no artifact rebuild, per the one-version-per-batch rule.
+
 ## 2026-10-16 (unreleased: SQL Server surface collector correctness)
 
 - Objective: investigate what the SQL role can collect, then fix the defects the

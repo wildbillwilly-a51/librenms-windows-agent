@@ -161,6 +161,32 @@ namespace LibreNMS.WindowsAgent.Core
 
         /// <summary>Map engine services to their sqlservr.exe process ids and report unowned engine processes.</summary>
         public bool IncludeProcessMapping { get; set; } = true;
+
+        /// <summary>
+        /// Read server-level SQL Server performance counters through PDH. On by
+        /// default: the cost is one sampling window per refresh shared by every
+        /// instance, and the whole read degrades to an empty section when the
+        /// counters are not present.
+        /// </summary>
+        public bool IncludeCounters { get; set; } = true;
+
+        /// <summary>
+        /// Milliseconds between the two samples that rate counters need. Clamped to
+        /// 250-3000 and to a quarter of the collector timeout, whichever is smaller.
+        /// </summary>
+        public int CounterSampleMs { get; set; } = 1000;
+
+        /// <summary>Page life expectancy below this is reported as buffer pressure.</summary>
+        public int PageLifeExpectancyWarning { get; set; } = 300;
+
+        /// <summary>Memory grants pending at or above this is reported as memory pressure.</summary>
+        public int MemoryGrantsPendingWarning { get; set; } = 1;
+
+        /// <summary>Processes blocked at or above this is reported as blocking pressure.</summary>
+        public int ProcessesBlockedWarning { get; set; } = 1;
+
+        /// <summary>Compilations above this percentage of batch requests is reported as compile pressure.</summary>
+        public int CompilationPercentWarning { get; set; } = 10;
     }
 
     public sealed class IisConfig

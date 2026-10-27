@@ -82,6 +82,7 @@ $performance_processes_raw = $agent_data['windows_agent_performance_processes'] 
 $sql_summary_raw = $agent_data['windows_agent_sql_server_summary'] ?? '';
 $sql_instances_raw = $agent_data['windows_agent_sql_server_instances'] ?? '';
 $sql_components_raw = $agent_data['windows_agent_sql_server_components'] ?? '';
+$sql_performance_raw = $agent_data['windows_agent_sql_server_performance'] ?? '';
 $iis_summary_raw = $agent_data['windows_agent_iis_summary'] ?? '';
 $iis_sites_raw = $agent_data['windows_agent_iis_sites'] ?? '';
 $iis_app_pools_raw = $agent_data['windows_agent_iis_app_pools'] ?? '';
@@ -427,6 +428,7 @@ $performance_network = $parse_rows($performance_network_raw, 'name');
 $performance_processes = $parse_rows($performance_processes_raw, 'name');
 $sql_instances = $parse_rows($sql_instances_raw, 'instance');
 $sql_components = $parse_rows($sql_components_raw, 'name');
+$sql_performance = $parse_rows($sql_performance_raw, 'instance');
 $iis_summary = $parse_windows_agent_kv($iis_summary_raw);
 $iis_sites = $parse_rows($iis_sites_raw, 'name');
 $iis_app_pools = $parse_rows($iis_app_pools_raw, 'name');
@@ -567,6 +569,59 @@ foreach ($factorytalk_linx_transactions as $row) {
     $factorytalk_transaction_pool_size += (int) ($row['pool_size'] ?? 0);
 }
 
+// Tier 1 server-level SQL Server performance counters, one agent row per instance.
+// A counter the agent could not read arrives as -1 and stays -1 here: an absent
+// counter and a measured zero are different facts, and folding them together would
+// invent a healthy reading on a host where the counter simply is not published.
+$sql_perf_present = static fn (array $row, string $key): float => ((float) ($row[$key] ?? -1)) < 0 ? -1.0 : (float) $row[$key];
+$sql_perf_max = static fn (float $current, float $value): float => $value < 0 ? $current : ($current < 0 ? $value : max($current, $value));
+$sql_perf_min = static fn (float $current, float $value): float => $value < 0 ? $current : ($current < 0 ? $value : min($current, $value));
+$sql_perf_sum = static fn (float $current, float $value): float => $value < 0 ? $current : ($current < 0 ? $value : $current + $value);
+
+$sql_perf_instances = count($sql_performance);
+$sql_perf_counters_ok = 0;
+$sql_perf_jobs_failed_total = 0;
+$sql_perf_pressure_issues = 0;
+$sql_perf_blocking_instances = 0;
+$sql_perf_memory_instances = 0;
+$sql_perf_buffer_instances = 0;
+$sql_perf_blocked_max = -1.0;
+$sql_perf_grants_pending_max = -1.0;
+$sql_perf_memory_percent_max = -1.0;
+$sql_perf_ple_min = -1.0;
+$sql_perf_connections_total = -1.0;
+$sql_perf_batches_total = -1.0;
+$sql_perf_compiles_total = -1.0;
+$sql_perf_recompiles_total = -1.0;
+$sql_perf_deadlocks_total = -1.0;
+$sql_perf_lock_waits_total = -1.0;
+
+foreach ($sql_performance as $sql_perf_row) {
+    if (strtolower((string) ($sql_perf_row['state'] ?? 'unavailable')) !== 'unavailable') {
+        $sql_perf_counters_ok++;
+    }
+
+    $sql_perf_blocked_max = $sql_perf_max($sql_perf_blocked_max, $sql_perf_present($sql_perf_row, 'processes_blocked'));
+    $sql_perf_grants_pending_max = $sql_perf_max($sql_perf_grants_pending_max, $sql_perf_present($sql_perf_row, 'memory_grants_pending'));
+    $sql_perf_memory_percent_max = $sql_perf_max($sql_perf_memory_percent_max, $sql_perf_present($sql_perf_row, 'memory_used_percent'));
+    $sql_perf_ple_min = $sql_perf_min($sql_perf_ple_min, $sql_perf_present($sql_perf_row, 'page_life_expectancy'));
+    $sql_perf_connections_total = $sql_perf_sum($sql_perf_connections_total, $sql_perf_present($sql_perf_row, 'user_connections'));
+    $sql_perf_batches_total = $sql_perf_sum($sql_perf_batches_total, $sql_perf_present($sql_perf_row, 'batch_requests_per_sec'));
+    $sql_perf_compiles_total = $sql_perf_sum($sql_perf_compiles_total, $sql_perf_present($sql_perf_row, 'compilations_per_sec'));
+    $sql_perf_recompiles_total = $sql_perf_sum($sql_perf_recompiles_total, $sql_perf_present($sql_perf_row, 'recompilations_per_sec'));
+    $sql_perf_deadlocks_total = $sql_perf_sum($sql_perf_deadlocks_total, $sql_perf_present($sql_perf_row, 'deadlocks_per_sec'));
+    $sql_perf_lock_waits_total = $sql_perf_sum($sql_perf_lock_waits_total, $sql_perf_present($sql_perf_row, 'lock_waits_per_sec'));
+
+    $sql_perf_pressure_issues += max(0, (int) ($sql_perf_row['pressure_issues'] ?? 0));
+    $sql_perf_blocking_instances += ((int) ($sql_perf_row['blocking_pressure'] ?? 0)) === 1 ? 1 : 0;
+    $sql_perf_memory_instances += ((int) ($sql_perf_row['memory_pressure'] ?? 0)) === 1 ? 1 : 0;
+    $sql_perf_buffer_instances += ((int) ($sql_perf_row['buffer_pressure'] ?? 0)) === 1 ? 1 : 0;
+
+    // Agent job counts run from Agent process start; the agent already converts them
+    // to deltas and emits 0 until it has two samples to subtract.
+    $sql_perf_jobs_failed_total += max(0, (int) ($sql_perf_row['agent_failed_jobs'] ?? 0));
+}
+
 $fields = [
     'agent_up' => 1,
     'roles_detected_total' => $roles_detected_total,
@@ -650,6 +705,23 @@ $fields = [
     'sql_listener_ports_total' => (int) ($sql_summary['listener_ports_total'] ?? 0),
     'sql_registry_instances' => (int) ($sql_summary['registry_instances'] ?? 0),
     'sql_unmapped_engine_processes' => (int) ($sql_summary['unmapped_engine_processes'] ?? 0),
+    'sql_perf_instances' => $sql_perf_instances,
+    'sql_perf_counters_ok' => $sql_perf_counters_ok,
+    'sql_perf_blocked_max' => $sql_perf_blocked_max,
+    'sql_perf_grants_pending_max' => $sql_perf_grants_pending_max,
+    'sql_perf_ple_min' => $sql_perf_ple_min,
+    'sql_perf_memory_percent_max' => $sql_perf_memory_percent_max,
+    'sql_perf_connections_total' => $sql_perf_connections_total,
+    'sql_perf_batches_total' => $sql_perf_batches_total,
+    'sql_perf_compiles_total' => $sql_perf_compiles_total,
+    'sql_perf_recompiles_total' => $sql_perf_recompiles_total,
+    'sql_perf_deadlocks_total' => $sql_perf_deadlocks_total,
+    'sql_perf_lock_waits_total' => $sql_perf_lock_waits_total,
+    'sql_perf_jobs_failed_total' => $sql_perf_jobs_failed_total,
+    'sql_perf_pressure_issues' => $sql_perf_pressure_issues,
+    'sql_perf_blocking_instances' => $sql_perf_blocking_instances,
+    'sql_perf_memory_instances' => $sql_perf_memory_instances,
+    'sql_perf_buffer_instances' => $sql_perf_buffer_instances,
     'iis_sites_total' => (int) ($iis_summary['sites_total'] ?? 0),
     'iis_sites_stopped' => (int) ($iis_summary['sites_stopped'] ?? 0),
     'iis_app_pools_total' => (int) ($iis_summary['app_pools_total'] ?? 0),
@@ -815,6 +887,39 @@ foreach ($horizon_pools as $pool_index => $pool_row) {
     $fields['horizon_pool_unready:' . $pool_metric_key] = (int) ($pool_row['spare_unready'] ?? 0);
 }
 
+// Per-instance SQL Server counter metrics, flattened the same way as the Horizon pools
+// so an alert rule can target one instance. Contract: `sql_perf_<measure>:<key>`, where
+// <key> is the SQL instance name sanitized to [A-Za-z0-9_-]. Instance names are unique
+// per host and already token-safe in practice. -1 means the counter was not readable,
+// which keeps a "greater than" rule from firing on an instance that published nothing.
+foreach ($sql_performance as $sql_perf_index => $sql_perf_row) {
+    $sql_perf_name = (string) ($sql_perf_row['instance'] ?? $sql_perf_index);
+    if ($sql_perf_name === '') {
+        continue;
+    }
+    $sql_perf_key = preg_replace('/[^A-Za-z0-9_-]/', '_', $sql_perf_name);
+    if ($sql_perf_key === null || $sql_perf_key === '') {
+        continue;
+    }
+
+    $sql_perf_state = [
+        'ok' => 0,
+        'info' => 1,
+        'warning' => 2,
+        'critical' => 3,
+        'disabled' => -1,
+    ][strtolower((string) ($sql_perf_row['state'] ?? 'unavailable'))] ?? -2;
+
+    $fields['sql_perf_state:' . $sql_perf_key] = $sql_perf_state;
+    $fields['sql_perf_blocked:' . $sql_perf_key] = $sql_perf_present($sql_perf_row, 'processes_blocked');
+    $fields['sql_perf_grants_pending:' . $sql_perf_key] = $sql_perf_present($sql_perf_row, 'memory_grants_pending');
+    $fields['sql_perf_ple:' . $sql_perf_key] = $sql_perf_present($sql_perf_row, 'page_life_expectancy');
+    $fields['sql_perf_connections:' . $sql_perf_key] = $sql_perf_present($sql_perf_row, 'user_connections');
+    $fields['sql_perf_batches:' . $sql_perf_key] = $sql_perf_present($sql_perf_row, 'batch_requests_per_sec');
+    $fields['sql_perf_jobs_failed:' . $sql_perf_key] = max(0, (int) ($sql_perf_row['agent_failed_jobs'] ?? 0));
+    $fields['sql_perf_pressure:' . $sql_perf_key] = max(0, (int) ($sql_perf_row['pressure_issues'] ?? 0));
+}
+
 $status_parts = [
     'version=' . ($agent['version'] ?? 'unknown'),
     'os=' . ($os['caption'] ?? 'unknown'),
@@ -923,6 +1028,7 @@ $windows_agent_app->data = [
     'sql_server_summary' => $sql_summary,
     'sql_server_instances' => $sql_instances,
     'sql_server_components' => $sql_components,
+    'sql_server_performance' => $sql_performance,
     'iis_summary' => $iis_summary,
     'iis_sites' => $iis_sites,
     'iis_app_pools' => $iis_app_pools,
@@ -1202,6 +1308,47 @@ app('Datastore')->put($device, 'app', [
     'no_listener' => $fields['sql_instances_without_listener'],
     'listener_ports' => $fields['sql_listener_ports_total'],
     'unmapped_engines' => $fields['sql_unmapped_engine_processes'],
+]);
+
+// Third SQL family rather than new datasets on either existing one, so both keep their
+// RRD schemas. Datasets that can carry the -1 "counter not readable" sentinel declare a
+// minimum of -1; pure counts keep a minimum of 0.
+$sql_performance_rrd_def = RrdDefinition::make()
+    ->addDataset('instances', 'GAUGE', 0)
+    ->addDataset('counters_ok', 'GAUGE', 0)
+    ->addDataset('blocked', 'GAUGE', -1)
+    ->addDataset('grants', 'GAUGE', -1)
+    ->addDataset('ple_min', 'GAUGE', -1)
+    ->addDataset('mem_percent', 'GAUGE', -1)
+    ->addDataset('connections', 'GAUGE', -1)
+    ->addDataset('batches', 'GAUGE', -1)
+    ->addDataset('compiles', 'GAUGE', -1)
+    ->addDataset('recompiles', 'GAUGE', -1)
+    ->addDataset('deadlocks', 'GAUGE', -1)
+    ->addDataset('lock_waits', 'GAUGE', -1)
+    ->addDataset('jobs_failed', 'GAUGE', 0)
+    ->addDataset('pressure', 'GAUGE', 0);
+
+app('Datastore')->put($device, 'app', [
+    'name' => 'windows-agent-sql-server-performance',
+    'app_id' => $windows_agent_app->app_id,
+    'rrd_name' => ['app', 'windows-agent-sql-server-performance', $windows_agent_app->app_id],
+    'rrd_def' => $sql_performance_rrd_def,
+], [
+    'instances' => $fields['sql_perf_instances'],
+    'counters_ok' => $fields['sql_perf_counters_ok'],
+    'blocked' => $fields['sql_perf_blocked_max'],
+    'grants' => $fields['sql_perf_grants_pending_max'],
+    'ple_min' => $fields['sql_perf_ple_min'],
+    'mem_percent' => $fields['sql_perf_memory_percent_max'],
+    'connections' => $fields['sql_perf_connections_total'],
+    'batches' => $fields['sql_perf_batches_total'],
+    'compiles' => $fields['sql_perf_compiles_total'],
+    'recompiles' => $fields['sql_perf_recompiles_total'],
+    'deadlocks' => $fields['sql_perf_deadlocks_total'],
+    'lock_waits' => $fields['sql_perf_lock_waits_total'],
+    'jobs_failed' => $fields['sql_perf_jobs_failed_total'],
+    'pressure' => $fields['sql_perf_pressure_issues'],
 ]);
 
 $iis_rrd_def = RrdDefinition::make()
