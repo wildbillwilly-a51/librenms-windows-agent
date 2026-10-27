@@ -31,7 +31,7 @@ namespace App\Facades {
     {
         public static function get(string $key): int
         {
-            return 1800000000;
+            return \LibreNMSAppPageTestState::$now;
         }
     }
 }
@@ -60,6 +60,7 @@ namespace {
         public static ?\App\Models\Application $application = null;
         public static array $updatedApplication = [];
         public static int $appId = 1;
+        public static int $now = 1800000000;
 
         public static function reset(int $appId, array $initialData = []): void
         {
@@ -161,6 +162,10 @@ namespace {
     {
         $fixture = json_decode((string) file_get_contents($fixturePath), true, flags: JSON_THROW_ON_ERROR);
         LibreNMSAppPageTestState::reset((int) $fixture['app_id'], $fixture['existing_application_data'] ?? []);
+        preg_match('/(?:^|\s)utc=(\S+)/', (string) ($fixture['agent_data']['windows_agent'] ?? ''), $clock);
+        LibreNMSAppPageTestState::$now = isset($fixture['now_utc'])
+            ? (int) strtotime($fixture['now_utc'])
+            : ((int) strtotime($clock[1] ?? '2026-10-27T18:00:00Z') + 60);
 
         $agent_data = $fixture['agent_data'];
         $device = $fixture['device'];
@@ -185,7 +190,7 @@ namespace {
     @mkdir($stubRoot . '/includes/html', 0777, true);
     file_put_contents(
         $stubRoot . '/includes/html/print-graphrow.inc.php',
-        '<?php echo "<div class=\"graph-stub\" data-type=\"" . htmlspecialchars((string) ($graph_array["type"] ?? ""), ENT_QUOTES, "UTF-8") . "\"></div>";'
+        '<?php echo "<div class=\"graph-stub\" data-type=\"" . htmlspecialchars((string) ($graph_array["type"] ?? ""), ENT_QUOTES, "UTF-8") . "\"><img src=\"fixture-graph.png\" alt=\"Fixture graph\"></div>";'
     );
     set_include_path($stubRoot . PATH_SEPARATOR . get_include_path());
 
@@ -252,6 +257,31 @@ namespace {
 
             foreach (($fixture['expect']['app_page']['not_contains'] ?? []) as $needle) {
                 assertNotContainsText($html, $needle, $name);
+            }
+
+            $pageExpect = $fixture['expect']['app_page'] ?? [];
+            if (isset($pageExpect['tabs'])) {
+                preg_match_all('/<a href="#([^"]+)" aria-controls="[^"]+" role="tab"/', $html, $tabs);
+                if (($tabs[1] ?? []) !== $pageExpect['tabs']) {
+                    throw new RuntimeException($name . ' tab order differs: ' . implode(', ', $tabs[1] ?? []));
+                }
+            }
+            if (isset($pageExpect['active_tab'])) {
+                assertContainsText($html, '<div role="tabpanel" class="tab-pane active" id="' . $pageExpect['active_tab'] . '">', $name);
+            }
+            foreach (($pageExpect['panes'] ?? []) as $id => $checks) {
+                $start = strpos($html, 'id="' . $id . '">');
+                if ($start === false) {
+                    throw new RuntimeException($name . ' missing pane ' . $id);
+                }
+                $end = strpos($html, '<div role="tabpanel"', $start + strlen($id));
+                $pane = substr($html, $start, $end === false ? null : $end - $start);
+                foreach (($checks['contains'] ?? []) as $needle) {
+                    assertContainsText($pane, $needle, $name . ':' . $id);
+                }
+                foreach (($checks['not_contains'] ?? []) as $needle) {
+                    assertNotContainsText($pane, $needle, $name . ':' . $id);
+                }
             }
 
             echo 'PASS ' . $name . PHP_EOL;

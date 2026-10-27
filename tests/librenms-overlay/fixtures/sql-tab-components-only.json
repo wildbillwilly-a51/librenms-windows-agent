@@ -1,0 +1,37 @@
+{
+  "name": "SQL tab components only",
+  "device": {
+    "device_id": 1201,
+    "hostname": "sql-role.example.test"
+  },
+  "app_id": 2201,
+  "agent_data": {
+    "windows_agent": "version=0.6.17.0 protocol=checkmk host=sql-role utc=2026-10-27T18:00:00Z",
+    "windows_agent_windows_os": "caption=\"Windows Server\"",
+    "windows_agent_performance": "type=summary collectors_run=1 collectors_failed=0 collectors_timed_out=0\ntype=collector collector=sql_server state=ok duration_ms=1000",
+    "windows_agent_sql_server_summary": "state=not_detected detected=0 instances_total=0 health_issues=0",
+    "windows_agent_roles": "role=sql_server detected=1 confidence=medium source=service:SQLBrowser",
+    "windows_agent_sql_server_components": "component=browser name=SQLBrowser state=Running start_mode=Manual expected=0 severity=info reason=not_required"
+  },
+  "expect": {
+    "status_prefix": "OK:",
+    "app_page": {
+      "tabs": [
+        "windows-agent-overview",
+        "windows-agent-roles",
+        "windows-agent-security",
+        "windows-agent-backup",
+        "windows-agent-services",
+        "windows-agent-agent-performance"
+      ],
+      "active_tab": "windows-agent-overview",
+      "contains": [
+        "Components only",
+        "SQLBrowser"
+      ],
+      "not_contains": [
+        "aria-controls=\"windows-agent-sql-server\""
+      ]
+    }
+  }
+}

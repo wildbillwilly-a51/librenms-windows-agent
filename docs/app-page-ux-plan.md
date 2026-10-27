@@ -218,9 +218,10 @@ collected-but-not-surfaced (which feeds Phase 3) or not-collected-but-valuable
 
 ### SQL Server Research Record — 2026-10-27
 
-Proposal: [SQL Server role-tab research](sql-server-role-tab-research.md).
+Record: [SQL Server role-tab research](sql-server-role-tab-research.md).
 The SQL-scoped stored-versus-rendered audit is included there; the cross-role
-Phase 3 audit is not claimed complete. No UI, collector or release changes yet.
+Phase 3 audit is not claimed complete. The existing-data SQL tab is implemented
+in unreleased overlay source. Additional collection remains proposed.
 
 - Promote an engine-detected first-level SQL Server tab with five forefront
   tiles: engine services, local TCP listeners, scheduled work, blocking now and
@@ -240,6 +241,13 @@ Phase 3 audit is not claimed complete. No UI, collector or release changes yet.
   documentation; LibreNMS application-data documentation; current local source.
   Claude challenged the priorities and code semantics; the linked record
   contains the reconciled findings, limits and implementation acceptance checks.
+
+Implementation boundary: current SQL payloads are not retained after collector
+failure. With no explicit engine rows remaining, show unknown collection in
+Overview/Role inventory and omit the SQL tab. Full last-good retention requires
+separate design. SQL graph images load lazily; negative sentinels and consolidated
+bins containing them are gaps in the new performance views. Five tiles use a
+scoped responsive grid, with native keyboard-operable instance disclosures.
 
 ---
 

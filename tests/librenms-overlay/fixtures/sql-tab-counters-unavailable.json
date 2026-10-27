@@ -1,0 +1,55 @@
+{
+  "name": "SQL counters unavailable",
+  "device": {
+    "device_id": 1250,
+    "hostname": "sql-role.example.test"
+  },
+  "app_id": 2250,
+  "agent_data": {
+    "windows_agent": "version=0.6.17.0 protocol=checkmk host=sql-role utc=2026-10-27T18:00:00Z",
+    "windows_agent_windows_os": "caption=\"Windows Server\"",
+    "windows_agent_performance": "type=summary collectors_run=1 collectors_failed=0 collectors_timed_out=0\ntype=collector collector=sql_server state=ok duration_ms=1000",
+    "windows_agent_sql_server_summary": "state=ok detected=1 instances_total=1 instances_running=1 instances_not_running=0 health_issues=0 engines_expected_not_running=0 agents_expected_not_running=0 components_expected_not_running=0 instances_without_listener=0 unmapped_engine_processes=0",
+    "windows_agent_sql_server_instances": "instance=MSSQLSERVER service=MSSQLSERVER state=Running start_mode=Auto expected=1 severity=ok agent_service=SQLSERVERAGENT agent_state=Running agent_start_mode=Auto agent_expected=1 agent_severity=ok agent_reason=agent_running edition=\"Standard Edition\" patch_level=16.0.1000.6 tcp_enabled=1 listener_active=1 listener_ports=1433 port_source=static requires_browser=0",
+    "windows_agent_sql_server_performance": "instance=MSSQLSERVER state=unavailable counters_read=0 counters_missing=33 processes_blocked=-1 memory_grants_pending=-1 agent_counters=0 agent_jobs_delta_available=0 agent_jobs_reset=0 pressure_issues=0"
+  },
+  "expect": {
+    "status_prefix": "OK:",
+    "app_page": {
+      "tabs": [
+        "windows-agent-sql-server",
+        "windows-agent-overview",
+        "windows-agent-roles",
+        "windows-agent-security",
+        "windows-agent-backup",
+        "windows-agent-services",
+        "windows-agent-agent-performance"
+      ],
+      "active_tab": "windows-agent-sql-server",
+      "panes": {
+        "windows-agent-sql-server": {
+          "contains": [
+            "<span class=\"label label-info\">Unknown</span> <strong>",
+            "partially checked",
+            "Not measured",
+            "performance counters are not measured."
+          ],
+          "not_contains": [
+            "<strong>No issues observed",
+            "0 observed job failures",
+            "application_windows-agent_sql_server_queues"
+          ]
+        },
+        "windows-agent-roles": {
+          "contains": [
+            "Open SQL Server tab"
+          ],
+          "not_contains": [
+            "Needs attention",
+            "No active listener"
+          ]
+        }
+      }
+    }
+  }
+}

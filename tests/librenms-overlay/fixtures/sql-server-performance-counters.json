@@ -94,22 +94,59 @@
     },
     "app_page": {
       "contains": [
-        "Blocked",
-        "PLE min",
+        "Blocking now",
         "Grants pending",
-        "Page life",
-        "blocked sessions",
-        "pending memory grants",
-        "low page life expectancy",
-        "SQL Server Agent job failure(s)",
+        "Page life (seconds)",
+        "Blocked processes at last sample",
+        "Pending memory grants at last sample",
+        "Low page life expectancy reported",
+        "SQL Server Agent job failure(s) observed",
         "latest two counter collections",
         "Counters",
         "36 read, 0 missing",
-        "unavailable"
+        "performance counters are not measured"
       ],
-      "not_contains": [
-        "data-type=\"application_windows-agent_sql_server\""
-      ]
+      "not_contains": [],
+      "tabs": [
+        "windows-agent-sql-server",
+        "windows-agent-overview",
+        "windows-agent-roles",
+        "windows-agent-security",
+        "windows-agent-backup",
+        "windows-agent-services",
+        "windows-agent-agent-performance"
+      ],
+      "active_tab": "windows-agent-sql-server",
+      "panes": {
+        "windows-agent-sql-server": {
+          "contains": [
+            "<span class=\"label label-warning\">Warning</span> <strong>",
+            "MSSQLSERVER — Blocked",
+            "APPDB: performance counters are not measured.",
+            "application_windows-agent_sql_server_queues",
+            "Not measured",
+            "loading=\"lazy\"",
+            "2 job failures",
+            "+3 more",
+            "1/2 instances measured"
+          ]
+        },
+        "windows-agent-roles": {
+          "contains": [
+            "Open SQL Server tab"
+          ],
+          "not_contains": [
+            "Needs attention",
+            "Blocked processes",
+            "SQL Server Agent job failure(s)"
+          ]
+        },
+        "windows-agent-overview": {
+          "contains": [
+            "<td><strong>SQL</strong></td><td><span class=\"label label-warning\">Warning</span>"
+          ]
+        }
+      }
     }
   }
 }

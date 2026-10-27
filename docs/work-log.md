@@ -1,5 +1,32 @@
 # Work Log
 
+## 2026-10-27 (existing-data SQL Server tab)
+
+- Implemented an engine-evidence-gated first-level SQL tab with five summary
+  tiles, one shared issue/verdict model, named attention, coverage/freshness,
+  keyboard-operable instance disclosures and scoped light/dark/mobile styling.
+  SQL state also drives Overview; generic Roles keeps a pointer without duplicate
+  SQL warnings. Collector failures remain unknown without manufacturing a role.
+- Added five performance graph views over existing DS, with explicit units and
+  host aggregation, negative/consolidation masking and lazy images. Agent source,
+  protocol, application metrics, RRD schemas and released payloads are unchanged.
+- Claude reviewed the source and seven rendered views. Applied its graph-order,
+  compilation-scale, coverage-wording, multi-issue and contrast refinements.
+  Corrected a stale graph screenshot by binding refreshed screenshots to source
+  and PNG hashes. Claude re-inspected the corrected source and pixels and found
+  no remaining correctness or visual blocker. Read-only schema inspection confirmed the existing canary
+  performance RRD includes AVERAGE, MIN and MAX RRAs; no schema was changed.
+- Validation: 30 page and 30 parser fixtures, 35 Horizon checks, 81 PHP lint
+  results (79 overlay and two runners), five real RRDtool PNG/export checks,
+  and nine source-bound Edge/Playwright views passed. Desktop/mobile, light/dark,
+  native keyboard evidence, tab pointer, lazy graph loading and no clipping or
+  relevant browser errors were checked. The temporary non-release package's
+  80 payload files match source, including all eight new SQL PHP files; all 79
+  packaged PHP files linted. Complete public-safety and diff checks passed.
+- Agent/MSI tests were not run because those paths are unchanged. Production
+  theme/print-graphrow integration remains a rollout check. No release or
+  deployment was performed; the overlay work is saved separately from the agent.
+
 ## 2026-10-27 (SQL Server role-tab research)
 
 - Compared the advisory research report with the SQL collector, parser,

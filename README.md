@@ -294,6 +294,13 @@ and `Horizon` on a Horizon server. The leftmost tab present is the landing tab,
 so a role host opens on its role. Roles that were evaluated but not detected are
 listed in the `Detected Roles` table on `Roles & Workloads`.
 
+The unreleased overlay source also promotes `SQL Server` after these role tabs
+when engine evidence is present. It uses existing agent data for service and
+local-listener state, sampled blocking/grants and scheduled-work evidence, with
+explicit coverage, named attention, expandable instances and separate-unit
+trends. Component-only hosts remain in generic inventory. No database queries
+or new alert rules are enabled.
+
 Quick network check from the poller that owns the device:
 
 ```bash
@@ -519,7 +526,8 @@ Expected output includes `<<<windows_agent>>>`, `collectors_run=23`, and
 SQL Server presentation and proposed collection priorities are documented in
 [SQL Server role-tab research](docs/sql-server-role-tab-research.md), with the
 shared UI contract in [the application-page roadmap](docs/app-page-ux-plan.md).
-These are proposals; they do not enable new database queries or change releases.
+The existing-data tab is implemented in unreleased overlay source; additional
+agent collection remains proposed. Published installers and payloads are unchanged.
 
 Universal agent, collector, MSI, and overlay work is developed directly in this
 repository. The source tree uses only the public `LibreNMS.WindowsAgent`
@@ -551,3 +559,8 @@ preparing a release:
 ```powershell
 .\scripts\build-release.ps1 -UpdateChecksums
 ```
+
+With PHP and RRDtool on `PATH`, validate the SQL performance graph views with
+`php tests/librenms-overlay/run-sql-graph-fixtures.php`. It renders synthetic
+PNGs and checks measured zero, missing data and consolidated gaps. Use
+`--rrdtool=<executable>` or `--output-dir=<temporary-directory>` when needed.

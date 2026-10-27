@@ -78,11 +78,10 @@
     },
     "app_page": {
       "contains": [
-        "Agents down",
-        "SQL Server Agent service(s) stopped",
-        "SQL Server component service(s) stopped",
-        "no active listener",
-        "unmapped sqlservr.exe process(es)",
+        "SQL Server Agent service is stopped",
+        "SQL Server component service is stopped",
+        "No active listener",
+        "Unmapped sqlservr.exe process(es)",
         "agent_not_running",
         "analysis_services",
         "51000 (dynamic)",
@@ -90,9 +89,17 @@
         "Standard Edition",
         "Patch level"
       ],
-      "not_contains": [
-        "data-type=\"application_windows-agent_sql_server\""
-      ]
+      "not_contains": [],
+      "tabs": [
+        "windows-agent-sql-server",
+        "windows-agent-overview",
+        "windows-agent-roles",
+        "windows-agent-security",
+        "windows-agent-backup",
+        "windows-agent-services",
+        "windows-agent-agent-performance"
+      ],
+      "active_tab": "windows-agent-sql-server"
     }
   }
 }

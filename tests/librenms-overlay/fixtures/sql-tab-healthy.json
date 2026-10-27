@@ -1,0 +1,57 @@
+{
+  "name": "SQL tab healthy",
+  "device": {
+    "device_id": 1200,
+    "hostname": "sql-role.example.test"
+  },
+  "app_id": 2200,
+  "agent_data": {
+    "windows_agent": "version=0.6.17.0 protocol=checkmk host=sql-role utc=2026-10-27T18:00:00Z",
+    "windows_agent_windows_os": "caption=\"Windows Server\"",
+    "windows_agent_performance": "type=summary collectors_run=1 collectors_failed=0 collectors_timed_out=0\ntype=collector collector=sql_server state=ok duration_ms=1000",
+    "windows_agent_sql_server_summary": "state=ok detected=1 instances_total=1 instances_running=1 instances_not_running=0 health_issues=0 engines_expected_not_running=0 agents_expected_not_running=0 components_expected_not_running=0 instances_without_listener=0 unmapped_engine_processes=0",
+    "windows_agent_sql_server_instances": "instance=MSSQLSERVER service=MSSQLSERVER state=Running start_mode=Auto expected=1 severity=ok agent_service=SQLSERVERAGENT agent_state=Running agent_start_mode=Auto agent_expected=1 agent_severity=ok agent_reason=agent_running edition=\"Standard Edition\" patch_level=16.0.1000.6 tcp_enabled=1 listener_active=1 listener_ports=1433 port_source=static requires_browser=0",
+    "windows_agent_sql_server_performance": "instance=MSSQLSERVER state=ok counters_read=38 counters_missing=0 processes_blocked=0 memory_grants_pending=0 page_life_expectancy=8200 memory_used_percent=96.5 user_connections=48 batch_requests_per_sec=140 compilations_per_sec=4 recompilations_per_sec=0.3 compilation_percent=2.86 deadlocks_per_sec=0 agent_counters=1 agent_failed_jobs=0 agent_jobs_delta_available=1 agent_jobs_reset=0 pressure_issues=0 tempdb_free_space_kb=1048576 version_store_size_kb=2048 longest_transaction_seconds=0"
+  },
+  "expect": {
+    "status_prefix": "OK:",
+    "app_page": {
+      "tabs": [
+        "windows-agent-sql-server",
+        "windows-agent-overview",
+        "windows-agent-roles",
+        "windows-agent-security",
+        "windows-agent-backup",
+        "windows-agent-services",
+        "windows-agent-agent-performance"
+      ],
+      "active_tab": "windows-agent-sql-server",
+      "panes": {
+        "windows-agent-sql-server": {
+          "contains": [
+            "<span class=\"label label-success\">OK</span> <strong>",
+            "No issues observed in service, listener and readable counter checks.",
+            "Database state, backups and job history are not collected",
+            "1/1 running",
+            "1/1 listening",
+            "0 job failures",
+            "1/1 instances measured"
+          ],
+          "not_contains": [
+            "Needs attention",
+            "Collection coverage"
+          ]
+        },
+        "windows-agent-roles": {
+          "contains": [
+            "Open SQL Server tab"
+          ],
+          "not_contains": [
+            "Needs attention",
+            "No active listener"
+          ]
+        }
+      }
+    }
+  }
+}

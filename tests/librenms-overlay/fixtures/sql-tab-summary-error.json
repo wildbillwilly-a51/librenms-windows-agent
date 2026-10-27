@@ -1,0 +1,48 @@
+{
+  "name": "SQL summary error without timing",
+  "device": {
+    "device_id": 1252,
+    "hostname": "sql-role.example.test"
+  },
+  "app_id": 2252,
+  "agent_data": {
+    "windows_agent": "version=0.6.17.0 protocol=checkmk host=sql-role utc=2026-10-27T18:00:00Z",
+    "windows_agent_windows_os": "caption=\"Windows Server\"",
+    "windows_agent_performance": "type=summary collectors_run=1 collectors_failed=1",
+    "windows_agent_roles": "role=sql_server detected=1 source=service:MSSQLSERVER",
+    "windows_agent_sql_server_summary": "state=error detected=0 instances_total=0"
+  },
+  "expect": {
+    "status_prefix": "OK:",
+    "app_page": {
+      "tabs": [
+        "windows-agent-overview",
+        "windows-agent-roles",
+        "windows-agent-security",
+        "windows-agent-backup",
+        "windows-agent-services",
+        "windows-agent-agent-performance"
+      ],
+      "active_tab": "windows-agent-overview",
+      "not_contains": [
+        "aria-controls=\"windows-agent-sql-server\""
+      ],
+      "panes": {
+        "windows-agent-roles": {
+          "contains": [
+            "SQL collection failed; SQL state is unknown."
+          ],
+          "not_contains": [
+            "SQL Server</div><div class=\"windows-agent-role-stat-value\">Not detected"
+          ]
+        },
+        "windows-agent-overview": {
+          "contains": [
+            "<td><strong>SQL</strong></td><td><span class=\"label label-default\">Unknown</span>",
+            "SQL collection failed; state not evaluated."
+          ]
+        }
+      }
+    }
+  }
+}

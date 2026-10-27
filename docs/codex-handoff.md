@@ -1,24 +1,30 @@
 # Codex Handoff
 
-- Objective: Research a dedicated auto-detected SQL Server role tab with Claude,
-  selecting existing forefront signals and valuable additional agent collection.
-- Current State: Proposal and SQL-scoped stored-versus-rendered audit are in
-  `docs/sql-server-role-tab-research.md`; the application-page and collector
-  roadmaps link the revised priorities. No runtime, config, version, installer,
-  checksum or artifact changes. Published baseline remains recorded in
-  `CURRENT-STATE.md`; agent 0.6.17 and overlay 0.6.31 are the research baseline.
-- Relevant Decisions: Five current tiles: engines, local listeners, scheduled
-  work, blocking and workspace grants; coverage beside the verdict. Use engine
-  evidence for tab detection, one issue/verdict model and unit-separated trends
-  over existing RRD data. Agent proposals start with capability results and
-  cadence-safe cumulative observations, followed by optional local integrated
-  database/log/backup/job evidence. No automatic grants, new alert rules or
-  assumed backup policies. Broad per-database counters and ERRORLOG parsing are
-  not prerequisites; a narrow PDH log-capacity alternative remains useful.
-- Validation Completed: Source audit, advisory-report review, Microsoft and
-  LibreNMS primary-source verification, Redgate comparison, two Claude review
-  exchanges, reconciled documentation corrections, Markdown/local-link and
-  scoped public-safety checks. No runtime tests needed for this docs-only change.
-- Validation Remaining: Proposed collection needs restricted-permission, reset/cadence,
-  cardinality and overhead testing during an implementation task; no such
-  runtime capability is claimed here.
+- Objective: Implement the existing-data SQL Server tab with Claude design and
+  visual review, keeping all agent changes separate. Implementation complete.
+- Current State: Unreleased overlay source is on `codex/sql-server-tab`, based on
+  research commit `5d62251`. An engine-evidence-gated first-level SQL tab has
+  five decision tiles, named attention, explicit coverage/freshness and native
+  instance disclosures. One issue model also drives Overview; generic Roles
+  keeps a pointer. Five separate-unit performance views use existing RRD DS.
+  Agent, protocol, metrics/schema, installer, versions/checksums and published
+  payloads are unchanged. No release or deployment performed.
+- Relevant Decisions: Preserve AD/FactoryTalk/Horizon/SQL ordering and first-role
+  landing behavior. With failed collection and no engine rows, show unknown SQL
+  collection in Overview/Role inventory and omit the tab; no last-good persistence
+  added. UI freshness uses a documented conservative 15-minute limit. Existing
+  pressure flags remain the policy source. Native lazy images and negative/bin
+  masking preserve missing evidence. Job deltas remain qualified sampled values.
+- Validation Completed: Claude design, source and pixel reviews reconciled; its
+  final review found no remaining blocker. Thirty page and thirty parser fixtures,
+  35 Horizon checks, 81 PHP syntax results, five real RRD PNG/xport checks and nine
+  source/image-bound Edge views passed. Desktop/mobile and light/dark fixture
+  checks cover keyboard evidence, tab navigation, lazy graphs and no clipping or
+  relevant browser errors. Read-only inspection confirmed existing canary RRD
+  MIN/MAX/AVERAGE archives. Temporary package: 80 payload files match source,
+  eight new SQL PHP files present and all 79 packaged PHP files linted. Complete
+  public-safety and diff checks passed. Local save uses explicit scoped Git because
+  the save helper does not support linked worktrees.
+- Validation Remaining: Production theme and print-graphrow integration are rollout
+  checks. Agent/MSI tests are inapplicable to this overlay-only change. Additional
+  agent collection remains a separate proposal; no SQL queries or grants added.

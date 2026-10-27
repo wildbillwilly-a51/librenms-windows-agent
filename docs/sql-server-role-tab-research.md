@@ -1,6 +1,7 @@
 # SQL Server Role Tab — Research and Design Proposal
 
-Date: 2026-10-27. Status: **proposal; no product changes or release**.
+Date: 2026-10-27. Status: **existing-data tab implemented in unreleased overlay
+source; agent additions remain proposals**.
 Source baseline: agent 0.6.17 / overlay 0.6.31, commit `3f5e91c`.
 
 ## Recommendation
@@ -14,8 +15,7 @@ The page should answer: **Which instance needs attention, why, what evidence is
 missing, and what should the operator check next?** It should not imply that
 Windows service health proves database or application availability.
 
-This is a prioritization proposal, not authorization to change collectors,
-permissions, alerts, release versions or deployed systems. The supplied ChatGPT
+The collection priorities below remain proposals. The supplied ChatGPT
 report was treated as a list of hypotheses. Its private screenshot observations
 are omitted. Primary documentation and this repository's code support the
 decisions below; collection overhead and restricted-login behavior still need
@@ -50,8 +50,11 @@ SQL Server
 For example: “One instance has blocked processes; SQL database queries are not
 configured.” A clean result is “No issues observed in service/listener and
 readable counter checks,” qualified by coverage. Never say “All databases
-healthy” from this data. A failed collection retains last-known role evidence
-with an explicit stale/unknown label; it does not become “Not detected.”
+healthy” from this data. A failed collection is unknown, rather than “Not
+detected.” Current SQL app data is replaced each poll: with no remaining engine
+evidence, Overview/Role inventory report collection failure and the SQL tab is
+omitted. If explicit instance rows remain, show them with incomplete coverage.
+Retaining a last-good SQL snapshot would require separate persistence design.
 
 ### Forefront selection with the current agent
 
@@ -223,8 +226,10 @@ Browser/ReportServer prefixes; that broad inventory role is not the tab gate.
 Keep component-only hosts in generic service/role evidence; consider a separate
 explicitly configured component view later. Browser/VSS-writer/telemetry or
 LocalDB alone must not create a misleading Database Engine tab. Disabled/error
-collection must not erase previously established role presence; this requires
-careful use of collector state and last-known evidence, not a new agent gate.
+collection must be distinguished from confirmed absence. Existing SQL rows are
+not retained across failed polls; the implemented fallback is an unknown SQL
+collection state in Overview/Role inventory, without inventing engine presence
+from the broad role flag. Last-good retention remains separate work.
 
 Use one effective SQL verdict derived from fresh service evidence, all existing
 pressure reasons, listener/unmapped-process conditions, job observations and capability coverage. Keep severity and
@@ -251,13 +256,16 @@ Do not infer production dark-theme behavior from a fixture lacking its CSS.
 Code inspected: `RoleDetector`, `SqlServerCollector`, `SqlServerCounterReader`,
 `SqlServerCounterPolicy`, the Unix-agent SQL parser/storage/RRD definitions,
 the application-page SQL/role-tab renderers and SQL graph definitions. Existing
-rendered-review findings inform the acceptance criteria; this proposal has not
-been rendered as a new UI. No live SQL query/permission/overhead validation was
+rendered-review findings inform the acceptance criteria. The existing-data tab
+now has local fixture rendering and browser/graph checks; live integration with
+the production LibreNMS shell remains a rollout check. No SQL query/permission/overhead validation was
 performed for this research.
 
-Recommended next implementation: a bounded overlay-only SQL tab using the
-existing payload, shared verdict and useful unit-separated trends. Design and
-measure the optional query capability separately before adding any collection.
+Implemented boundary: an overlay-only SQL tab using the existing payload,
+shared verdict and unit-separated trends. The new views read the same RRD DS,
+mask negative unavailable/consolidated incomplete intervals, and lazy-load
+images. Agent code and published versions are unchanged. Design and measure
+the optional query capability separately before adding any collection.
 The full cross-role Phase 3 audit remains separate; the SQL-scoped audit above
 is sufficient input to select SQL content without claiming that audit finished.
 

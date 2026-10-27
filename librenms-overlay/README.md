@@ -16,6 +16,21 @@ The overlay depends on LibreNMS `unix-agent` already being enabled for the
 Windows device. It does not replace SNMP polling and does not change the
 Windows-side agent protocol.
 
+The unreleased source promotes detected SQL engines to a first-level SQL Server
+tab after Active Directory, FactoryTalk and Horizon. Five tiles lead with engine
+services, local TCP listeners, scheduled work, blocking and pending memory grants.
+One issue model drives Overview, SQL status and named attention; generic Roles
+keeps a navigation link. Expandable instance evidence supports keyboard and
+small screens. SQL performance views reuse the existing RRD family, group units,
+mask negative unavailable samples and lazy-load graph images inside disclosures.
+No SQL queries, agent changes, RRD schema changes or alerts are introduced.
+
+Counter coverage and collection age qualify the verdict. Evidence older than
+15 minutes is labeled stale; the payload has no configurable poll-cadence field.
+On SQL collector failure without retained engine rows, Overview and Roles show
+unknown collection state and no SQL tab. The current parser does not retain a
+last-good SQL snapshot. Component-only hosts do not create an engine tab.
+
 The app page is grouped by purpose under tabs and starts with a compact health
 overview. Section detail tables and trend graphs are collapsed by default so
 not-detected roles stay visible without blank tables or graph-heavy panels.

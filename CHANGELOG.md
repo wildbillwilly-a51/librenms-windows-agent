@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased — research and documentation
+## Unreleased — SQL Server role tab
+
+- Promote detected SQL engines to a first-level tab using existing agent data,
+  with five decision tiles, named attention, explicit collection coverage and
+  expandable instance evidence. Keep SQL status consistent with Overview and
+  avoid duplicate SQL warnings in generic Roles.
+- Add separate-unit performance views over existing SQL RRD datasets, preserve
+  gaps for negative unavailable samples and bins containing them, and lazy-load SQL graph images.
+  Preserve agent code, protocol, RRD schemas, alerts and released artifacts.
 
 - Propose an automatically detected SQL Server role tab, prioritize existing
   decision-grade signals and document optional bounded database/log/backup/job

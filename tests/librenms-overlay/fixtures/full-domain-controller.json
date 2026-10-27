@@ -374,7 +374,6 @@
         "data-type=\"application_windows-agent_horizon_state_health\"",
         "data-type=\"application_windows-agent_horizon_edges\"",
         "windows-agent-graphs-horizon",
-        "data-type=\"application_windows-agent_sql_server\"",
         "data-type=\"application_windows-agent_iis\"",
         "data-type=\"application_windows-agent_classified_services\"",
         "data-type=\"application_windows-agent_watched_services\"",
@@ -382,7 +381,19 @@
         "data-type=\"application_windows-agent_tcp_ports\"",
         "data-type=\"application_windows-agent_tls_certificates\"",
         "data-type=\"application_windows-agent_agent_up\""
-      ]
+      ],
+      "tabs": [
+        "windows-agent-active-directory",
+        "windows-agent-factorytalk",
+        "windows-agent-sql-server",
+        "windows-agent-overview",
+        "windows-agent-roles",
+        "windows-agent-security",
+        "windows-agent-backup",
+        "windows-agent-services",
+        "windows-agent-agent-performance"
+      ],
+      "active_tab": "windows-agent-active-directory"
     }
   }
 }

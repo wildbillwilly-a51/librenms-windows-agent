@@ -215,7 +215,7 @@ $kv_table = static function (array $rows) use ($esc): string {
     return $html;
 };
 
-$render_graph_html = static function (string $key) use ($app_id): string {
+$render_graph_html = static function (string $key, bool $lazy_images = false) use ($app_id): string {
     $graph_type = $key;
     $graph_array = [];
     $graph_array['height'] = '100';
@@ -226,7 +226,8 @@ $render_graph_html = static function (string $key) use ($app_id): string {
 
     ob_start();
     include 'includes/html/print-graphrow.inc.php';
-    return (string) ob_get_clean();
+    $html = (string) ob_get_clean();
+    return $lazy_images ? (string) preg_replace('/<img\b(?![^>]*\bloading=)/i', '<img loading="lazy" decoding="async"', $html) : $html;
 };
 
 $state_has_issue = static function (array $state): bool {
@@ -321,6 +322,9 @@ $render_tab_summary = static function (array $summary) use ($esc): string {
     }
     if ($collected !== '') {
         $html .= '<span class="text-muted windows-agent-role-collected">Collected ' . $esc($collected) . '</span>';
+    }
+    if (($summary['coverage'] ?? '') !== '') {
+        $html .= '<div class="windows-agent-role-coverage text-muted">' . $esc($summary['coverage']) . '</div>';
     }
     $html .= '</div>';
 
@@ -750,42 +754,11 @@ $factorytalk_section_summary = $factorytalk_detected
 
 // Counter pressure is shown beside the service inventory, but only once counters were
 // actually readable: an instance that published none must not read as "0 blocked".
-$sql_counter_rows_available = 0;
-$sql_counter_pressure_issues = 0;
-$sql_counter_blocking_instances = 0;
-$sql_counter_memory_instances = 0;
-$sql_counter_buffer_instances = 0;
-$sql_counter_jobs_failed = 0;
-$sql_counter_blocked_max = -1;
-$sql_counter_ple_min = -1;
-foreach ($sql_server_performance as $sql_counter_row) {
-    if (strtolower((string) ($sql_counter_row['state'] ?? 'unavailable')) === 'unavailable') {
-        continue;
-    }
-
-    $sql_counter_rows_available++;
-    $sql_counter_pressure_issues += max(0, (int) ($sql_counter_row['pressure_issues'] ?? 0));
-    $sql_counter_blocking_instances += ((int) ($sql_counter_row['blocking_pressure'] ?? 0)) === 1 ? 1 : 0;
-    $sql_counter_memory_instances += ((int) ($sql_counter_row['memory_pressure'] ?? 0)) === 1 ? 1 : 0;
-    $sql_counter_buffer_instances += ((int) ($sql_counter_row['buffer_pressure'] ?? 0)) === 1 ? 1 : 0;
-    if (((int) ($sql_counter_row['agent_jobs_delta_available'] ?? 0)) === 1) {
-        $sql_counter_jobs_failed += max(0, (int) ($sql_counter_row['agent_failed_jobs'] ?? 0));
-    }
-
-    $sql_counter_blocked = (float) ($sql_counter_row['processes_blocked'] ?? -1);
-    if ($sql_counter_blocked >= 0) {
-        $sql_counter_blocked_max = $sql_counter_blocked_max < 0 ? $sql_counter_blocked : max($sql_counter_blocked_max, $sql_counter_blocked);
-    }
-
-    $sql_counter_ple = (float) ($sql_counter_row['page_life_expectancy'] ?? -1);
-    if ($sql_counter_ple >= 0) {
-        $sql_counter_ple_min = $sql_counter_ple_min < 0 ? $sql_counter_ple : min($sql_counter_ple_min, $sql_counter_ple);
-    }
-}
-
-$sql_counter_summary_metrics = $sql_counter_rows_available > 0
-    ? ' ' . $metric('Blocked', $sql_counter_blocked_max < 0 ? '-' : (string) (int) $sql_counter_blocked_max) . ' ' . $metric('PLE min', $sql_counter_ple_min < 0 ? '-' : (string) (int) $sql_counter_ple_min)
-    : '';
+$sql_view = require __DIR__ . '/windows-agent/sql-server-model.inc.php';
+$sql_promoted = $sql_view['detected'];
+$sql_section_summary = $sql_view['failure'] !== ''
+    ? 'SQL collection failed; state not evaluated.'
+    : $metric('Instances', $sql_view['total']) . ' ' . $metric('Conditions', count($sql_view['issues'])) . ' ' . $metric('Counters', count($sql_view['counterNames']) . '/' . $sql_view['runningCount'] . ' running instances');
 
 $sections = [
     'agent' => [
@@ -815,8 +788,8 @@ $sections = [
     ],
     'sql' => [
         'title' => 'SQL',
-        'state' => $section_state($sql_server_summary['state'] ?? 'not_detected', (int) ($sql_server_summary['health_issues'] ?? $sql_server_summary['instances_not_running'] ?? 0)),
-        'summary' => $metric('Instances', $sql_server_summary['instances_total'] ?? '0') . ' ' . $metric('Down', $sql_server_summary['instances_not_running'] ?? '0') . ' ' . $metric('Agents down', $sql_server_summary['agents_expected_not_running'] ?? '0') . ' ' . $metric('Issues', $sql_server_summary['health_issues'] ?? '0') . $sql_counter_summary_metrics,
+        'state' => $section_state($sql_view['state']),
+        'summary' => $sql_section_summary,
     ],
     'iis' => [
         'title' => 'IIS',
@@ -951,93 +924,9 @@ if ($has_role_details($performance_summary, $performance_processes)) {
 }
 
 // Higher scores sort first; a stopped engine outranks a stopped SQL Agent.
-$sql_instance_issue = static function (array $row): int {
-    if (strtolower((string) ($row['state'] ?? '')) !== 'running') {
-        return 2;
-    }
-
-    return in_array(strtolower((string) ($row['agent_severity'] ?? 'ok')), ['warning', 'critical'], true) ? 1 : 0;
-};
-
-$sql_details = $has_role_details($sql_server_summary, $sql_server_instances) ? $table(['Instance', 'Edition', 'Patch level', 'State', 'Start mode', 'Agent', 'Browser', 'Ports', 'Listening', 'PID'], $issue_first($sql_server_instances, $sql_instance_issue, 'instance'), static function ($row) use ($esc, $state_label): string {
-    $ports = (string) ($row['listener_ports'] ?? '');
-    $source = (string) ($row['port_source'] ?? '');
-    if ($ports === '') {
-        $ports = $source === '' ? '-' : $source;
-    } elseif ($source !== '') {
-        $ports .= ' (' . $source . ')';
-    }
-
-    $agent = (string) ($row['agent_state'] ?? '');
-    $agent_reason = (string) ($row['agent_reason'] ?? '');
-    if (in_array(strtolower((string) ($row['agent_severity'] ?? 'ok')), ['warning', 'critical'], true)) {
-        $agent = $state_label($agent === '' ? 'unknown' : $agent) . ' <small>' . $esc($agent_reason) . '</small>';
-    } else {
-        $agent = $esc($agent);
-    }
-
-    $listening = array_key_exists('listener_active', $row)
-        ? (((int) $row['listener_active']) === 1 ? 'yes' : 'no')
-        : '-';
-
-    return '<td>' . $esc($row['instance'] ?? '') . '</td>'
-        . '<td>' . $esc($row['edition'] ?? '') . '</td>'
-        . '<td>' . $esc($row['patch_level'] ?? $row['version'] ?? '') . '</td>'
-        . '<td>' . $state_label($row['state'] ?? 'unknown') . '</td>'
-        . '<td>' . $esc($row['start_mode'] ?? '') . '</td>'
-        . '<td>' . $agent . '</td>'
-        . '<td>' . $esc($row['browser_state'] ?? '') . '</td>'
-        . '<td>' . $esc($ports) . '</td>'
-        . '<td>' . $esc($listening) . '</td>'
-        . '<td>' . $esc($row['pid'] ?? '') . '</td>';
-}) : '';
-
-if ($has_role_details($sql_server_summary, $sql_server_components)) {
-    $sql_details .= $table(['Component', 'Service', 'Instance', 'State', 'Start mode', 'Expected', 'Reason'], $issue_first($sql_server_components, static fn (array $row): int => in_array(strtolower((string) ($row['severity'] ?? 'ok')), ['warning', 'critical'], true) ? 1 : 0, 'name'), static function ($row) use ($esc, $state_label): string {
-        return '<td>' . $esc($row['component'] ?? '') . '</td>'
-            . '<td>' . $esc($row['name'] ?? '') . '</td>'
-            . '<td>' . $esc($row['instance'] ?? '-') . '</td>'
-            . '<td>' . $state_label($row['state'] ?? 'unknown') . '</td>'
-            . '<td>' . $esc($row['start_mode'] ?? '') . '</td>'
-            . '<td>' . (((int) ($row['expected'] ?? 0)) === 1 ? 'yes' : 'no') . '</td>'
-            . '<td>' . $esc($row['reason'] ?? '') . '</td>';
-    });
-}
-
-// Server-level performance counters, read through PDH with no SQL login. A counter the
-// agent could not read arrives as -1 and renders as "-", never as a zero.
-if ($has_role_details($sql_server_summary, $sql_server_performance)) {
-    $sql_counter_value = static function ($value, int $decimals = 0) use ($esc): string {
-        if (! is_numeric($value) || ((float) $value) < 0) {
-            return '-';
-        }
-
-        return $esc($decimals > 0 ? number_format((float) $value, $decimals) : (string) (int) round((float) $value));
-    };
-
-    $sql_details .= $table(
-        ['Instance', 'Counters', 'Blocked', 'Grants pending', 'Page life', 'Connections', 'Batches/s', 'Compile %', 'Memory vs target %', 'Deadlocks/s', 'Jobs failed', 'Pressure'],
-        $issue_first($sql_server_performance, static fn (array $row): int => max(0, (int) ($row['pressure_issues'] ?? 0)), 'instance'),
-        static function ($row) use ($esc, $state_label, $sql_counter_value): string {
-            $counters = strtolower((string) ($row['state'] ?? 'unavailable')) === 'unavailable'
-                ? $state_label('unavailable')
-                : $esc(($row['counters_read'] ?? '0') . ' read, ' . ($row['counters_missing'] ?? '0') . ' missing');
-
-            return '<td>' . $esc($row['instance'] ?? '') . '</td>'
-                . '<td>' . $counters . '</td>'
-                . '<td>' . $sql_counter_value($row['processes_blocked'] ?? -1) . '</td>'
-                . '<td>' . $sql_counter_value($row['memory_grants_pending'] ?? -1) . '</td>'
-                . '<td>' . $sql_counter_value($row['page_life_expectancy'] ?? -1) . '</td>'
-                . '<td>' . $sql_counter_value($row['user_connections'] ?? -1) . '</td>'
-                . '<td>' . $sql_counter_value($row['batch_requests_per_sec'] ?? -1, 1) . '</td>'
-                . '<td>' . $sql_counter_value($row['compilation_percent'] ?? -1, 1) . '</td>'
-                . '<td>' . $sql_counter_value($row['memory_used_percent'] ?? -1, 1) . '</td>'
-                . '<td>' . $sql_counter_value($row['deadlocks_per_sec'] ?? -1, 2) . '</td>'
-                . '<td>' . (((int) ($row['agent_jobs_delta_available'] ?? 0)) === 1 ? $sql_counter_value($row['agent_failed_jobs'] ?? -1) : '-') . '</td>'
-                . '<td>' . $esc((string) (int) ($row['pressure_issues'] ?? 0)) . '</td>';
-        }
-    );
-}
+$sql_component_details = $table(['Component', 'Service', 'Instance', 'State', 'Start mode', 'Expected', 'Reason'], $issue_first($sql_server_components, static fn (array $row): int => in_array(strtolower((string) ($row['severity'] ?? 'ok')), ['warning', 'critical'], true) ? 1 : 0, 'name'), static function (array $row) use ($esc): string {
+    return '<td>' . $esc($row['component'] ?? '') . '</td><td>' . $esc($row['name'] ?? '') . '</td><td>' . $esc($row['instance'] ?? 'Shared') . '</td><td>' . $esc($row['state'] ?? 'Not reported') . '</td><td>' . $esc($row['start_mode'] ?? 'Not reported') . '</td><td>' . $esc(array_key_exists('expected', $row) ? ((int) $row['expected'] === 1 ? 'yes' : 'no') : 'Not reported') . '</td><td>' . $esc($row['reason'] ?? 'Not reported') . '</td>';
+});
 
 $iis_details = '';
 $iis_rows = [];
@@ -2097,7 +1986,7 @@ $performance_tab .= $render_section_summary('performance-depth', 'Windows Perfor
     ['label' => 'Pressure Issues', 'key' => 'windows-agent_perf_pressure_issues'],
 ]);
 
-$render_graph_list = static function (array $graphs, string $id_prefix) use ($esc, $render_graph_html, $render_disclosure): string {
+$render_graph_list = static function (array $graphs, string $id_prefix, bool $lazy_images = false) use ($esc, $render_graph_html, $render_disclosure): string {
     $primary = '';
     $secondary = '';
     foreach ($graphs as $graph) {
@@ -2106,7 +1995,7 @@ $render_graph_list = static function (array $graphs, string $id_prefix) use ($es
             continue;
         }
 
-        $graph_html = '<div class="windows-agent-graph-view"><h4>' . $esc($graph['label'] ?? 'Graph') . '</h4>' . $render_graph_html($graph_key) . '</div>';
+        $graph_html = '<div class="windows-agent-graph-view"><h4>' . $esc($graph['label'] ?? 'Graph') . '</h4>' . $render_graph_html($graph_key, $lazy_images) . '</div>';
         if ((bool) ($graph['secondary'] ?? false)) {
             $secondary .= $graph_html;
         } else {
@@ -2190,66 +2079,46 @@ if ($horizon_surface_available) {
     }
 }
 
-// Roles & Workloads tab: summary spans the non-first-order roles that live here
-// (SQL and IIS), plus the detected-role inventory and logged-on sessions.
-$sql_detected = ! in_array(strtolower((string) ($sql_server_summary['state'] ?? 'not_detected')), ['not_detected', 'disabled', 'unsupported', 'not_applicable'], true);
+$sql_tab = $sql_promoted ? require __DIR__ . '/windows-agent/sql-server-tab.inc.php' : '';
+
+// A promoted role owns its state and attention. Generic inventory keeps a pointer.
 $iis_detected = ! in_array(strtolower((string) ($iis_summary['state'] ?? 'not_detected')), ['not_detected', 'disabled', 'unsupported', 'not_applicable'], true);
-$sql_down = (int) ($sql_server_summary['instances_not_running'] ?? 0);
-$sql_agents_down = (int) ($sql_server_summary['agents_expected_not_running'] ?? 0);
-$sql_components_down = (int) ($sql_server_summary['components_expected_not_running'] ?? 0);
-$sql_no_listener = (int) ($sql_server_summary['instances_without_listener'] ?? 0);
-$sql_unmapped_engines = (int) ($sql_server_summary['unmapped_engine_processes'] ?? 0);
 $iis_stopped = (int) ($iis_summary['sites_stopped'] ?? 0) + (int) ($iis_summary['app_pools_stopped'] ?? 0);
 $roles_detected_count = count(array_filter($roles, static fn (array $r): bool => (int) ($r['detected'] ?? 0) === 1));
-$roles_attention = [];
-if ($sql_detected && $sql_down > 0) {
-    $roles_attention[] = ['title' => $sql_down . ' SQL Server instance(s) not running', 'detail' => (string) ($sql_server_summary['instances_total'] ?? '0') . ' instance(s) detected.', 'action' => 'Review the SQL Server inventory below.'];
-}
-if ($sql_detected && $sql_agents_down > 0) {
-    $roles_attention[] = ['title' => $sql_agents_down . ' SQL Server Agent service(s) stopped', 'detail' => 'Set to start automatically but not running; scheduled backups and maintenance jobs are not executing.', 'action' => 'Start the SQL Server Agent service on the affected instance(s).'];
-}
-if ($sql_detected && $sql_components_down > 0) {
-    $roles_attention[] = ['title' => $sql_components_down . ' SQL Server component service(s) stopped', 'detail' => 'Automatic SQL Server components are not running.', 'action' => 'Review the SQL Server component inventory below.'];
-}
-if ($sql_detected && $sql_no_listener > 0) {
-    $roles_attention[] = ['title' => $sql_no_listener . ' SQL Server instance(s) with no active listener', 'detail' => 'TCP is enabled but no configured port is listening.', 'action' => 'Confirm the TCP listener configuration for the affected instance(s).'];
-}
-if ($sql_detected && $sql_unmapped_engines > 0) {
-    $roles_attention[] = ['title' => $sql_unmapped_engines . ' unmapped sqlservr.exe process(es)', 'detail' => 'Database engine processes that no detected SQL Server service owns.', 'action' => 'Investigate the unowned SQL Server engine process(es).'];
-}
-if ($sql_detected && $sql_counter_blocking_instances > 0) {
-    $roles_attention[] = ['title' => $sql_counter_blocking_instances . ' SQL Server instance(s) with blocked sessions', 'detail' => 'Sessions are waiting on locks held by another session.', 'action' => 'Investigate the blocking chain on the affected instance(s).'];
-}
-if ($sql_detected && $sql_counter_memory_instances > 0) {
-    $roles_attention[] = ['title' => $sql_counter_memory_instances . ' SQL Server instance(s) with pending memory grants', 'detail' => 'Queries are queued waiting for workspace memory.', 'action' => 'Review SQL Server memory configuration on the affected instance(s).'];
-}
-if ($sql_detected && $sql_counter_buffer_instances > 0) {
-    $roles_attention[] = ['title' => $sql_counter_buffer_instances . ' SQL Server instance(s) with low page life expectancy', 'detail' => 'The buffer pool is turning over faster than the configured threshold allows.', 'action' => 'Review buffer pool pressure on the affected instance(s).'];
-}
-if ($sql_detected && $sql_counter_jobs_failed > 0) {
-    $roles_attention[] = ['title' => $sql_counter_jobs_failed . ' SQL Server Agent job failure(s)', 'detail' => 'New failures between the agent\'s latest two counter collections; not a lifetime or daily total.', 'action' => 'Review SQL Server Agent job history on the affected instance(s).'];
-}
+$roles_attention = $sql_promoted ? [] : array_map(static function (array $item): array {
+    $item['title'] = $item['instance'] . ' — ' . $item['title'];
+    return $item;
+}, $sql_view['issues']);
 if ($iis_detected && $iis_stopped > 0) {
     $roles_attention[] = ['title' => $iis_stopped . ' IIS site(s) or app pool(s) stopped', 'detail' => (string) ($iis_summary['sites_total'] ?? '0') . ' site(s), ' . (string) ($iis_summary['app_pools_total'] ?? '0') . ' pool(s).', 'action' => 'Review the IIS inventory below.'];
 }
-$roles_tab_state = $worst_section_state([$sections['sql']['state'], $sections['iis']['state']]);
-$roles_verdict = empty($roles_attention)
-    ? 'No workload issues on this host. Detected roles are listed below.'
-    : count($roles_attention) . ' workload condition(s) need attention.';
+$roles_states = $iis_detected ? [$sections['iis']['state']] : [];
+if (! $sql_promoted && ($sql_view['failure'] !== '' || $state_has_issue($sections['sql']['state']) || $sql_view['state'] === 'unknown')) {
+    $roles_states[] = $sections['sql']['state'];
+}
+$roles_tab_state = $worst_section_state($roles_states);
+$roles_verdict = empty($roles_attention) ? 'No issues observed in the workloads shown here.' : count($roles_attention) . ' workload condition(s) need attention.';
+if (! $sql_promoted && $sql_view['failure'] !== '') {
+    $roles_verdict = 'SQL collection failed; SQL state is unknown. Other workloads are listed below.';
+}
 $roles_tab = $render_tab_summary([
     'state' => $roles_tab_state,
     'verdict' => $roles_verdict,
     'next' => $roles_attention[0]['action'] ?? '',
     'collected' => (string) ($data['last_agent_utc'] ?? ''),
     'tiles' => [
-        ['SQL Server', $sql_detected ? 'Detected' : 'Not detected', $sql_detected ? ((string) ($sql_server_summary['instances_total'] ?? '0') . ' instance(s), ' . $sql_down . ' down, ' . $sql_agents_down . ' agent(s) down') : 'No SQL instance'],
+        ['SQL Server', $sql_promoted ? 'Own tab' : ($sql_view['failure'] !== '' ? 'Unknown' : (count($sql_server_components) > 0 ? 'Components only' : ucfirst(str_replace('_', ' ', $sql_view['state'])))), $sql_promoted ? 'Instance health and evidence' : 'Local collection evidence'],
         ['IIS', $iis_detected ? 'Detected' : 'Not detected', $iis_detected ? ((string) ($iis_summary['sites_total'] ?? '0') . ' site(s), ' . $iis_stopped . ' stopped') : 'No web server'],
         ['Detected roles', $roles_detected_count, count($roles) . ' evaluated'],
         ['Logged-on sessions', count($logged_on_user_sessions), 'Interactive and remote'],
     ],
     'attention' => $roles_attention,
 ]);
-$roles_tab .= $render_section_summary('sql', 'SQL Server', $sections['sql']['state'], $sections['sql']['summary'], $sql_details);
+if ($sql_promoted) {
+    $roles_tab .= '<p><a href="#windows-agent-sql-server" data-windows-agent-open-sql>Open SQL Server tab</a> for instance health, attention and trends.</p>';
+} else {
+    $roles_tab .= $render_section_summary('sql', 'SQL components and collection', $sections['sql']['state'], $sections['sql']['summary'], $sql_component_details);
+}
 $roles_tab .= $render_section_summary('iis', 'IIS', $sections['iis']['state'], $sections['iis']['summary'], $iis_details);
 $roles_tab .= $render_section_summary('roles', 'Detected Roles', $section_state(empty($roles) ? 'not_detected' : 'ok'), $metric('Rows', count($roles)), $role_details);
 if (! $ad_dc_detected) {
@@ -2440,6 +2309,80 @@ echo '<style>
 .windows-agent-role-attention ul { margin: 0; padding: 0; list-style: none; }
 .windows-agent-role-attention li { padding: 6px 0; border-top: 1px solid rgba(127, 127, 127, 0.2); }
 .windows-agent-role-attention-action { margin-top: 2px; }
+.windows-agent-sql {
+    --sql-text: #202630;
+    --sql-muted: #626d7a;
+    --sql-border: #cfd6df;
+    --sql-surface: #fff;
+    --sql-subtle: #f5f8fc;
+    --sql-link: #1769d2;
+    color: var(--sql-text);
+    overflow-wrap: anywhere;
+}
+.dark .windows-agent-sql {
+    --sql-text: #e6edf3;
+    --sql-muted: #a7b2bf;
+    --sql-border: #4b5563;
+    --sql-surface: #2d333a;
+    --sql-subtle: #343b43;
+    --sql-link: #79b8ff;
+}
+.windows-agent-sql .text-muted { color: var(--sql-muted) !important; }
+.windows-agent-sql small { color: var(--sql-muted); }
+.windows-agent-sql a { color: var(--sql-link); }
+.windows-agent-sql .label-warning { color: #332200; }
+.windows-agent-sql .label-success { background: #357a38; }
+.windows-agent-sql .label-danger { background: #a94442; }
+.windows-agent-sql .label-info { background: #31708f; }
+.windows-agent-sql .label-default { background: #666; }
+.windows-agent-sql .windows-agent-role-status-info .label-info { background: #666; }
+.windows-agent-sql .windows-agent-role-status { padding: 12px; background: var(--sql-subtle); }
+.windows-agent-sql .windows-agent-role-collected { float: none; display: block; margin: 6px 0 0; }
+.windows-agent-sql .windows-agent-role-action { display: block; margin: 6px 0 0; }
+.windows-agent-sql .windows-agent-role-coverage { margin-top: 8px; font-size: 12px; }
+.windows-agent-sql .windows-agent-role-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 0 0 14px; }
+.windows-agent-sql .windows-agent-role-stats::before,
+.windows-agent-sql .windows-agent-role-stats::after { display: none; }
+.windows-agent-sql .windows-agent-role-stat { float: none; width: auto; min-width: 0; min-height: 108px; padding: 12px; overflow-wrap: anywhere; }
+.windows-agent-sql .windows-agent-role-stat-value { font-size: 19px; }
+.windows-agent-sql .windows-agent-role-attention { margin: 14px 0 0; }
+.windows-agent-sql .windows-agent-role-attention li { padding: 9px 0; }
+.windows-agent-sql-coverage { margin-bottom: 16px; padding: 10px 12px; border: 1px solid var(--sql-border); background: var(--sql-subtle); }
+.windows-agent-sql-coverage ul { margin: 6px 0 0; padding-left: 18px; }
+.windows-agent-sql-instance { margin-bottom: 8px; border: 1px solid var(--sql-border); background: var(--sql-surface); }
+.windows-agent-sql-instance > summary { position: relative; display: grid; grid-template-columns: minmax(150px, 1fr) minmax(0, 3fr); gap: 6px 18px; padding: 12px 14px 12px 32px; list-style: none; cursor: pointer; overflow-wrap: anywhere; }
+.windows-agent-sql-instance > summary::-webkit-details-marker { display: none; }
+.windows-agent-sql-instance > summary::before { content: "›"; position: absolute; left: 12px; top: 8px; font-size: 22px; color: var(--sql-link); }
+.windows-agent-sql-instance[open] > summary::before { transform: rotate(90deg); }
+.windows-agent-sql-instance > summary:hover { background: var(--sql-subtle); }
+.windows-agent-sql-instance > summary:focus-visible { outline: 2px solid var(--sql-link); outline-offset: -2px; }
+.windows-agent-sql-instance-name .label { display: inline-block; margin-left: 4px; }
+.windows-agent-sql-instance-facts { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; }
+.windows-agent-sql-instance-reason { grid-column: 1 / -1; font-size: 12px; }
+.windows-agent-sql-expand { float: right; color: var(--sql-link); }
+.windows-agent-sql-instance-body { padding: 14px; border-top: 1px solid var(--sql-border); }
+.windows-agent-sql-evidence { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; margin: 0 0 16px; }
+.windows-agent-sql-evidence > div { min-width: 0; overflow-wrap: anywhere; }
+.windows-agent-sql-evidence dt { color: var(--sql-muted); font-size: 12px; font-weight: 400; }
+.windows-agent-sql-evidence dd { margin: 3px 0 0; }
+.windows-agent-sql .table { color: var(--sql-text); background: var(--sql-surface); }
+.windows-agent-sql .table > tbody > tr > td,
+.windows-agent-sql .table > tbody > tr > th { border-color: var(--sql-border); }
+.windows-agent-sql .table-striped > tbody > tr:nth-of-type(odd) { background: var(--sql-subtle); }
+.dark .windows-agent-sql .btn-default { color: var(--sql-text); border-color: var(--sql-border); background: var(--sql-surface); }
+@media (max-width: 991px) {
+    .windows-agent-sql .windows-agent-role-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .windows-agent-sql .windows-agent-role-stat:nth-child(3) { grid-column: 1 / -1; }
+    .windows-agent-sql .windows-agent-role-stat { min-height: 84px; border-bottom: 1px solid var(--sql-border); }
+}
+@media (max-width: 767px) {
+    .windows-agent-sql-instance > summary { display: block; }
+    .windows-agent-sql-instance-name,
+    .windows-agent-sql-instance-reason { display: block; }
+    .windows-agent-sql-instance-facts { display: grid; gap: 4px; margin: 8px 0; }
+    .windows-agent-sql-evidence { grid-template-columns: minmax(0, 1fr); }
+    .windows-agent-sql-expand { float: none; margin-left: 8px; }
+}
 .windows-agent-horizon-operations {
     --horizon-blue: #1769d2;
     --horizon-link: #1769d2;
@@ -2645,6 +2588,13 @@ if ($horizon_surface_available) {
         'issue' => $state_has_issue($sections['horizon']['state']),
     ];
 }
+if ($sql_promoted) {
+    $tab_definitions['windows-agent-sql-server'] = [
+        'title' => 'SQL Server',
+        'body' => $sql_tab,
+        'issue' => $state_has_issue($sections['sql']['state']),
+    ];
+}
 $tab_definitions += [
     'windows-agent-overview' => [
         'title' => 'Overview',
@@ -2654,7 +2604,7 @@ $tab_definitions += [
     'windows-agent-roles' => [
         'title' => 'Roles & Workloads',
         'body' => $roles_tab,
-        'issue' => $state_has_issue($sections['sql']['state']) || $state_has_issue($sections['iis']['state']) || (! $ad_dc_detected && $dfsr_has_issue),
+        'issue' => $state_has_issue($roles_tab_state) || (! $ad_dc_detected && $dfsr_has_issue),
     ],
     'windows-agent-security' => [
         'title' => 'Security & Certificates',
@@ -2693,6 +2643,11 @@ echo '<script>
 (function () {
     "use strict";
     var lastDrawerTrigger = null;
+    document.addEventListener("click", function (event) {
+        if (!event.target.closest("[data-windows-agent-open-sql]")) return;
+        var tab = document.querySelector("a[role=tab][aria-controls=windows-agent-sql-server]");
+        if (tab) { event.preventDefault(); tab.click(); tab.focus(); }
+    });
     function setPoolOpen(poolRef, open) {
         var toggle = document.querySelector("[data-pool-toggle=\"" + poolRef + "\"]");
         var region = document.querySelector("[data-pool-region=\"" + poolRef + "\"]");

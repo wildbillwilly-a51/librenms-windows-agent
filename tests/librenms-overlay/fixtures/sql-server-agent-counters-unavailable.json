@@ -49,13 +49,23 @@
       "contains": [
         "33 read, 0 missing",
         "38 read, 0 missing",
-        "Jobs failed"
+        "Job failures"
       ],
       "not_contains": [
         "SQL Server Agent job failure(s)",
         "SQL Server Agent service(s) stopped",
         "Counted since the SQL Server Agent process last started"
-      ]
+      ],
+      "tabs": [
+        "windows-agent-sql-server",
+        "windows-agent-overview",
+        "windows-agent-roles",
+        "windows-agent-security",
+        "windows-agent-backup",
+        "windows-agent-services",
+        "windows-agent-agent-performance"
+      ],
+      "active_tab": "windows-agent-sql-server"
     }
   }
 }

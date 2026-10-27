@@ -48,14 +48,27 @@
       "contains": [
         "MSSQLSERVER",
         "16.0.1000.6",
-        "1433"
+        "1433",
+        "expectation not reported",
+        "Not reported",
+        "Not measured",
+        "partially checked"
       ],
       "not_contains": [
         "SQL Server Agent job failure(s)",
         "SQL Server Agent service(s) stopped",
-        "Grants pending",
         "read, 0 missing"
-      ]
+      ],
+      "tabs": [
+        "windows-agent-sql-server",
+        "windows-agent-overview",
+        "windows-agent-roles",
+        "windows-agent-security",
+        "windows-agent-backup",
+        "windows-agent-services",
+        "windows-agent-agent-performance"
+      ],
+      "active_tab": "windows-agent-sql-server"
     }
   }
 }
