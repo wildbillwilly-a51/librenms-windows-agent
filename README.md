@@ -7,9 +7,9 @@ The Windows agent listens on TCP `6556` and emits Checkmk-style
 `windows_agent_*` sections. The LibreNMS overlay teaches LibreNMS how to parse
 those sections and show the `Windows Agent` application.
 
-The current published overlay is `0.6.31`; the public Windows agent remains
-`0.6.16`. Agent release preparation is separate. See `CURRENT-STATE.md` for
-release status.
+The current published overlay is `0.6.31` and the current Windows agent is
+`0.6.17`. They are versioned independently. See `CURRENT-STATE.md` for release
+status.
 
 ## Primary Runbook
 
@@ -233,7 +233,7 @@ iwr -UseBasicParsing https://raw.githubusercontent.com/wildbillwilly-a51/librenm
 Direct MSI link:
 
 ```text
-https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/artifacts/librenms-windows-agent-0.6.16.msi
+https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/artifacts/librenms-windows-agent-0.6.17.msi
 ```
 
 The default Windows install is normally enough. It installs the
@@ -242,10 +242,11 @@ Windows firewall rules, starts the service, and preserves existing config on
 upgrade.
 On FactoryTalk hosts, the MSI also enables the complete bounded FactoryTalk
 feature set, including localhost Counter Monitor snapshots every 15 minutes.
-Release 0.6.16 upgrades prior packages inside the MSI rollback boundary, and
+Since 0.6.16 the MSI upgrades prior packages inside its rollback boundary, and
 setup reports success only after the installed Windows service reaches
 `Running` and returns a valid agent payload. The one-command installer checks
 the .NET Framework prerequisite and listener port before changing the host,
+runs on Windows PowerShell 4.0 and later (so stock Windows Server 2012 R2 works),
 prepares the final configuration before service startup, and retains a verbose
 Windows Installer log under
 `%TEMP%\librenms-windows-agent\install-agent-<version>-<timestamp>.log`.
@@ -402,13 +403,13 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Interactive install after downloading the MSI:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.16.msi /L*V "$env:TEMP\librenms-windows-agent-0.6.16-install.log"
+msiexec /i librenms-windows-agent-0.6.17.msi /L*V "$env:TEMP\librenms-windows-agent-0.6.17-install.log"
 ```
 
 Silent install after downloading the MSI:
 
 ```powershell
-msiexec /i librenms-windows-agent-0.6.16.msi /qn /L*V "$env:TEMP\librenms-windows-agent-0.6.16-install.log"
+msiexec /i librenms-windows-agent-0.6.17.msi /qn /L*V "$env:TEMP\librenms-windows-agent-0.6.17-install.log"
 ```
 
 The direct MSI intentionally uses one reliable default path:
@@ -430,7 +431,7 @@ registered MSI before the replacement transaction.
 Silent uninstall:
 
 ```powershell
-msiexec /x librenms-windows-agent-0.6.16.msi /qn /L*V "$env:TEMP\librenms-windows-agent-0.6.16-uninstall.log"
+msiexec /x librenms-windows-agent-0.6.17.msi /qn /L*V "$env:TEMP\librenms-windows-agent-0.6.17-uninstall.log"
 ```
 
 ### Collector Expectations

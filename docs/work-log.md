@@ -1,5 +1,58 @@
 # Work Log
 
+## 2026-10-27 (agent 0.6.17: built, canary-installed, release committed locally)
+
+- Objective: cut agent `0.6.17` agent-only, keeping overlay `0.6.30`, build locally
+  without committing, and canary it on the SQL test host through `install-agent.ps1`.
+  No publishing. Overlay `0.6.31` waits for separate overlay work.
+- Bump: `Directory.Build.props` (`Version`, `AssemblyVersion`, `FileVersion`) and the
+  `install-agent.ps1` default `-Version`. `install.sh` and `capabilities.json` stay at
+  overlay `0.6.30`. Release-facing docs (`README.md`, `CURRENT-STATE.md`, the
+  `CHANGELOG.md` release heading) are left for the publish step.
+- Build: `build-release.ps1 -Version 0.6.17 -AgentOnly -OverlayVersion 0.6.30
+  -UpdateChecksums`. A combined build would force the overlay version to equal the
+  agent version, so agent-only is the only way to ship differing versions. Tests,
+  MSI build, and the installer integration test passed. `SHA256SUMS` now lists overlay
+  `0.6.30` (unchanged hash), config `0.6.17` and MSI `0.6.17`; every hash matches an
+  independent recomputation. The `0.6.17` MSI keeps the stable UpgradeCode with a new
+  ProductCode. The `0.6.17` config template is byte-identical to `0.6.16`'s; new SQL
+  settings come from code defaults.
+- Canary: staged `install-agent.ps1`, `SHA256SUMS` and both artifacts on the test host
+  and ran `install-agent.ps1 -Version 0.6.17 -BaseUrl file:///<staging> -Silent` as
+  LocalSystem through a one-time scheduled task. The `file://` BaseUrl works, including
+  checksum verification.
+- Defect found: the first run failed in the .NET prerequisite check on
+  `Get-ItemPropertyValue`, a PowerShell 5.0 cmdlet; the host is Server 2012 R2 with
+  PowerShell 4.0. Present in the published installer since `0.6.15`. Fixed with
+  `Get-ItemProperty`; a scan for other PowerShell 5+ constructs found none. The failed
+  run changed nothing on the host. The scheduled task reported exit code 0 despite the
+  failure; only the captured output showed it.
+- Second run: installed. MSI status 0, no `Return value 3`, exactly one product
+  registered (`0.6.17`), service running as LocalSystem. About 1.4 s between service
+  stop and the new listener. `agent.json` was re-serialized: one semantic difference
+  (`%ProgramData%` expanded in `logging.path`, same file), 113 keys otherwise
+  identical. The live payload reports `0.6.17.0` with all four SQL sections,
+  `counters_missing=0` on every instance, the SQL collector at about 1.6 s, and no
+  collector failed or timed out. A production poller fetched the new payload; no
+  warnings or errors in the agent log since the upgrade.
+- Validation: agent tests passed inside `build-release.ps1`; `install-agent.ps1` parses
+  under Windows PowerShell 5.1; the fixed function returns the registry value.
+- Not verified: configuration preservation for a customized config (this host's
+  config equals the default template, so preservation and overwrite look the same);
+  the elevated installer acceptance suite (needs a disposable host, it uninstalls); how
+  the production overlay renders the new payload.
+- Release commit: while this was in progress, overlay `0.6.31` was published to
+  GitHub from a separate branch, built on the same SQL commits and keeping agent
+  `0.6.16`. The agent release was moved onto that published commit rather than
+  forking from it. The `0.6.17` MSI and config were not rebuilt (the canaried bytes
+  are what ship). `SHA256SUMS` now lists overlay `0.6.31` with agent `0.6.17`, and
+  every line matches an independent hash. `README.md` and `CURRENT-STATE.md` now
+  name agent `0.6.17`. Committed locally only; GitHub publication awaits approval.
+- Field state: the test host now runs unpublished agent `0.6.17`. Publish these exact
+  bytes. If agent source changes before publication, either ship `0.6.18` or reinstall
+  the rebuilt `0.6.17` on the test host, so no host keeps `0.6.17` bytes that differ
+  from the published ones.
+
 ## 2026-10-27 (publish overlay 0.6.31; preserve separate agent release)
 
 - User approved GitHub publication of overlay 0.6.31. Claude reviewed the

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = '0.6.16',
+    [string]$Version = '0.6.17',
     [string]$RepoOwner = 'wildbillwilly-a51',
     [string]$RepoName = 'librenms-windows-agent',
     [string]$RepoBranch = 'main',
@@ -81,7 +81,14 @@ function Get-DotNetFrameworkRelease {
         return 0
     }
 
-    return [int](Get-ItemPropertyValue -LiteralPath $path -Name Release -ErrorAction SilentlyContinue)
+    # Get-ItemProperty, not Get-ItemPropertyValue: the latter needs PowerShell 5.0,
+    # and Windows Server 2012 R2 ships PowerShell 4.0.
+    $item = Get-ItemProperty -LiteralPath $path -Name Release -ErrorAction SilentlyContinue
+    if (-not $item) {
+        return 0
+    }
+
+    return [int]$item.Release
 }
 
 function Get-ListeningOwners {

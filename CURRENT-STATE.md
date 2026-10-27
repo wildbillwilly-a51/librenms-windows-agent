@@ -25,28 +25,36 @@ and private exports do not belong here.
 
 ## Current Releases
 
-These are the public installer defaults. This overlay-only publication preserves
-the published Windows agent payloads; the next agent release is separate.
-`main` contains unreleased agent source, while installers still serve the
-immutable `0.6.16` MSI. Do not rebuild or replace that published version.
+These are the public installer defaults. Agent `0.6.17` is an agent-only release:
+it preserves the published overlay `0.6.31` artifact and checksum byte-for-byte.
+Published versions are immutable; do not rebuild or replace `0.6.17` or
+`0.6.31`. The next change to either ships as a new version.
 
 - Overlay version: `0.6.31`
-- Windows agent version: `0.6.16`
+- Windows agent version: `0.6.17`
 - Overlay: `artifacts/librenms-windows-agent-overlay-0.6.31.tar.gz`
-- Windows MSI: `artifacts/librenms-windows-agent-0.6.16.msi`
-- Versioned agent config: `artifacts/librenms-windows-agent-config-0.6.16-win.json`
+- Windows MSI: `artifacts/librenms-windows-agent-0.6.17.msi`
+- Versioned agent config: `artifacts/librenms-windows-agent-config-0.6.17-win.json`
 - Checksums: `SHA256SUMS`
 - Overlay SHA256: `fb8c88c844bcfdcfcc98a35674befb25327256c9b19c79d4a0a377a486fda34b`
-- Windows MSI SHA256: `5a40c9965a44179b09c57e4e3951e55982b983bfd1fd83b4e93cbeaaf5811732`
+- Windows MSI SHA256: `8e588074498671a3772bb8ca5520f0734cba23d430b66eb04458038a411a96c9`
 - Versioned config SHA256: `94fd8b56e0ac2ca15f50dd0ffff1d3f9167032b4717aeecd5b091f336fbe404b`
 - Public overlay installer: `install.sh`
 - Public Windows installer: `install-agent.ps1`
 
-Windows agent release `0.6.16` keeps the repaired install and upgrade path and
-adds explicit Horizon service expectedness plus active-certificate health. The bootstrap verifies a
-matching versioned config, checks prerequisites and port ownership, prepares
+Windows agent release `0.6.17` makes the SQL Server collector accurate and adds
+credential-free depth. Per-instance TCP ports come from the registry instead of a
+1433/1434 guess; engine services map to their process IDs, with per-user LocalDB
+kept apart from unowned engines; non-engine components get their own section;
+SQL Agent, component and Browser verdicts are expectedness-aware; and server-level
+performance counters are read through PDH, with SQL Agent counters read only while
+the Agent runs. It also fixes `install-agent.ps1` on Windows PowerShell 4.0, which
+had failed on stock Windows Server 2012 R2 since `0.6.15`. The bootstrap verifies
+a matching versioned config, checks prerequisites and port ownership, prepares
 configuration before service startup, leaves registered upgrades inside MSI
 rollback, retains verbose diagnostics, and verifies a live protocol response.
+Before publication, `0.6.17` was canary-installed through `install-agent.ps1` on a
+multi-instance SQL Server 2017 host running Windows Server 2012 R2.
 Overlay release `0.6.31` adds SQL component/performance parsing, per-instance
 application metrics, two new SQL RRD graph families and richer SQL inventory
 and attention rows. Unreadable and first-sample job deltas remain `-1`, distinct
@@ -142,7 +150,7 @@ For an intentional release:
 For an agent-only release that preserves the current overlay:
 
 ```powershell
-.\scripts\build-release.ps1 -Version 0.6.16 -AgentOnly -OverlayVersion 0.6.27 -UpdateChecksums
+.\scripts\build-release.ps1 -Version 0.6.17 -AgentOnly -OverlayVersion 0.6.31 -UpdateChecksums
 ```
 
 Before publishing, review the full committed snapshot for secrets, private
@@ -158,10 +166,11 @@ fixtures.
 
 ## Next Recommended Action
 
-Overlay `0.6.31` is published and is the installer default. Windows agent
-`0.6.16` remains the public installer default, with its MSI/config bytes
-unchanged. The separate next-agent release must preserve the `0.6.31` overlay
-artifact and checksum when it is intentionally promoted.
+Windows agent `0.6.17` and overlay `0.6.31` are the installer defaults. Agent
+`0.6.17` is running on its canary host only; every other Windows host stays on its
+previous agent until an operator runs `install-agent.ps1` there. Roll the agent
+out at the operator's pace. Hosts still on `0.6.16` or older keep working with
+overlay `0.6.31` but report no SQL components, counters or LocalDB separation.
 
 Publishing changes no deployed node: the reapply timer uses its locally staged
 copy and downloads nothing. Deploy `0.6.31` to the management/web node and every

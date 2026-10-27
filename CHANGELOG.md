@@ -1,29 +1,18 @@
 # Changelog
 
-## Overlay 0.6.31 - 2026-10-27
+## Windows agent 0.6.17 - 2026-10-27
 
-Overlay-only release of the SQL support developed with the next Windows agent.
-The published agent 0.6.16 MSI and configuration are preserved byte-for-byte.
+Agent-only release. Overlay `0.6.31` (below) is unchanged and already carries the
+matching overlay support; the bullets here marked as overlay changes shipped there.
+Canary-tested on a multi-instance SQL Server 2017 host running Windows Server 2012 R2
+before publication.
 
-- Parse SQL component health and server-level performance sections, expose
-  per-instance `sql_perf_<measure>:<key>` application metrics, and add the
-  `windows-agent-sql-server-health` and `windows-agent-sql-server-performance`
-  graph families without changing the original SQL RRD schema.
-- Show edition, patch level, listener state, process ID, components and readable
-  counters in the SQL inventory, with actionable attention rows and no automatic
-  alert creation. LocalDB remains separate from unmapped service engines.
-- Preserve unavailable SQL Agent job counts as `-1` in per-instance metrics and
-  aggregates, including first samples with no usable delta. The new job-failure
-  dataset accepts `-1`; measured zero retains its meaning. Correct the page and
-  alert guidance to describe collection deltas rather than lifetime counts.
-- Keep older agents compatible and document partial counter totals, deployment
-  independence, and the limits of collection deltas as job-event history.
-
-## Unreleased
-
-SQL Server surface collector correctness. Agent publication is tracked
-separately; the matching overlay support is shipped in 0.6.31 above.
-
+- `install-agent.ps1` runs on PowerShell 4.0 again. Its .NET Framework prerequisite
+  check called `Get-ItemPropertyValue`, a PowerShell 5.0 cmdlet, so since `0.6.15`
+  the one-command Windows installer failed immediately on stock Windows Server 2012 R2,
+  which is in scope and ships PowerShell 4.0. The check now uses `Get-ItemProperty`.
+  The script stopped after downloading and verifying artifacts and before changing
+  anything, so affected hosts were left on their previous version.
 - Per-instance TCP endpoints are now read from the registry
   (`HKLM\SOFTWARE\Microsoft\Microsoft SQL Server\<key>\MSSQLServer\SuperSocketNetLib\Tcp\IPAll`)
   instead of filtering host listeners to ports 1433 and 1434. The old filter stamped the
@@ -130,6 +119,25 @@ the matching overlay support is shipped in 0.6.31 above.
   `memoryGrantsPendingWarning` (default `1`), `processesBlockedWarning`
   (default `1`), and `compilationPercentWarning` (default `10`).
 - Per-database counters, ERRORLOG evidence, and DMV queries remain unimplemented.
+
+## Overlay 0.6.31 - 2026-10-27
+
+Overlay-only release of the SQL support developed with the next Windows agent.
+The published agent 0.6.16 MSI and configuration are preserved byte-for-byte.
+
+- Parse SQL component health and server-level performance sections, expose
+  per-instance `sql_perf_<measure>:<key>` application metrics, and add the
+  `windows-agent-sql-server-health` and `windows-agent-sql-server-performance`
+  graph families without changing the original SQL RRD schema.
+- Show edition, patch level, listener state, process ID, components and readable
+  counters in the SQL inventory, with actionable attention rows and no automatic
+  alert creation. LocalDB remains separate from unmapped service engines.
+- Preserve unavailable SQL Agent job counts as `-1` in per-instance metrics and
+  aggregates, including first samples with no usable delta. The new job-failure
+  dataset accepts `-1`; measured zero retains its meaning. Correct the page and
+  alert guidance to describe collection deltas rather than lifetime counts.
+- Keep older agents compatible and document partial counter totals, deployment
+  independence, and the limits of collection deltas as job-event history.
 
 ## Overlay 0.6.30 - 2026-09-09
 
