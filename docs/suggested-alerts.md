@@ -65,8 +65,9 @@ are configured not to run a component:
 `windows_agent_sql_server_performance` is new visibility and ships non-alerting:
 none of the rules below is enabled anywhere, and none should be turned on before
 the numbers have been watched on the hosts in question for long enough to know
-their normal range. Counter availability has also not yet been confirmed on a
-real SQL host, so treat a missing metric as "not published here" first.
+their normal range. A development build read the counters on a multi-instance
+SQL Server 2017 host; availability still depends on each host, so treat a
+missing metric as "not published here" first.
 
 | Purpose | Metric | Suggested condition | Severity |
 | --- | --- | --- | --- |
@@ -87,9 +88,12 @@ Notes that change how these should be written:
 - `sql_perf_ple_min` is the minimum across instances, so one small instance with a
   cold cache drags it down for the host. Prefer the per-instance key below when a
   host runs instances of very different sizes.
-- `sql_perf_jobs_failed_total` counts failures since the SQL Server Agent process
-  last started, not since midnight, and the agent reports it as a delta between
-  polls. It is zero on the first poll after an agent restart, by design.
+- `sql_perf_jobs_failed_total` sums valid failure deltas between the agent's
+  latest two counter collections. It is not a lifetime or daily total. An
+  unreadable counter or first sample has no usable delta and is `-1`; a later
+  measured zero means no new failures. A counter reset reports the current
+  count since SQL Agent restarted. These are collection deltas, not a durable
+  job-event history: a collection that LibreNMS does not poll may be missed.
 - The 300-second page life expectancy threshold is the historical rule of thumb for
   a small buffer pool and is far too low for a large one. It is the collector
   default (`pageLifeExpectancyWarning`) and should be raised per host rather than

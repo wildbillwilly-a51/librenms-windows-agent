@@ -61,7 +61,7 @@
       "sql_perf_pressure:MSSQLSERVER": 3,
       "sql_perf_blocked:APPDB": -1,
       "sql_perf_ple:APPDB": -1,
-      "sql_perf_jobs_failed:APPDB": 0,
+      "sql_perf_jobs_failed:APPDB": -1,
       "sql_perf_pressure:APPDB": 0
     },
     "data": {
@@ -73,7 +73,7 @@
       "sql_server_performance.1.instance": "APPDB",
       "sql_server_performance.1.state": "unavailable",
       "sql_server_performance.1.processes_blocked": "-1",
-        "sql_server_performance.1.agent_failed_jobs": "-1"
+      "sql_server_performance.1.agent_failed_jobs": "-1"
     },
     "datastore": {
       "windows-agent-sql-server-performance.instances": 2,
@@ -102,6 +102,7 @@
         "pending memory grants",
         "low page life expectancy",
         "SQL Server Agent job failure(s)",
+        "latest two counter collections",
         "Counters",
         "36 read, 0 missing",
         "unavailable"

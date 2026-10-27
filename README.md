@@ -7,6 +7,10 @@ The Windows agent listens on TCP `6556` and emits Checkmk-style
 `windows_agent_*` sections. The LibreNMS overlay teaches LibreNMS how to parse
 those sections and show the `Windows Agent` application.
 
+Overlay `0.6.31` is prepared for publication. The public installer continues to
+serve `0.6.30` until this release is approved and published; see
+`CURRENT-STATE.md` for release status.
+
 ## Primary Runbook
 
 Use this path for a normal installation or upgrade.
@@ -58,6 +62,24 @@ The overlay installs:
 - LibreNMS application page and graph definitions.
 - A systemd reapply timer so the overlay can be restored after LibreNMS
   updates.
+
+Overlay `0.6.31` adds SQL Server component and performance visibility for agents
+that report the new SQL sections. The SQL inventory shows per-instance edition,
+patch level, listener state and process ID, plus expectedness-aware Agent and
+component health. Server-level counters add blocking, memory grants, page life,
+connections, workload rates and SQL Agent job-failure deltas. Two new RRD
+families preserve the original SQL graph schema; SQL graphs remain available
+through LibreNMS graph definitions rather than inline on the application page.
+No alerts are created or enabled.
+
+Older agents remain compatible: the existing instance inventory still renders,
+while new health fields default to zero and performance counters remain
+unavailable until an updated agent reports them. A missing counter or a job
+counter without a usable delta is `-1`, displayed as `-`, never a measured zero.
+Job failures describe the change between the agent's latest two collections,
+not a daily or lifetime total. Host totals include only readable instances;
+compare `sql_perf_counters_ok` with `sql_perf_instances` before treating them as
+complete. See `docs/suggested-alerts.md` for optional metric conditions.
 
 The FactoryTalk application view is issue-first. Its operational view shows a
 health assessment, recommended next action, core service state, runtime CPU and
@@ -366,7 +388,7 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Install a specific overlay version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.30
+curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.31
 ```
 
 Preview without changing the node:
@@ -474,6 +496,11 @@ sudo bash ./rollback-overlay.sh --librenms-root /opt/librenms
 
 Add `--delete-apps` only when you intentionally want to remove existing
 `windows-agent` application rows and metrics.
+
+Use the installed rollback script for a local rollback. Passing an older
+`--version` to the public bootstrap alone is insufficient: `SHA256SUMS` lists
+only the current payloads, so a historical package also needs the matching
+checksum manifest from its release commit through `CHECKSUM_URL`.
 
 ### Windows Agent Diagnostics
 

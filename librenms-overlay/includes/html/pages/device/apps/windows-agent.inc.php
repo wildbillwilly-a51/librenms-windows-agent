@@ -768,7 +768,9 @@ foreach ($sql_server_performance as $sql_counter_row) {
     $sql_counter_blocking_instances += ((int) ($sql_counter_row['blocking_pressure'] ?? 0)) === 1 ? 1 : 0;
     $sql_counter_memory_instances += ((int) ($sql_counter_row['memory_pressure'] ?? 0)) === 1 ? 1 : 0;
     $sql_counter_buffer_instances += ((int) ($sql_counter_row['buffer_pressure'] ?? 0)) === 1 ? 1 : 0;
-    $sql_counter_jobs_failed += max(0, (int) ($sql_counter_row['agent_failed_jobs'] ?? 0));
+    if (((int) ($sql_counter_row['agent_jobs_delta_available'] ?? 0)) === 1) {
+        $sql_counter_jobs_failed += max(0, (int) ($sql_counter_row['agent_failed_jobs'] ?? 0));
+    }
 
     $sql_counter_blocked = (float) ($sql_counter_row['processes_blocked'] ?? -1);
     if ($sql_counter_blocked >= 0) {
@@ -1031,7 +1033,7 @@ if ($has_role_details($sql_server_summary, $sql_server_performance)) {
                 . '<td>' . $sql_counter_value($row['compilation_percent'] ?? -1, 1) . '</td>'
                 . '<td>' . $sql_counter_value($row['memory_used_percent'] ?? -1, 1) . '</td>'
                 . '<td>' . $sql_counter_value($row['deadlocks_per_sec'] ?? -1, 2) . '</td>'
-                . '<td>' . (((int) ($row['agent_jobs_delta_available'] ?? 0)) === 1 ? $esc((string) (int) ($row['agent_failed_jobs'] ?? 0)) : '-') . '</td>'
+                . '<td>' . (((int) ($row['agent_jobs_delta_available'] ?? 0)) === 1 ? $sql_counter_value($row['agent_failed_jobs'] ?? -1) : '-') . '</td>'
                 . '<td>' . $esc((string) (int) ($row['pressure_issues'] ?? 0)) . '</td>';
         }
     );
@@ -2225,7 +2227,7 @@ if ($sql_detected && $sql_counter_buffer_instances > 0) {
     $roles_attention[] = ['title' => $sql_counter_buffer_instances . ' SQL Server instance(s) with low page life expectancy', 'detail' => 'The buffer pool is turning over faster than the configured threshold allows.', 'action' => 'Review buffer pool pressure on the affected instance(s).'];
 }
 if ($sql_detected && $sql_counter_jobs_failed > 0) {
-    $roles_attention[] = ['title' => $sql_counter_jobs_failed . ' SQL Server Agent job failure(s)', 'detail' => 'Counted since the SQL Server Agent process last started, not since midnight.', 'action' => 'Review SQL Server Agent job history on the affected instance(s).'];
+    $roles_attention[] = ['title' => $sql_counter_jobs_failed . ' SQL Server Agent job failure(s)', 'detail' => 'New failures between the agent\'s latest two counter collections; not a lifetime or daily total.', 'action' => 'Review SQL Server Agent job history on the affected instance(s).'];
 }
 if ($iis_detected && $iis_stopped > 0) {
     $roles_attention[] = ['title' => $iis_stopped . ' IIS site(s) or app pool(s) stopped', 'detail' => (string) ($iis_summary['sites_total'] ?? '0') . ' site(s), ' . (string) ($iis_summary['app_pools_total'] ?? '0') . ' pool(s).', 'action' => 'Review the IIS inventory below.'];

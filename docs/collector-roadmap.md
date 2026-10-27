@@ -99,8 +99,9 @@ noise by itself.
 4. Hyper-V: VM state, integration service state, replication health.
 5. Deeper SQL Server, in the order surveyed in `docs/sql-collector-expansion.md`.
    Server-level performance counters through PDH are done and shipped as
-   `windows_agent_sql_server_performance`, though counter availability has not yet
-   been observed on a real SQL host. What remains, in order: bounded ERRORLOG and
+   `windows_agent_sql_server_performance`, and a development build read them on a
+   real multi-instance SQL Server 2017 host. Installed-service validation remains
+   separate from that `--once` evidence. What remains, in order: bounded ERRORLOG and
    event-log evidence, then capped per-database counters, then optional local
    integrated queries for database/job/backup state after credential and
    permission handling is explicitly designed.

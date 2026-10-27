@@ -1,9 +1,28 @@
 # Changelog
 
+## Overlay 0.6.31 - 2026-10-27 (publication pending)
+
+Overlay-only release of the SQL support developed with the next Windows agent.
+The published agent 0.6.16 MSI and configuration are preserved byte-for-byte.
+
+- Parse SQL component health and server-level performance sections, expose
+  per-instance `sql_perf_<measure>:<key>` application metrics, and add the
+  `windows-agent-sql-server-health` and `windows-agent-sql-server-performance`
+  graph families without changing the original SQL RRD schema.
+- Show edition, patch level, listener state, process ID, components and readable
+  counters in the SQL inventory, with actionable attention rows and no automatic
+  alert creation. LocalDB remains separate from unmapped service engines.
+- Preserve unavailable SQL Agent job counts as `-1` in per-instance metrics and
+  aggregates, including first samples with no usable delta. The new job-failure
+  dataset accepts `-1`; measured zero retains its meaning. Correct the page and
+  alert guidance to describe collection deltas rather than lifetime counts.
+- Keep older agents compatible and document partial counter totals, deployment
+  independence, and the limits of collection deltas as job-event history.
+
 ## Unreleased
 
-SQL Server surface collector correctness. Agent and overlay change together; no
-version has been cut and no artifact has been rebuilt.
+SQL Server surface collector correctness. Agent publication is tracked
+separately; the matching overlay support is prepared in 0.6.31 above.
 
 - Per-instance TCP endpoints are now read from the registry
   (`HKLM\SOFTWARE\Microsoft\Microsoft SQL Server\<key>\MSSQLServer\SuperSocketNetLib\Tcp\IPAll`)
@@ -52,8 +71,8 @@ version has been cut and no artifact has been rebuilt.
 - No protocol rename, no application identity change, no RRD schema change.
 
 SQL Server server-level performance counters (Tier 1 of
-`docs/sql-collector-expansion.md`). Agent and overlay change together; no version
-has been cut and no artifact has been rebuilt.
+`docs/sql-collector-expansion.md`). Agent publication is tracked separately;
+the matching overlay support is prepared in 0.6.31 above.
 
 - New `windows_agent_sql_server_performance` section, one row per detected engine
   instance, carrying server-level counters read through PDH

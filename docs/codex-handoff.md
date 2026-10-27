@@ -1,39 +1,28 @@
 # Codex Handoff
 
-- Objective: Execute `docs/app-page-ux-plan.md`. Phase 0 (Horizon machine-state and
-  pool-capacity correctness) and Phase 1 (uniform tab contract and shared summary
-  renderer) are complete. The most recent work adds per-pool Horizon availability
-  metrics for downstream alerting, published as overlay 0.6.30.
-- Current state: Overlay 0.6.30 is built, published on GitHub `main`, and is the
-  installer default. Windows agent 0.6.16 is unchanged and its published bytes are
-  untouched, so this is overlay-only. 0.6.30 flattens each Horizon clone pool's
-  availability numbers into `application_metrics` as `horizon_pool_<measure>:<key>` (key
-  = pool name sanitized to `[A-Za-z0-9_-]`), seven measures per pool
-  (`ready`, `ready_percent`, `machines_total`, `state`, `maintenance`, `spare_total`,
-  `unready`), so LibreNMS alert rules — which compare one metric to a constant — can
-  target an individual pool. `horizon_pool_state` maps the collector's per-pool
-  `health_state` to an ordinal (`ok=0 info=1 warning=2 critical=3`; `disabled=-1`,
-  `incomplete=-2` sit below `ok`). Additive to application metrics only; no RRD,
-  protocol, or identity change. The prior 0.6.29 pod-view-on-all-members behavior is
-  unchanged.
-- Relevant decisions: flatten in the overlay poller (the `$horizon_pools` rows are
-  already parsed there), keeping the collector as the owner of the per-pool verdict,
-  which it emits as `health_state` and the overlay maps to the state ordinal. Percent
-  basis is whole-pool `machines_total`; "available" is `spare_ready` (AVAILABLE ready
-  spares). Qualifiers keep the trailing colon so `horizon_pool_ready:` does not match
-  `horizon_pool_ready_percent:`. "A pool went dark" stays on the estate-wide
-  `horizon_pools_incomplete` rollup, not a vanished per-pool row.
-- Validation completed: overlay parser fixtures (extended `horizon-detected` with the
-  seven per-pool fields for two pools), app-page fixtures, and central collector tests
-  all pass on PHP 8.3; the `dotnet` agent test suite passes via the release build; `bash
-  -n install.sh` clean. The packaged `capabilities.json` reports 0.6.30 and the new
-  `horizon_pool_availability_metrics` capability, and `SHA256SUMS` matches an independent
-  hash of the artifact.
-- Validation remaining: per-pool rows exist in `application_metrics` only after a live
-  poll of a device that reports a Horizon clone pool, so first deployment should confirm
-  the `horizon_pool_*:<key>` rows appear on such a device after the next poll.
-- Inspection notes: confirm collector liveness from the systemd journal for the Horizon
-  worker, never from RRD file timestamps (rrdcached write delay). The Horizon central
-  collector caches its per-site snapshot on the management node under
-  `storage/app/windows-agent-horizon/<site>.json` (mode 0600). Two Horizon pods are
-  collected, each with its own display device and application id.
+- Objective: Prepare overlay 0.6.31 from the unreleased SQL support, with Claude
+  reviewing the plan and final diff. Agent release work is separate.
+- Current State: Candidate artifact built locally; installer default, capability
+  manifest and version assertion are 0.6.31. SQL component/performance parsing,
+  per-instance metrics, two new RRD families and app-page evidence are included.
+  Unavailable and first-sample job deltas stay `-1`; page wording describes
+  collection deltas. Published MSI/config 0.6.16 are preserved. Publication and
+  deployment are pending; the public overlay remains 0.6.30.
+- Relevant Decisions: Preserve protocol/app identity and existing RRD schemas.
+  SQL graphs remain outside the inline app page. No alerts are enabled. Counter
+  totals include only readable instances; job deltas are sampled evidence, not
+  durable event history. Reconcile separately prepared agent release metadata
+  before publishing this candidate.
+- Validation Completed: Release-script agent suite 93/93; parser/app-page
+  fixtures 15/15 each; central Horizon 35/35; shell syntax and diff checks pass.
+  Source/package PHP lint 71/71 each; all 72 manifest entries match source;
+  independent checksums and published MSI/config byte preservation pass. The
+  original SQL RRD schema is unchanged; new graph datasets match definitions
+  and the 19-character limit. Full public-snapshot scan: 263 files and 2,371
+  files/archive members, no findings. Claude's plan and final diff reviews
+  found no remaining blockers. The separate agent source still matches the
+  tested SQL contract; only its version/bootstrap release edits differ.
+- Validation Remaining: GitHub publication and deployed SQL/UI/graph checks
+  require approval. Installed-agent validation belongs to the agent release.
+- Next Action: Obtain publication approval and reconcile release metadata if
+  the separate agent release is promoted before this overlay candidate.

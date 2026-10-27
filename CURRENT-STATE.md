@@ -25,6 +25,9 @@ and private exports do not belong here.
 
 ## Current Releases
 
+These are the currently published payloads. Overlay `0.6.31` is prepared
+locally as described below; publication and deployment remain pending.
+
 - Overlay version: `0.6.30`
 - Windows agent version: `0.6.16`
 - Overlay: `artifacts/librenms-windows-agent-overlay-0.6.30.tar.gz`
@@ -145,18 +148,23 @@ fixtures.
 
 ## Next Recommended Action
 
-Overlay `0.6.30` is published and is the installer default. Rollout timing
-belongs to the operator: publishing changes no deployed node, because the
-overlay reapply timer re-applies the locally staged copy and performs no
-download.
+Review and approve publication of prepared overlay `0.6.31`. Its installer
+default, capability manifest and version assertion move together. The candidate
+is `artifacts/librenms-windows-agent-overlay-0.6.31.tar.gz`, pinned in
+`SHA256SUMS` (overlay SHA256
+`fb8c88c844bcfdcfcc98a35674befb25327256c9b19c79d4a0a377a486fda34b`);
+the published agent `0.6.16` MSI and config remain unchanged.
 
-Apply `0.6.30` to the overlay nodes that poll Windows-agent devices when
-convenient. After the next poll of a device that reports Horizon clone pools,
-confirm the per-pool metrics appear in `application_metrics` — for example one
-`horizon_pool_ready:<pool>` row per reporting pool, plus the companion
-`horizon_pool_ready_percent`, `horizon_pool_machines_total`, `horizon_pool_state`
-(`ok=0 info=1 warning=2 critical=3`), `horizon_pool_maintenance`,
-`horizon_pool_spare_total`, and `horizon_pool_unready`. The emission was validated
-against the overlay parser fixtures on PHP 8.3; these rows exist only on devices
-that actually report a pool, so verification requires a live poll of a Horizon
-device.
+This overlay adds SQL component and performance parsing, per-instance metrics,
+two new RRD graph families and richer app-page evidence. It also preserves
+unavailable job deltas as `-1`, including a first sample without a previous
+reading. Older agents remain compatible but cannot populate the new counters.
+
+Before publication, reconcile the final agent release contract and current
+release documentation with the separately prepared agent release. After
+publication, apply the overlay to each node that polls Windows-agent devices
+and the management/web node when authorized. Publishing changes no deployed
+node: the reapply timer uses only its locally staged copy and downloads nothing.
+Then confirm the SQL tables, per-instance metrics and new RRD families on a
+device running the updated agent. Keep newly available metrics non-alerting
+unless alert rules are separately approved.

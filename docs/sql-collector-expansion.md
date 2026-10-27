@@ -1,6 +1,7 @@
 # SQL Server Collector Expansion — Investigation
 
-Status: **defects fixed, tiers 1–3 still proposed.** This is the survey that
+Status: **surface defects fixed; Tier 1 server-level counters implemented and
+verified with a development build.** This is the survey that
 `docs/collector-roadmap.md` item 5 ("Deeper SQL Server") asks for before design
 starts.
 
@@ -338,9 +339,10 @@ credential-free posture.
    `windows-agent-sql-server-performance` RRD family and graph, per-instance
    `sql_perf_<measure>:<key>` application metrics for alert targeting, and
    non-alerting by default. A counter or object that is not present is reported
-   as `-1`, never as a measured zero. **Counter availability is still unverified
-   on a real SQL host** — the list below is product knowledge, and the collector
-   is written to degrade rather than to assume it.
+   as `-1`, never as a measured zero. **The development build read all engine
+   counters on three SQL Server 2017 instances**, plus Agent counters where
+   Agent was running; see "Development build on the host". Availability must
+   still degrade safely on other hosts.
 3. **Tier 2 ERRORLOG and event-log evidence** into
    `windows_agent_sql_server_evidence` — bounded pattern counts, no raw log.
 4. **Tier 1 per-database counters**, gated and capped, with the

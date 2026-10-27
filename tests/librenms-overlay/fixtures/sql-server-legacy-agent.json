@@ -1,0 +1,61 @@
+{
+  "name": "SQL Server legacy agent compatibility fixture",
+  "device": {
+    "device_id": 1007,
+    "hostname": "windows-agent-sql-legacy.example.test"
+  },
+  "app_id": 2007,
+  "agent_data": {
+    "windows_agent": "version=0.6.16.0 protocol=checkmk host=windows-agent-sql-legacy utc=2026-10-27T18:00:00Z",
+    "windows_agent_windows_os": "caption=\"Microsoft Windows 10 Pro\"",
+    "windows_agent_pending_reboot": "pending=0 sources=",
+    "windows_agent_windows_update": "reboot_required=0 service_state=Running",
+    "windows_agent_services": "installed_count=0",
+    "windows_agent_performance": "type=summary collect_duration_ms=1880 collectors_run=15 collectors_failed=0 collectors_timed_out=0 payload_bytes=11552 process_working_set_bytes=43929600 process_private_bytes=32755712",
+    "windows_agent_performance_summary": "state=ok cpu_queue_length=0 cpu_pressure=0 memory_available_mb=4096 memory_committed_percent=45 memory_pressure=0 pages_per_sec=0 paging_pressure=0 disk_read_ms_max=0 disk_write_ms_max=0 disk_queue_length_max=0 disk_pressure=0 network_bytes_per_sec_total=0 network_errors_total=0 network_issue=0 pressure_issues=0",
+    "windows_agent_sql_server_summary": "state=ok detected=1 instances_total=1 instances_running=1 instances_not_running=0 listener_ports_total=1 health_issues=0",
+    "windows_agent_iis_summary": "state=not_detected sites_total=0 sites_running=0 sites_stopped=0 app_pools_total=0 app_pools_running=0 app_pools_stopped=0 bindings_total=0",
+    "windows_agent_horizon_summary": "state=not_detected detected=0 services_total=0 services_not_running=0 processes_total=0 ports_total=0 ports_listening=0 ports_missing=0 certificates_total=0 certificates_expired=0 certificates_expiring=0 health_issues=0",
+    "windows_agent_factorytalk_summary": "state=not_detected detected=0 products_total=0 services_total=0 services_not_running=0 core_services_not_running=0 processes_total=0 ports_total=0 ports_listening=0 health_issues=0",
+    "windows_agent_tls_certificates_summary": "state=ok store_count=1 certificate_count=0 expired_count=0 expiring_warning_count=0 expiring_critical_count=0 not_yet_valid_count=0 invalid_chain_count=0 weak_key_count=0 weak_signature_count=0 missing_private_key_count=0 bound_count=0 binding_missing_count=0 unhealthy_count=0",
+    "windows_agent_backup_storage_summary": "state=not_detected vss_writers_total=0 vss_writers_stable=0 vss_writers_failed=0 vss_writers_retryable_failed=0 vss_writers_non_retryable_failed=0 backup_services_total=0 backup_services_not_running=0",
+    "windows_agent_datto_backup_summary": "state=not_detected detected=0 service_running=0 provider_present=0 provider_issue=0 processes_total=0 evidence_state=unknown recent_errors=0 recent_critical_failures=0 last_success_age_hours=-1 stale_warning=0 stale_critical=0 health_issues=0",
+    "windows_agent_ad_dc_health_summary": "state=not_applicable reason=not_domain_controller dc_detected=0 core_services_total=0 core_services_not_running=0 dns_service_present=0 dns_service_running=0 dns_service_issue=0 sysvol_share_present=0 netlogon_share_present=0 shares_missing=0 time_state=not_applicable time_service_running=0 time_issues=0 health_issues=0",
+    "windows_agent_sql_server_instances": "instance=MSSQLSERVER service=MSSQLSERVER state=Running start_mode=Auto agent_state=Running browser_state=Stopped listener_ports=1433 version=16.0.1000.6"
+  },
+  "expect": {
+    "status_prefix": "OK:",
+    "fields": {
+      "sql_instances_total": 1,
+      "sql_health_issues": 0,
+      "sql_agents_total": 0,
+      "sql_perf_instances": 0,
+      "sql_perf_counters_ok": 0,
+      "sql_perf_blocked_max": -1,
+      "sql_perf_jobs_failed_total": -1
+    },
+    "data": {
+      "sql_server_instances.0.instance": "MSSQLSERVER",
+      "sql_server_components": [],
+      "sql_server_performance": []
+    },
+    "datastore": {
+      "windows-agent-sql-server.instances_total": 1,
+      "windows-agent-sql-server-performance.jobs_failed": -1,
+      "windows-agent-sql-server-performance.blocked": -1
+    },
+    "app_page": {
+      "contains": [
+        "MSSQLSERVER",
+        "16.0.1000.6",
+        "1433"
+      ],
+      "not_contains": [
+        "SQL Server Agent job failure(s)",
+        "SQL Server Agent service(s) stopped",
+        "Grants pending",
+        "read, 0 missing"
+      ]
+    }
+  }
+}

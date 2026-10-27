@@ -1,5 +1,34 @@
 # Work Log
 
+## 2026-10-27 (overlay 0.6.31 candidate; publication pending)
+
+- Prepared overlay-only 0.6.31 from the existing SQL component/health and
+  server-level counter support, in isolation from the separate agent release.
+  The published agent 0.6.16 MSI/config and all old artifacts remain unchanged.
+- Claude reviewed the plan and identified a release-blocking sentinel defect:
+  unavailable SQL Agent job counts were clamped to zero. Per-instance metrics
+  and totals now keep `-1`, including first samples without a usable delta;
+  the new `jobs_failed` dataset accepts `-1` before its first publication.
+  App-page attention and guidance describe collection deltas, not lifetime
+  totals. Added stopped-Agent/first-sample and legacy-agent fixtures.
+- Updated installer default, capability version assertion, README, candidate
+  state and release/continuity documentation. Corrected stale counter
+  verification claims using the existing recorded on-host evidence.
+- Build: `scripts/build-release.ps1 -Version 0.6.31 -AgentVersion 0.6.16
+  -OverlayOnly -UpdateChecksums`; agent console suite 93/93, parser/app-page
+  fixtures 15/15 each, central Horizon 35/35 and shell syntax pass.
+- Final verification: source/package PHP lint 71/71 each; all 72 payload
+  entries match their manifest and source bytes; independent checksums match;
+  preserved MSI/config byte-equal the public baseline. Original SQL RRD schema
+  is unchanged; new graph datasets match definitions and name-length limits.
+  Full public-snapshot scan covered 263 files and 2,371 files/archive members,
+  with no findings. Claude final diff review found no remaining blockers.
+- The separate agent source still matches the tested SQL contract. Publication
+  and deployment remain pending approval; if the agent is promoted first,
+  reconcile release metadata before publishing this overlay. Installed-agent
+  checks remain with the agent release. Retained job deltas are sampled
+  evidence and may miss unpolled cache refreshes; no completeness claim.
+
 ## 2026-10-27 (unreleased: on-host verification and LocalDB false alarm)
 
 - Objective: verify the unreleased SQL collector work on the multi-instance SQL Server

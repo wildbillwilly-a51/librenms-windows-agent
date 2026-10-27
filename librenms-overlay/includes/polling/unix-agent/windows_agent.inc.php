@@ -577,10 +577,13 @@ $sql_perf_present = static fn (array $row, string $key): float => ((float) ($row
 $sql_perf_max = static fn (float $current, float $value): float => $value < 0 ? $current : ($current < 0 ? $value : max($current, $value));
 $sql_perf_min = static fn (float $current, float $value): float => $value < 0 ? $current : ($current < 0 ? $value : min($current, $value));
 $sql_perf_sum = static fn (float $current, float $value): float => $value < 0 ? $current : ($current < 0 ? $value : $current + $value);
+$sql_perf_job_delta = static fn (array $row): float => ((int) ($row['agent_jobs_delta_available'] ?? 0)) === 1
+    ? $sql_perf_present($row, 'agent_failed_jobs')
+    : -1.0;
 
 $sql_perf_instances = count($sql_performance);
 $sql_perf_counters_ok = 0;
-$sql_perf_jobs_failed_total = 0;
+$sql_perf_jobs_failed_total = -1.0;
 $sql_perf_pressure_issues = 0;
 $sql_perf_blocking_instances = 0;
 $sql_perf_memory_instances = 0;
@@ -617,9 +620,9 @@ foreach ($sql_performance as $sql_perf_row) {
     $sql_perf_memory_instances += ((int) ($sql_perf_row['memory_pressure'] ?? 0)) === 1 ? 1 : 0;
     $sql_perf_buffer_instances += ((int) ($sql_perf_row['buffer_pressure'] ?? 0)) === 1 ? 1 : 0;
 
-    // Agent job counts run from Agent process start; the agent already converts them
-    // to deltas and emits 0 until it has two samples to subtract.
-    $sql_perf_jobs_failed_total += max(0, (int) ($sql_perf_row['agent_failed_jobs'] ?? 0));
+    // The agent converts lifetime job counts to collection-to-collection deltas.
+    // An unreadable counter or a first sample has no delta, not a measured zero.
+    $sql_perf_jobs_failed_total = $sql_perf_sum($sql_perf_jobs_failed_total, $sql_perf_job_delta($sql_perf_row));
 }
 
 $fields = [
@@ -919,7 +922,7 @@ foreach ($sql_performance as $sql_perf_index => $sql_perf_row) {
     $fields['sql_perf_ple:' . $sql_perf_key] = $sql_perf_present($sql_perf_row, 'page_life_expectancy');
     $fields['sql_perf_connections:' . $sql_perf_key] = $sql_perf_present($sql_perf_row, 'user_connections');
     $fields['sql_perf_batches:' . $sql_perf_key] = $sql_perf_present($sql_perf_row, 'batch_requests_per_sec');
-    $fields['sql_perf_jobs_failed:' . $sql_perf_key] = max(0, (int) ($sql_perf_row['agent_failed_jobs'] ?? 0));
+    $fields['sql_perf_jobs_failed:' . $sql_perf_key] = $sql_perf_job_delta($sql_perf_row);
     $fields['sql_perf_pressure:' . $sql_perf_key] = max(0, (int) ($sql_perf_row['pressure_issues'] ?? 0));
 }
 
@@ -1329,7 +1332,7 @@ $sql_performance_rrd_def = RrdDefinition::make()
     ->addDataset('recompiles', 'GAUGE', -1)
     ->addDataset('deadlocks', 'GAUGE', -1)
     ->addDataset('lock_waits', 'GAUGE', -1)
-    ->addDataset('jobs_failed', 'GAUGE', 0)
+    ->addDataset('jobs_failed', 'GAUGE', -1)
     ->addDataset('pressure', 'GAUGE', 0);
 
 app('Datastore')->put($device, 'app', [
