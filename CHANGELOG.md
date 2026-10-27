@@ -1,6 +1,6 @@
 # Changelog
 
-## Overlay 0.6.31 - 2026-10-27 (publication pending)
+## Overlay 0.6.31 - 2026-10-27
 
 Overlay-only release of the SQL support developed with the next Windows agent.
 The published agent 0.6.16 MSI and configuration are preserved byte-for-byte.
@@ -22,7 +22,7 @@ The published agent 0.6.16 MSI and configuration are preserved byte-for-byte.
 ## Unreleased
 
 SQL Server surface collector correctness. Agent publication is tracked
-separately; the matching overlay support is prepared in 0.6.31 above.
+separately; the matching overlay support is shipped in 0.6.31 above.
 
 - Per-instance TCP endpoints are now read from the registry
   (`HKLM\SOFTWARE\Microsoft\Microsoft SQL Server\<key>\MSSQLServer\SuperSocketNetLib\Tcp\IPAll`)
@@ -72,7 +72,7 @@ separately; the matching overlay support is prepared in 0.6.31 above.
 
 SQL Server server-level performance counters (Tier 1 of
 `docs/sql-collector-expansion.md`). Agent publication is tracked separately;
-the matching overlay support is prepared in 0.6.31 above.
+the matching overlay support is shipped in 0.6.31 above.
 
 - New `windows_agent_sql_server_performance` section, one row per detected engine
   instance, carrying server-level counters read through PDH

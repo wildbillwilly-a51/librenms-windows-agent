@@ -7,9 +7,9 @@ The Windows agent listens on TCP `6556` and emits Checkmk-style
 `windows_agent_*` sections. The LibreNMS overlay teaches LibreNMS how to parse
 those sections and show the `Windows Agent` application.
 
-Overlay `0.6.31` is prepared for publication. The public installer continues to
-serve `0.6.30` until this release is approved and published; see
-`CURRENT-STATE.md` for release status.
+The current published overlay is `0.6.31`; the public Windows agent remains
+`0.6.16`. Agent release preparation is separate. See `CURRENT-STATE.md` for
+release status.
 
 ## Primary Runbook
 

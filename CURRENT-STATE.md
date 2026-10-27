@@ -25,16 +25,18 @@ and private exports do not belong here.
 
 ## Current Releases
 
-These are the currently published payloads. Overlay `0.6.31` is prepared
-locally as described below; publication and deployment remain pending.
+These are the public installer defaults. This overlay-only publication preserves
+the published Windows agent payloads; the next agent release is separate.
+`main` contains unreleased agent source, while installers still serve the
+immutable `0.6.16` MSI. Do not rebuild or replace that published version.
 
-- Overlay version: `0.6.30`
+- Overlay version: `0.6.31`
 - Windows agent version: `0.6.16`
-- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.30.tar.gz`
+- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.31.tar.gz`
 - Windows MSI: `artifacts/librenms-windows-agent-0.6.16.msi`
 - Versioned agent config: `artifacts/librenms-windows-agent-config-0.6.16-win.json`
 - Checksums: `SHA256SUMS`
-- Overlay SHA256: `8791e8b35a721c77837973bc513fcb7afeda99c7ceda7d09e215d3c5a2d8c2a3`
+- Overlay SHA256: `fb8c88c844bcfdcfcc98a35674befb25327256c9b19c79d4a0a377a486fda34b`
 - Windows MSI SHA256: `5a40c9965a44179b09c57e4e3951e55982b983bfd1fd83b4e93cbeaaf5811732`
 - Versioned config SHA256: `94fd8b56e0ac2ca15f50dd0ffff1d3f9167032b4717aeecd5b091f336fbe404b`
 - Public overlay installer: `install.sh`
@@ -45,6 +47,14 @@ adds explicit Horizon service expectedness plus active-certificate health. The b
 matching versioned config, checks prerequisites and port ownership, prepares
 configuration before service startup, leaves registered upgrades inside MSI
 rollback, retains verbose diagnostics, and verifies a live protocol response.
+Overlay release `0.6.31` adds SQL component/performance parsing, per-instance
+application metrics, two new SQL RRD graph families and richer SQL inventory
+and attention rows. Unreadable and first-sample job deltas remain `-1`, distinct
+from measured zero. Counter totals include only readable instances, and job
+counts are collection deltas rather than durable event history. Older agents
+remain compatible; the new counters require the matching agent sections. The
+original SQL RRD schema is unchanged, and no alert rules are enabled.
+
 Overlay release `0.6.30` adds per-pool Horizon availability metrics. Each clone pool's
 availability numbers are flattened into `application_metrics` as
 `horizon_pool_<measure>:<key>` (key = pool name sanitized to `[A-Za-z0-9_-]`), so
@@ -148,23 +158,19 @@ fixtures.
 
 ## Next Recommended Action
 
-Review and approve publication of prepared overlay `0.6.31`. Its installer
-default, capability manifest and version assertion move together. The candidate
-is `artifacts/librenms-windows-agent-overlay-0.6.31.tar.gz`, pinned in
-`SHA256SUMS` (overlay SHA256
-`fb8c88c844bcfdcfcc98a35674befb25327256c9b19c79d4a0a377a486fda34b`);
-the published agent `0.6.16` MSI and config remain unchanged.
+Overlay `0.6.31` is published and is the installer default. Windows agent
+`0.6.16` remains the public installer default, with its MSI/config bytes
+unchanged. The separate next-agent release must preserve the `0.6.31` overlay
+artifact and checksum when it is intentionally promoted.
 
-This overlay adds SQL component and performance parsing, per-instance metrics,
-two new RRD graph families and richer app-page evidence. It also preserves
-unavailable job deltas as `-1`, including a first sample without a previous
-reading. Older agents remain compatible but cannot populate the new counters.
+Publishing changes no deployed node: the reapply timer uses its locally staged
+copy and downloads nothing. Deploy `0.6.31` to the management/web node and every
+node that polls Windows-agent devices only when the operator authorizes rollout.
+After rollout, confirm SQL tables, per-instance metrics and the new RRD families
+on a device reporting the new SQL sections. Other devices remain compatible
+but cannot populate counters they do not collect. Keep new visibility
+non-alerting unless alert rules are separately approved.
 
-Before publication, reconcile the final agent release contract and current
-release documentation with the separately prepared agent release. After
-publication, apply the overlay to each node that polls Windows-agent devices
-and the management/web node when authorized. Publishing changes no deployed
-node: the reapply timer uses only its locally staged copy and downloads nothing.
-Then confirm the SQL tables, per-instance metrics and new RRD families on a
-device running the updated agent. Keep newly available metrics non-alerting
-unless alert rules are separately approved.
+Use the installed rollback script for a local rollback. Historical bootstrap
+versions also need the matching checksum manifest from their release commit;
+the current `SHA256SUMS` lists only the current release payloads.

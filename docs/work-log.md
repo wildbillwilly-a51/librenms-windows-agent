@@ -1,5 +1,26 @@
 # Work Log
 
+## 2026-10-27 (publish overlay 0.6.31; preserve separate agent release)
+
+- User approved GitHub publication of overlay 0.6.31. Claude reviewed the
+  publication plan and found no remaining overwrite or publication hazard.
+- Publish the reviewed artifact unchanged, SHA256
+  `fb8c88c844bcfdcfcc98a35674befb25327256c9b19c79d4a0a377a486fda34b`,
+  with its matching installer default and checksum in the same snapshot.
+  Keep the public agent default at 0.6.16 and preserve those payload bytes;
+  agent release preparation and canary validation remain separate.
+- The agent collector/installer source paths still match the reviewed protocol
+  baseline. Agent bootstrap/version edits and exact next-agent artifacts stay
+  outside this overlay publication. No deployed host or overlay node is updated.
+- Reused valid candidate evidence: agent suite 93/93, parser/app-page 15/15
+  each, Horizon 35/35, source/package lint 71/71 each, 72 manifest entries,
+  dataset/schema/byte checks and full public-snapshot safety scan. Publication
+  changes only release-status documentation; scan the exact committed tree
+  before pushing, then verify public raw installer/manifest/artifact bytes.
+- Coordination records the next-agent checksum merge requirement: retain overlay
+  0.6.31, hash existing canary-tested agent bytes, avoid rebuilding immutable
+  payloads, and integrate current public history without force-pushing.
+
 ## 2026-10-27 (overlay 0.6.31 candidate; publication pending)
 
 - Prepared overlay-only 0.6.31 from the existing SQL component/health and
