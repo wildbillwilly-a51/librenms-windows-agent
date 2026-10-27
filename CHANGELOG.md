@@ -15,7 +15,10 @@ version has been cut and no artifact has been rebuilt.
 - Engine services are mapped to their `sqlservr.exe` process id (`pid` per instance).
   `unmapped_engine_processes` in the summary counts engine processes that no detected
   service owns, which previously left a silent discrepancy between the process list and
-  the instance list.
+  the instance list. Per-user SQL Server Express LocalDB instances are excluded from it
+  and reported as `localdb_processes` instead, so a developer's LocalDB no longer reads
+  as a discovery gap. The process path and command line are used only to classify and
+  are never emitted.
 - Non-engine SQL components are surfaced in a new
   `windows_agent_sql_server_components` section: Analysis Services, Reporting Services,
   Integration Services, Full-Text, Launchpad, PolyBase, the VSS writer, and telemetry,

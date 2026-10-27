@@ -60,16 +60,16 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
             var components = config.IncludeComponents
                 ? BuildComponents(tagged, instances, cancellationToken)
                 : new List<ComponentRow>();
-            var unmapped = config.IncludeProcessMapping
-                ? UnmappedEngineProcesses(engines, cancellationToken)
-                : 0;
+            var engineProcesses = config.IncludeProcessMapping
+                ? CountEngineProcesses(engines, cancellationToken)
+                : new EngineProcessCounts();
 
             foreach (var row in instances)
             {
                 row.BrowserState = browserState;
             }
 
-            var summary = Summarize(instances, components, browserClass, browserRequired, browserState, registry.Count, unmapped);
+            var summary = Summarize(instances, components, browserClass, browserRequired, browserState, registry.Count, engineProcesses);
 
             var performance = config.IncludeCounters && instances.Count > 0
                 ? await PerformanceLinesAsync(config, context, instances, cancellationToken).ConfigureAwait(false)
@@ -335,39 +335,53 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
         }
 
         /// <summary>
-        /// Counts sqlservr.exe processes that no detected engine service owns.
-        /// A non-zero value means instance discovery is incomplete.
+        /// Counts sqlservr.exe processes that no detected engine service owns,
+        /// separating per-user LocalDB instances from the rest. A non-zero unmapped
+        /// count means instance discovery is incomplete; LocalDB is expected on
+        /// developer-used hosts and is reported for context only. The executable
+        /// path and command line are read only to classify and are never emitted.
         /// </summary>
-        private static int UnmappedEngineProcesses(IEnumerable<TaggedService> engines, CancellationToken cancellationToken)
+        private static EngineProcessCounts CountEngineProcesses(IEnumerable<TaggedService> engines, CancellationToken cancellationToken)
         {
             var owned = new HashSet<long>(engines.Select(item => item.Service.ProcessId).Where(pid => pid > 0));
-            var unmapped = 0;
+            var counts = new EngineProcessCounts();
 
             try
             {
-                foreach (var item in Wmi.Query("SELECT ProcessId FROM Win32_Process WHERE Name='sqlservr.exe'"))
+                foreach (var item in Wmi.Query("SELECT ProcessId,ExecutablePath,CommandLine FROM Win32_Process WHERE Name='sqlservr.exe'"))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     using (item)
                     {
                         var pid = (long)Wmi.UInt64Value(item, "ProcessId");
-                        if (pid > 0 && !owned.Contains(pid))
+                        if (pid <= 0 || owned.Contains(pid))
                         {
-                            unmapped++;
+                            continue;
+                        }
+
+                        if (SqlServerPolicy.IsLocalDbProcess(
+                            Wmi.StringValue(item, "ExecutablePath"),
+                            Wmi.StringValue(item, "CommandLine")))
+                        {
+                            counts.LocalDb++;
+                        }
+                        else
+                        {
+                            counts.Unmapped++;
                         }
                     }
                 }
             }
             catch (System.Management.ManagementException)
             {
-                return 0;
+                return new EngineProcessCounts();
             }
             catch (UnauthorizedAccessException)
             {
-                return 0;
+                return new EngineProcessCounts();
             }
 
-            return unmapped;
+            return counts;
         }
 
         private static string Summarize(
@@ -377,8 +391,9 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
             bool browserRequired,
             string browserState,
             int registryInstances,
-            int unmappedEngineProcesses)
+            EngineProcessCounts engineProcesses)
         {
+            var unmappedEngineProcesses = engineProcesses.Unmapped;
             var total = instances.Count;
             var running = instances.Count(row => IsRunning(row.State));
             var notRunning = Math.Max(0, total - running);
@@ -424,6 +439,7 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
                 Kv("instances_without_listener", instancesWithoutListener),
                 Kv("registry_instances", registryInstances),
                 Kv("unmapped_engine_processes", unmappedEngineProcesses),
+                Kv("localdb_processes", engineProcesses.LocalDb),
                 Kv("browser_state", browserState),
                 Kv("browser_required", browserRequired ? 1 : 0),
                 Kv("browser_severity", browserClass.State),
@@ -465,6 +481,7 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
                 Kv("instances_without_listener", 0),
                 Kv("registry_instances", 0),
                 Kv("unmapped_engine_processes", 0),
+                Kv("localdb_processes", 0),
                 Kv("browser_state", "missing"),
                 Kv("browser_required", 0),
                 Kv("browser_severity", "info"),
@@ -584,6 +601,12 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
         private static bool IsAuto(string mode)
         {
             return string.IsNullOrWhiteSpace(mode) || string.Equals(mode, "auto", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private sealed class EngineProcessCounts
+        {
+            public int Unmapped { get; set; }
+            public int LocalDb { get; set; }
         }
 
         private sealed class TaggedService

@@ -322,6 +322,23 @@ namespace LibreNMS.WindowsAgent.Core
             return Equals((instanceName ?? string.Empty).Trim(), DefaultInstanceName);
         }
 
+        /// <summary>
+        /// True when a sqlservr.exe process is a SQL Server Express LocalDB instance.
+        /// LocalDB runs on demand from a user profile, is never a Windows service, and
+        /// is not a monitored database server, so it must not count as an unowned
+        /// engine. The inputs are used only to classify and are never emitted: a
+        /// LocalDB command line carries the owning user's profile path.
+        /// </summary>
+        public static bool IsLocalDbProcess(string executablePath, string commandLine)
+        {
+            var path = executablePath ?? string.Empty;
+            var command = commandLine ?? string.Empty;
+
+            return path.IndexOf(@"\LocalDB\Binn\", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                command.IndexOf(@"\LocalDB\Binn\", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                command.IndexOf("-sLOCALDB#", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         public static string NextAction(string state, int enginesNotRunning, int agentsNotRunning, int componentIssues, int unmappedEngineProcesses, int instancesWithoutListener)
         {
             if (string.Equals(state, "disabled", StringComparison.OrdinalIgnoreCase))

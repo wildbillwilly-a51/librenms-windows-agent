@@ -8,10 +8,12 @@ The five defects in "Defects found in the current collector" below have been
 fixed; each carries a **Fixed** note. Tier 1 server-level counters are
 implemented; per-database counters, Tier 2 and Tier 3 remain proposals.
 
-`probe-sql-sources.ps1` was run once on the multi-instance test host on
-2026-10-27, elevated but as an administrator rather than as LocalSystem. Its
-results are in "On-host probe results" below. Neither the agent build nor the
-collector itself has run on a SQL host yet.
+On 2026-10-27, on the multi-instance test host, `probe-sql-sources.ps1` was run
+once as an elevated administrator and once as LocalSystem, and a development
+build of the agent was run there with `--once` as LocalSystem. Results are in
+"On-host probe results" and "Development build on the host" below. The
+development build was never installed as a service, so nothing it produced
+reached LibreNMS.
 
 ## What the collector did before the defect fixes
 
@@ -74,9 +76,17 @@ raises an attention row on the app page instead of leaving the operator to
 notice the discrepancy themselves.
 
 The on-host probe identified the fourth process: a per-user SQL Server LocalDB
-instance started from a user profile, which no Windows service owns. That is
-the case the counter exists for. The agent emits only the count, never the
-process command line, which here contained a user's profile path.
+instance started from a user profile, which no Windows service owns. Counted as
+an unmapped engine, it made "investigate unowned sqlservr.exe" the summary's
+next action on an otherwise healthy host — a false alarm, since LocalDB is
+expected wherever developers work and is not a monitored database server.
+
+`SqlServerPolicy.IsLocalDbProcess` now classifies a `sqlservr.exe` whose
+executable path contains `\LocalDB\Binn\` or whose command line carries
+`-sLOCALDB#` as LocalDB. Those are reported separately as `localdb_processes`
+and excluded from `unmapped_engine_processes`. The path and command line are
+read only to classify and are never emitted: a LocalDB command line contains
+the owning user's profile path.
 
 ### 3. Non-engine SQL components are detected but discarded
 
@@ -198,6 +208,12 @@ in for "the Agent is running". The collector reads Agent counters only for
 instances whose Agent service is `Running` (`SqlServerCounterPolicy.ShouldRead`)
 and reports them as unavailable (`-1`) otherwise.
 
+The same caution applies to the Availability Group counters. On an instance with
+no Availability Group (`IsHadrEnabled = 0`), `Database Replica(_Total)` still
+exists and reads `0`, so `ag_log_send_queue_kb` and `ag_redo_queue_kb` report
+`0`, not `-1`. A zero there means "no queue", not "AGs are configured and
+healthy".
+
 ### Per-database counters and cardinality
 
 `SQLServer:Databases(<dbname>)` has a full counter set **per database**:
@@ -272,7 +288,9 @@ Two routes, and the first may cost nothing:
 LocalSystem. SQL Server Setup provisions `NT AUTHORITY\SYSTEM` as a sysadmin
 login on the Database Engine, so a local shared-memory connection
 (`Server=lpc:<host>[\<instance>];Integrated Security=SSPI`) may succeed with
-no stored credential whatsoever. **This must be verified per host, not
+no stored credential whatsoever. On the test host this held: run as SYSTEM,
+section 12 of the probe connected to all three instances as
+`NT AUTHORITY\SYSTEM` with sysadmin. **It must still be verified per host, not
 assumed** — the login can be removed by hardening, and Route A is not
 available if the agent is ever reconfigured to run as a non-SYSTEM account.
 Section 12 of `probe-sql-sources.ps1` tests exactly this; it only answers the
@@ -372,9 +390,42 @@ as an administrator account. Observed:
   last 24 hours. No `SQLSERVERAGENT` events in 7 days, which does not mean no
   job failures: the Agent writes to the event log only when a job is
   configured to.
-- **LocalSystem SQL access (section 12): not answered.** The probe ran as an
-  administrator, whose login the instances rejected. Whether
-  `NT AUTHORITY\SYSTEM` can connect still needs a run as LocalSystem.
+- **LocalSystem SQL access (section 12).** As an administrator, every instance
+  rejected the login. Run as LocalSystem through a one-time scheduled task,
+  `NT AUTHORITY\SYSTEM` connected to all three instances over shared memory
+  with sysadmin, `VIEW SERVER STATE` and `VIEW ANY DEFINITION`. Every other
+  section matched the administrator run.
+
+## Development build on the host
+
+A Release build of the agent was copied to a temporary folder on the test host
+with a copy of its `agent.json` whose log path pointed at the same folder, then
+run with `--once` as LocalSystem through a one-time scheduled task. `--once`
+collects and prints a payload with no listener and no service, so the installed
+agent and what LibreNMS polls were untouched. The folder and task were removed
+afterwards.
+
+- **Collector health.** 23 collectors ran with none failed and none timed out.
+  The SQL collector took about 1.6–1.7 s including the 1 s counter sampling
+  window, against a 10 s collector timeout; the full collection took about
+  11 s, the same as the installed agent's normal cache refresh.
+- **Instances.** Correct per-instance ports (`1433` static, the two dynamic
+  ports with `port_source=dynamic`), `listener_active=1` on all three, edition
+  and patch level from the registry, and the engine PIDs.
+  `listener_ports_total=3`, where the installed agent reports `4`.
+- **SQL Agent.** The two `Manual` Agents that were stopped came out as
+  `agent_not_expected_running` (informational); `health_issues=0`.
+- **Components.** Seven, including Integration Services (`MsDtsServer140`),
+  which the service-name filter in the probe had not listed.
+- **Counters.** `counters_missing=0` on every instance: all 33 engine counters
+  read on all three, and the 5 SQL Agent counters on the one instance whose
+  Agent was running. On the two stopped-Agent instances, the Agent counters
+  were skipped and reported as `-1`. Rate counters returned non-zero values,
+  confirming the two-sample window works.
+- **LocalDB.** The first run reported `unmapped_engine_processes=1` and named it
+  as the next action. After the LocalDB fix, a second run reported
+  `unmapped_engine_processes=0`, `localdb_processes=1`, and a healthy next
+  action.
 
 ## Verification status
 
@@ -392,13 +443,14 @@ as an administrator account. Observed:
 | 19 Tier 1 counters return values by exact name | On-host probe: `Get-Counter` samples on all three instances |
 | `SQLAgent` counter categories exist while the Agent is stopped | On-host probe: categories listed for two instances whose Agent services were stopped |
 | ERRORLOG located and readable for every instance | On-host probe: path from the `-e` startup parameter, pattern matches returned |
-| LocalSystem can connect to SQL with integrated auth | **Not verified.** The probe ran as an administrator, not as LocalSystem |
+| LocalSystem can connect to SQL with integrated auth | Probe run as LocalSystem: connected to all three instances as sysadmin |
 | The Tier 1 counter collector builds, passes unit tests, and passes overlay fixtures | `dotnet build` 0 warnings / 0 errors; 91 agent tests pass (exit 0); `run-parser-fixtures`, `run-app-page-fixtures`, `run-horizon-central-tests` all exit 0; 71/71 overlay PHP files lint clean |
-| The Tier 1 counter collector reads a real counter | **Partly verified.** The probe sampled 19 of the Tier 1 counters through PDH by the names the collector uses. The collector's own `SqlServerCounterReader` has not run on a host, and the remaining counter names are unconfirmed |
+| The Tier 1 counter collector reads a real counter | Development build run with `--once` on the host: every engine counter read on all three instances (`counters_missing=0`), Agent counters read where the Agent runs |
 | SQL Agent counters are gated on the Agent service state | `SqlServerCounterPolicy.ShouldRead` unit test; 92 agent tests pass (exit 0) |
 | The defect fixes build, pass unit tests, and pass overlay fixtures | `dotnet build` 0 warnings / 0 errors; 77 agent tests pass (exit 0); `run-parser-fixtures`, `run-app-page-fixtures`, `run-horizon-central-tests` all exit 0; 70/70 overlay PHP files lint clean |
-| The defect fixes produce correct output on a real SQL host | **Inputs verified, collector not run.** The probe confirmed the registry values, SSRP ports and PID mapping the collector reads. The collector itself has not been built into an MSI or run on a host |
+| The defect fixes produce correct output on a real SQL host | Development build run with `--once` on the host: ports, port sources, listener state, PIDs, edition and Agent verdicts all correct |
+| LocalDB is not reported as an unmapped engine | Second `--once` run after the fix: `unmapped_engine_processes=0`, `localdb_processes=1` |
+| The agent works installed as a service with these changes | **Not verified.** Not installed; deferred to the next agent release, which would go to the test host first |
 
-The DMV list and the unsampled counter names above are still from product
-knowledge. Treat Tier 2 and Tier 3 as unconfirmed until something reads them on
-a host.
+The DMV list above is still from product knowledge. Treat Tier 2 and Tier 3 as
+unconfirmed until something reads them on a host.

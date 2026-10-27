@@ -705,6 +705,9 @@ $fields = [
     'sql_listener_ports_total' => (int) ($sql_summary['listener_ports_total'] ?? 0),
     'sql_registry_instances' => (int) ($sql_summary['registry_instances'] ?? 0),
     'sql_unmapped_engine_processes' => (int) ($sql_summary['unmapped_engine_processes'] ?? 0),
+    // Per-user LocalDB instances are counted apart from unmapped engines: expected on
+    // developer-used hosts, never a service, and not a discovery gap.
+    'sql_localdb_processes' => (int) ($sql_summary['localdb_processes'] ?? 0),
     'sql_perf_instances' => $sql_perf_instances,
     'sql_perf_counters_ok' => $sql_perf_counters_ok,
     'sql_perf_blocked_max' => $sql_perf_blocked_max,

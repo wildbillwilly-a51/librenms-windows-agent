@@ -1,5 +1,40 @@
 # Work Log
 
+## 2026-10-27 (unreleased: on-host verification and LocalDB false alarm)
+
+- Objective: verify the unreleased SQL collector work on the multi-instance SQL Server
+  2017 test host, and fix what that turned up. Installation deferred to the next agent
+  release.
+- Access: local administrator on the test host. PowerShell remoting fails there
+  because its transcription policy writes to a network share the remote session cannot
+  reach; commands ran instead as one-time LocalSystem scheduled tasks, created,
+  run and deleted remotely, with files staged over the admin share and removed
+  afterwards. Transcription and module logging were left in place.
+- Probe as LocalSystem: `NT AUTHORITY\SYSTEM` connected to all three instances as
+  sysadmin; every other section matched the administrator run.
+- Development build: run with `--once` as LocalSystem from a temporary folder and a
+  copy of the host config with its log redirected, so the installed agent and what
+  LibreNMS polls were untouched. No collector failed or timed out; the SQL collector
+  took about 1.7 s against a 10 s timeout; `counters_missing=0` on all three
+  instances; ports, port sources, listener state, PIDs, edition and Agent verdicts
+  were correct.
+- Fix: the first run reported the host's per-user LocalDB as an unmapped engine and
+  made it the summary's next action. Added `SqlServerPolicy.IsLocalDbProcess`
+  (executable path under `\LocalDB\Binn\` or a `-sLOCALDB#` instance switch); the
+  collector now reports those as `localdb_processes` and excludes them from
+  `unmapped_engine_processes`. Path and command line are never emitted. Overlay
+  stores `sql_localdb_processes`. A second `--once` run confirmed
+  `unmapped_engine_processes=0`, `localdb_processes=1`, healthy next action.
+- Also observed: Availability Group counters read `0`, not `-1`, on an instance with no
+  AG. Documented; no code change.
+- Tests: new LocalDB classification test (93 agent tests pass, exit 0); the
+  `sql-server-multi-instance` fixture now carries `localdb_processes`.
+- Validation: `dotnet build -c Release` 0 warnings / 0 errors; agent tests 93 / 0;
+  parser and app-page suites 13 / 13 each, Horizon central 35 / 35, all exit 0;
+  overlay PHP lint 71 / 71; `bash -n ./install.sh` exit 0.
+- Not verified: the agent installed as a service with these changes; deferred to the
+  next agent release, which should go to the test host first.
+
 ## 2026-10-27 (unreleased: SQL probe evidence and SQL Agent counter gating)
 
 - Objective: act on the first on-host run of `probe-sql-sources.ps1` against the

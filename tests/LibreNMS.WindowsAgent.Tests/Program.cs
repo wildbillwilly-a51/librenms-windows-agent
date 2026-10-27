@@ -94,6 +94,7 @@ namespace LibreNMS.WindowsAgent.Tests
                 ("sql policy resolves unassigned dynamic port", SqlPolicyResolvesUnassignedDynamicPort),
                 ("sql policy resolves disabled tcp", SqlPolicyResolvesDisabledTcp),
                 ("sql policy next action prioritises engine over agent", SqlPolicyNextActionPrioritisesEngineOverAgent),
+                ("sql policy classifies localdb processes", SqlPolicyClassifiesLocalDbProcesses),
                 ("sql counter object names use pdh instance prefixes", SqlCounterObjectNamesUsePdhInstancePrefixes),
                 ("sql counter specs declare rate and cumulative counters", SqlCounterSpecsDeclareRateAndCumulativeCounters),
                 ("sql counter object names are deduplicated", SqlCounterObjectNamesAreDeduplicated),
@@ -1274,6 +1275,26 @@ namespace LibreNMS.WindowsAgent.Tests
             AssertEqual("disabled", result.Source);
             AssertEqual(string.Empty, result.Ports);
             AssertEqual(0, result.PortNumbers.Count);
+        }
+
+        private static void SqlPolicyClassifiesLocalDbProcesses()
+        {
+            // Shape seen on a real host: LocalDB started from a user profile, no service.
+            AssertTrue(SqlServerPolicy.IsLocalDbProcess(
+                @"C:\Program Files\Microsoft SQL Server\130\LocalDB\Binn\sqlservr.exe",
+                @"""C:\Program Files\Microsoft SQL Server\130\LocalDB\Binn\\sqlservr.exe"" -c -SMSSQL13E.LOCALDB -sLOCALDB#1234ABCD"),
+                "LocalDB path and instance switch should classify as LocalDB");
+            AssertTrue(SqlServerPolicy.IsLocalDbProcess(string.Empty, "sqlservr.exe -c -sLOCALDB#0A1B2C3D"),
+                "the LocalDB instance switch alone should classify as LocalDB");
+            AssertTrue(SqlServerPolicy.IsLocalDbProcess(@"C:\Program Files\Microsoft SQL Server\150\LocalDB\Binn\sqlservr.exe", null),
+                "the LocalDB path alone should classify as LocalDB");
+
+            AssertFalse(SqlServerPolicy.IsLocalDbProcess(
+                @"C:\Program Files\Microsoft SQL Server\MSSQL14.APPDB\MSSQL\Binn\sqlservr.exe",
+                @"""C:\Program Files\Microsoft SQL Server\MSSQL14.APPDB\MSSQL\Binn\sqlservr.exe"" -sAPPDB"),
+                "a service-hosted named instance is not LocalDB");
+            AssertFalse(SqlServerPolicy.IsLocalDbProcess(null, null),
+                "unreadable path and command line must not be guessed as LocalDB");
         }
 
         private static void SqlPolicyNextActionPrioritisesEngineOverAgent()

@@ -57,7 +57,8 @@ are configured not to run a component:
   SQL rule per host is enough.
 - `sql_unmapped_engine_processes` is diagnostic, not a failure: it counts
   `sqlservr.exe` processes that no detected service owns, which means instance
-  discovery is incomplete on that host.
+  discovery is incomplete on that host. Per-user LocalDB instances are excluded
+  and counted in `sql_localdb_processes` instead; do not alert on that one.
 
 ## SQL Server Performance Counters
 
