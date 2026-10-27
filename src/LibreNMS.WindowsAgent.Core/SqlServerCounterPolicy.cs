@@ -197,7 +197,9 @@ namespace LibreNMS.WindowsAgent.Core
             new SqlCounterSpec("ag_redo_queue_kb", SqlCounterScope.Engine, "Database Replica", "Recovery Queue", TotalCounterInstance, optional: true),
 
             // SQL Agent job counts are cumulative since Agent start, so they are
-            // reported as deltas. The Agent object is absent when the Agent is stopped.
+            // reported as deltas. The SQLAgent object stays registered while the Agent
+            // service is stopped, so ShouldRead gates these on the service state
+            // instead of on whether the category exists.
             new SqlCounterSpec("agent_failed_jobs", SqlCounterScope.Agent, "Jobs", "Failed jobs", TotalCounterInstance, cumulative: true, optional: true),
             new SqlCounterSpec("agent_successful_jobs", SqlCounterScope.Agent, "Jobs", "Successful jobs", TotalCounterInstance, cumulative: true, optional: true),
             new SqlCounterSpec("agent_active_jobs", SqlCounterScope.Agent, "Jobs", "Active jobs", TotalCounterInstance, optional: true),
@@ -268,6 +270,22 @@ namespace LibreNMS.WindowsAgent.Core
             }
 
             return names;
+        }
+
+        /// <summary>
+        /// Whether a counter should be read at all. SQL Agent counters are skipped
+        /// while the instance's Agent service is not running: their category stays
+        /// registered and would otherwise read as zeros that look like a healthy,
+        /// idle Agent.
+        /// </summary>
+        public static bool ShouldRead(SqlCounterSpec spec, bool agentRunning)
+        {
+            if (spec == null)
+            {
+                return false;
+            }
+
+            return spec.Scope != SqlCounterScope.Agent || agentRunning;
         }
 
         /// <summary>
@@ -356,9 +374,10 @@ namespace LibreNMS.WindowsAgent.Core
                 result.CompilationPercent = Math.Round((input.CompilationsPerSec * 100) / input.BatchRequestsPerSec, 2);
             }
 
-            // Queries queued waiting for workspace memory are the unambiguous signal;
-            // Total far below Target is the softer one and only counts alongside a
-            // readable target.
+            // Queries queued waiting for workspace memory are the memory signal.
+            // MemoryUsedPercent (Total vs Target) is reported for context only: an
+            // idle or recently started instance sits far below its target without
+            // being under pressure, so it must not raise MemoryPressure.
             if (input.MemoryGrantsPending >= Math.Max(1, input.MemoryGrantsPendingWarning))
             {
                 result.MemoryPressure = 1;

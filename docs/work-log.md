@@ -1,5 +1,36 @@
 # Work Log
 
+## 2026-10-27 (unreleased: SQL probe evidence and SQL Agent counter gating)
+
+- Objective: act on the first on-host run of `probe-sql-sources.ps1` against the
+  multi-instance SQL Server 2017 test host.
+- Evidence: the probe confirmed the registry instance inventory, edition, patch
+  level and `Tcp\IPAll` ports (cross-checked against SSRP and per-PID sockets), that
+  every Tier 1 counter object exists under the literal PDH names, and that 19 Tier 1
+  counters return values by exact name. It explained the unowned `sqlservr.exe` as a
+  per-user LocalDB instance. Recorded in `docs/sql-collector-expansion.md` under
+  "On-host probe results", without host names.
+- Fix: the probe showed `SQLAgent$<INSTANCE>:Jobs` categories registered for two
+  instances whose Agent services were stopped, contradicting the assumption that the
+  object disappears. Added `SqlServerCounterPolicy.ShouldRead`; the reader now reads
+  Agent counters only for instances whose Agent service is `Running` and reports
+  them as `-1` otherwise.
+- Fix: the `Evaluate` comment implied total-below-target memory raises pressure; it
+  does not, and the probe showed it should not (idle instances at 5–8% of target).
+  Comment corrected; no behaviour change.
+- Tests: new `ShouldRead` test, including that every Agent spec is optional so
+  skipping never counts against `counters_missing` — 92 agent tests pass, exit 0.
+- Validation: `dotnet build -c Release` 0 warnings / 0 errors; agent tests 92 / 0;
+  parser and app-page suites 13 / 13 each and Horizon central 35 / 35, all exit 0;
+  overlay PHP lint 71 / 71; `bash -n ./install.sh` exit 0.
+- Not verified: the collector itself has still not run on a SQL host, the unsampled
+  Tier 1 counter names are unconfirmed, and whether LocalSystem can connect to SQL is
+  unanswered because the probe ran as an administrator. Four counters typed as
+  levels (`Lock Wait Time (ms)`, `Average Wait Time (ms)`,
+  `Average Latch Wait Time (ms)`, `Log Flush Wait Time`) are rate or average types;
+  they read correctly while any true rate counter forces the second sample, so this
+  was left as is.
+
 ## 2026-10-16 (unreleased: SQL Server server-level performance counters)
 
 - Objective: implement Tier 1 server-level performance counters from

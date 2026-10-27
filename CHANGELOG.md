@@ -78,15 +78,22 @@ has been cut and no artifact has been rebuilt.
   on the host, so the sampling cost does not scale with instance count. The window
   is clamped to 250–3000 ms and to a quarter of the collector timeout.
 - A counter, counter instance, or performance object that is not present is
-  reported as `-1`, never as a measured zero, and never raises pressure. Counter
-  availability has not been observed on a real SQL host, so the collector treats
-  the documented counter list as a hypothesis: every read degrades to a shorter
-  row or an empty section rather than failing the collector.
+  reported as `-1`, never as a measured zero, and never raises pressure. A
+  read-only probe on one multi-instance SQL Server 2017 host confirmed every counter
+  object exists and 19 of the counters return values by name; the rest are still
+  unconfirmed, so every read degrades to a shorter row or an empty section rather
+  than failing the collector.
 - Derived per instance: `memory_used_percent` (total versus target server memory),
   `compilation_percent` (compilations as a share of batch requests, ignored below
   10 batches/sec so an idle instance does not read as a plan cache problem), and
   `memory_pressure` / `buffer_pressure` / `blocking_pressure` / `compile_pressure` /
-  `deadlock_pressure` flags rolled into `pressure_issues`.
+  `deadlock_pressure` flags rolled into `pressure_issues`. `memory_used_percent` is
+  context only and never raises `memory_pressure`: an idle instance sits far below
+  its target without being under pressure.
+- SQL Agent job counters are read only while the instance's SQL Agent service is
+  `Running`, and are reported as `-1` otherwise. The `SQLAgent` counter categories
+  stay registered after the Agent stops, so reading them regardless would report a
+  stopped Agent as an idle one with zero failed jobs.
 - Overlay: new `windows-agent-sql-server-performance` RRD family and graph. Both
   `windows-agent-sql-server` and `windows-agent-sql-server-health` are untouched,
   per the add-a-family rule. Device-level `sql_perf_*` fields carry the host

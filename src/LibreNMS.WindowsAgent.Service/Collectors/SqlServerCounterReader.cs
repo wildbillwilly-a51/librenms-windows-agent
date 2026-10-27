@@ -28,7 +28,11 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
         /// <summary>True when at least one engine counter was read.</summary>
         public bool EngineCountersAvailable { get; set; }
 
-        /// <summary>True when the SQLAgent:Jobs object was present; it is absent while the Agent is stopped.</summary>
+        /// <summary>
+        /// True when at least one SQL Agent counter was read. Agent counters are only
+        /// read while the instance's Agent service is running, because the SQLAgent
+        /// object stays registered after the service stops.
+        /// </summary>
         public bool AgentCountersAvailable { get; set; }
 
         public double Value(string key)
@@ -55,12 +59,18 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
         /// <summary>
         /// Samples every instance twice, with a single shared delay in between, so
         /// the sampling window costs the same no matter how many instances exist.
+        /// SQL Agent counters are read only for instances named in
+        /// <paramref name="agentRunningInstances"/>.
         /// </summary>
         public static async Task<IList<SqlCounterReading>> ReadAsync(
             IEnumerable<string> instanceNames,
+            ICollection<string> agentRunningInstances,
             int sampleMs,
             CancellationToken cancellationToken)
         {
+            var agentRunning = new HashSet<string>(
+                agentRunningInstances ?? (ICollection<string>)Array.Empty<string>(),
+                StringComparer.OrdinalIgnoreCase);
             var results = new List<SqlCounterReading>();
             var handles = new List<CounterHandle>();
             var objectCache = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
@@ -74,9 +84,17 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
                     var reading = new SqlCounterReading { Instance = instanceName };
                     results.Add(reading);
 
+                    var instanceAgentRunning = agentRunning.Contains(instanceName ?? string.Empty);
                     foreach (var spec in SqlServerCounterPolicy.Specs)
                     {
                         reading.Values[spec.Key] = SqlServerCounterPolicy.Unavailable;
+
+                        // Agent specs are all optional, so skipping them while the
+                        // Agent is stopped does not count as a missing counter.
+                        if (!SqlServerCounterPolicy.ShouldRead(spec, instanceAgentRunning))
+                        {
+                            continue;
+                        }
 
                         var objectName = SqlServerCounterPolicy.ObjectName(instanceName, spec);
                         if (!ObjectExists(objectName, objectCache))

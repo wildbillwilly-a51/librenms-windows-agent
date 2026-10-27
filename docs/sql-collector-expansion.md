@@ -5,9 +5,13 @@ Status: **defects fixed, tiers 1–3 still proposed.** This is the survey that
 starts.
 
 The five defects in "Defects found in the current collector" below have been
-fixed; each carries a **Fixed** note. Everything under Tier 1, Tier 2 and
-Tier 3 remains a proposal, and the verification gap at the bottom still stands:
-`probe-sql-sources.ps1` has not been run on a host.
+fixed; each carries a **Fixed** note. Tier 1 server-level counters are
+implemented; per-database counters, Tier 2 and Tier 3 remain proposals.
+
+`probe-sql-sources.ps1` was run once on the multi-instance test host on
+2026-10-27, elevated but as an administrator rather than as LocalSystem. Its
+results are in "On-host probe results" below. Neither the agent build nor the
+collector itself has run on a SQL host yet.
 
 ## What the collector did before the defect fixes
 
@@ -68,6 +72,11 @@ reports `pid`, and the summary reports `unmapped_engine_processes`: the count of
 `sqlservr.exe` processes that no detected engine service owns. A non-zero value
 raises an attention row on the app page instead of leaving the operator to
 notice the discrepancy themselves.
+
+The on-host probe identified the fourth process: a per-user SQL Server LocalDB
+instance started from a user profile, which no Windows service owns. That is
+the case the counter exists for. The agent emits only the count, never the
+process command line, which here contained a user's profile path.
 
 ### 3. Non-engine SQL components are detected but discarded
 
@@ -181,6 +190,13 @@ delta math — budget for a short sampling window.
 SQL login, which is normally a Tier 3 item. Caveat: these are counted from
 Agent process start, so they reset on restart — they are "failures since Agent
 started", not "failures today". Treat as a delta/rate, not a level.
+
+The `SQLAgent:` / `SQLAgent$<INSTANCE>:` counter categories stay registered
+while the Agent service is stopped — the on-host probe listed them for two
+instances whose Agents were stopped. Category existence therefore cannot stand
+in for "the Agent is running". The collector reads Agent counters only for
+instances whose Agent service is `Running` (`SqlServerCounterPolicy.ShouldRead`)
+and reports them as unavailable (`-1`) otherwise.
 
 ### Per-database counters and cardinality
 
@@ -315,6 +331,51 @@ credential-free posture.
    are the two things operators ask for first and neither is reachable without
    a connection.
 
+## On-host probe results
+
+`probe-sql-sources.ps1` ran once on the multi-instance SQL Server 2017
+Standard test host (one default instance and two named instances), elevated,
+as an administrator account. Observed:
+
+- **Registry.** `Instance Names\SQL` listed all three instances. `Setup`
+  carried edition, patch level and version; `Tcp\IPAll` gave a static
+  `TcpPort` for the default instance and only `TcpDynamicPorts` for the two
+  named instances. The SQL Browser (SSRP) response and the sockets actually
+  owned by each `sqlservr.exe` PID matched those registry values exactly. This
+  confirms the inputs the defect-1 port fix reads.
+- **Process mapping.** Each engine service's PID matched a `sqlservr.exe
+  -s<INSTANCE>` process. The one unowned `sqlservr.exe` was a per-user LocalDB
+  instance (see defect 2).
+- **Performance counters.** Every counter object Tier 1 reads exists for all
+  three instances under the literal `SQLServer:` and `MSSQL$<INSTANCE>:` names,
+  plus `SQLAgent:` / `SQLAgent$<INSTANCE>:Jobs`. 19 of the Tier 1 counters were
+  sampled by exact name through PDH (`Get-Counter`) and returned values on all
+  three instances. The remaining Tier 1 counters were not sampled; their
+  objects exist, but their counter names are still unconfirmed.
+- **Agent counter categories outlive the Agent.** See "SQL Agent counters".
+- **Memory used vs target.** Two idle instances sat at roughly 5–8% of their
+  target server memory with no other sign of pressure. That is why
+  `memory_used_percent` is reported for context only and never raises
+  `memory_pressure`.
+- **Per-database cardinality.** 10, 11 and 30 database counter instances
+  (including `_Total`) across the three instances — manageable here, but it
+  confirms per-database counters need the cap described above.
+- **ERRORLOG.** The `-e` startup parameter located every instance's
+  ERRORLOG, on different drives per instance, and all were readable. The
+  default instance's ERRORLOG was about 300 MB, so the Tier 2 reader must tail
+  from the end of the file rather than scan it. The log carried backup
+  completion and login-failure lines. On two instances, the newest backup line
+  was several months old while their SQL Agents were stopped — the exact gap
+  that backup age (Tier 3) and Agent expectedness exist to surface. This is an
+  observation about one host, not a product fault.
+- **Event log.** SQL providers logged only informational backup events in the
+  last 24 hours. No `SQLSERVERAGENT` events in 7 days, which does not mean no
+  job failures: the Agent writes to the event log only when a job is
+  configured to.
+- **LocalSystem SQL access (section 12): not answered.** The probe ran as an
+  administrator, whose login the instances rejected. Whether
+  `NT AUTHORITY\SYSTEM` can connect still needs a run as LocalSystem.
+
 ## Verification status
 
 | Claim | How checked |
@@ -326,12 +387,18 @@ credential-free posture.
 | Four `sqlservr.exe` processes vs three engine services | Live agent payload (`windows_agent_performance_processes` and `windows_agent_services`) |
 | SQL Agent stopped does not raise `health_issues` | Live payload: two Agents `Stopped`, summary `state=ok health_issues=0` |
 | SSAS / Launchpad / Full-Text present but absent from instance rows | Live payload service list vs `windows_agent_sql_server_instances` |
-| Counter availability, registry contents, ERRORLOG readability, LocalSystem SQL access | **Not verified.** Remote WMI, WinRM, and SQL login to the test host were all denied to the investigating account. `probe-sql-sources.ps1` must be run on the host to confirm |
+| Registry contents (instances, edition, patch level, TCP ports) | On-host probe, cross-checked against the SSRP response and the per-PID listening sockets |
+| Counter objects exist under the literal PDH names | On-host probe: category listing for all three instances |
+| 19 Tier 1 counters return values by exact name | On-host probe: `Get-Counter` samples on all three instances |
+| `SQLAgent` counter categories exist while the Agent is stopped | On-host probe: categories listed for two instances whose Agent services were stopped |
+| ERRORLOG located and readable for every instance | On-host probe: path from the `-e` startup parameter, pattern matches returned |
+| LocalSystem can connect to SQL with integrated auth | **Not verified.** The probe ran as an administrator, not as LocalSystem |
 | The Tier 1 counter collector builds, passes unit tests, and passes overlay fixtures | `dotnet build` 0 warnings / 0 errors; 91 agent tests pass (exit 0); `run-parser-fixtures`, `run-app-page-fixtures`, `run-horizon-central-tests` all exit 0; 71/71 overlay PHP files lint clean |
-| The Tier 1 counter collector reads a real counter | **Not verified.** No PDH read has been executed against a SQL Server instance. The counter names, object prefixes, and `_Total` instance choices are from product knowledge; the naming and threshold logic is unit tested, the I/O is not |
+| The Tier 1 counter collector reads a real counter | **Partly verified.** The probe sampled 19 of the Tier 1 counters through PDH by the names the collector uses. The collector's own `SqlServerCounterReader` has not run on a host, and the remaining counter names are unconfirmed |
+| SQL Agent counters are gated on the Agent service state | `SqlServerCounterPolicy.ShouldRead` unit test; 92 agent tests pass (exit 0) |
 | The defect fixes build, pass unit tests, and pass overlay fixtures | `dotnet build` 0 warnings / 0 errors; 77 agent tests pass (exit 0); `run-parser-fixtures`, `run-app-page-fixtures`, `run-horizon-central-tests` all exit 0; 70/70 overlay PHP files lint clean |
-| The defect fixes produce correct output on a real SQL host | **Not verified.** The new collector has not been built into an MSI or run on a host. Registry reads, port resolution, and PID mapping are covered by unit tests over synthetic inputs only |
+| The defect fixes produce correct output on a real SQL host | **Inputs verified, collector not run.** The probe confirmed the registry values, SSRP ports and PID mapping the collector reads. The collector itself has not been built into an MSI or run on a host |
 
-The counter names, registry paths, and DMV list above are from product
-knowledge, not from observation of the test host. Run the probe script before
-treating any of Tier 1–3 as confirmed available.
+The DMV list and the unsampled counter names above are still from product
+knowledge. Treat Tier 2 and Tier 3 as unconfirmed until something reads them on
+a host.

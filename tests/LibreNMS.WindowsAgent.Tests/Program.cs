@@ -107,7 +107,8 @@ namespace LibreNMS.WindowsAgent.Tests
                 ("sql counter health ignores compile ratio on an idle instance", SqlCounterHealthIgnoresCompileRatioOnIdleInstance),
                 ("sql counter health derives memory and compile percentages", SqlCounterHealthDerivesPercentages),
                 ("sql counter state ordinal keeps sentinels below ok", SqlCounterStateOrdinalKeepsSentinelsBelowOk),
-                ("sql counter sample window stays inside the collector budget", SqlCounterSampleWindowStaysInsideCollectorBudget)
+                ("sql counter sample window stays inside the collector budget", SqlCounterSampleWindowStaysInsideCollectorBudget),
+                ("sql counter agent specs are skipped while the agent is stopped", SqlCounterAgentSpecsAreSkippedWhileAgentIsStopped)
             };
 
             var failed = 0;
@@ -1289,6 +1290,30 @@ namespace LibreNMS.WindowsAgent.Tests
             AssertEqual(
                 "No action; SQL service evidence was not detected.",
                 SqlServerPolicy.NextAction("not_detected", 0, 0, 0, 0, 0));
+        }
+
+        private static void SqlCounterAgentSpecsAreSkippedWhileAgentIsStopped()
+        {
+            // The SQLAgent object stays registered after the Agent service stops, so
+            // category existence cannot stand in for "the Agent is running".
+            var failedJobs = SqlCounterSpecFor("agent_failed_jobs");
+            AssertFalse(SqlServerCounterPolicy.ShouldRead(failedJobs, false), "agent counters must not be read while the agent is stopped");
+            AssertTrue(SqlServerCounterPolicy.ShouldRead(failedJobs, true), "agent counters are read while the agent runs");
+
+            var ple = SqlCounterSpecFor("page_life_expectancy");
+            AssertTrue(SqlServerCounterPolicy.ShouldRead(ple, false), "engine counters do not depend on the agent");
+            AssertTrue(SqlServerCounterPolicy.ShouldRead(ple, true), "engine counters are always read");
+
+            AssertFalse(SqlServerCounterPolicy.ShouldRead(null, true), "a null spec is never read");
+
+            foreach (var spec in SqlServerCounterPolicy.Specs)
+            {
+                if (spec.Scope == SqlCounterScope.Agent)
+                {
+                    // Skipping must never count against counters_missing.
+                    AssertTrue(spec.Optional, "agent spec " + spec.Key + " must be optional");
+                }
+            }
         }
 
         private static void SqlCounterObjectNamesUsePdhInstancePrefixes()

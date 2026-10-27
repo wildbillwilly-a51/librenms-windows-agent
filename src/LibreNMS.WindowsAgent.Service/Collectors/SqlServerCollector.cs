@@ -117,7 +117,11 @@ namespace LibreNMS.WindowsAgent.Service.Collectors
             try
             {
                 readings = await SqlServerCounterReader
-                    .ReadAsync(instances.Select(row => row.Instance), sampleMs, cancellationToken)
+                    .ReadAsync(
+                        instances.Select(row => row.Instance),
+                        instances.Where(row => IsRunning(row.AgentState)).Select(row => row.Instance).ToList(),
+                        sampleMs,
+                        cancellationToken)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException)
