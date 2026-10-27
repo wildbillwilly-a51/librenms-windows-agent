@@ -97,14 +97,18 @@ noise by itself.
    the bounded runtime and Counter Monitor sections; continue avoiding project
    files, controller subscriptions, and raw diagnostics by default.
 4. Hyper-V: VM state, integration service state, replication health.
-5. Deeper SQL Server, in the order surveyed in `docs/sql-collector-expansion.md`.
+5. Deeper SQL Server, using the revised priorities in
+   [SQL Server role-tab research](sql-server-role-tab-research.md); retain
+   `docs/sql-collector-expansion.md` as the earlier survey and probe record.
    Server-level performance counters through PDH are done and shipped as
    `windows_agent_sql_server_performance`, and a development build read them on a
-   real multi-instance SQL Server 2017 host. Installed-service validation remains
-   separate from that `--once` evidence. What remains, in order: bounded ERRORLOG and
-   event-log evidence, then capped per-database counters, then optional local
-   integrated queries for database/job/backup state after credential and
-   permission handling is explicitly designed.
+   real multi-instance SQL Server 2017 host. Agent 0.6.17 subsequently passed
+   installed-service canary validation. Proposed next work: explicit capability
+   results and cadence-safe counter observations, then optional local integrated
+   database/log/backup/job queries after permissions and bounds are designed.
+   A narrow capped PDH log-capacity subset can serve sites without SQL access;
+   broader per-database counters, bounded incidents, I/O and conditional HA
+   follow operational need. These additions remain proposals.
 
 ## Collector Acceptance Criteria
 

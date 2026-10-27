@@ -1,5 +1,22 @@
 # Work Log
 
+## 2026-10-27 (SQL Server role-tab research)
+
+- Compared the advisory research report with the SQL collector, parser,
+  application data, existing first-level role tabs and graph definitions.
+  Documented a five-tile SQL tab proposal, a SQL-scoped unsurfaced-data audit
+  and prioritized additive agent collection; no product code or version changes.
+- Consulted Claude as a read-only source/design partner. Reconciled cadence
+  gaps, detection evidence, narrow PDH log-capacity alternatives and permission
+  limits against Microsoft and LibreNMS primary documentation. Corrected the
+  earlier survey's universal SYSTEM/sysadmin claim and CHECKDB/I/O guidance.
+- Validation: Microsoft/LibreNMS primary-source checks, a Redgate comparison,
+  source-to-proposal tracing and two Claude review exchanges completed. Applied
+  the peer's stale-survey/grant-text corrections; final wording/source additions
+  checked by Codex. Markdown references/local links, scoped privacy/credential
+  scan and `git diff --check` passed. Runtime/build/release tests are not
+  applicable to this documentation-only change; no new SQL queries or rollout.
+
 ## 2026-10-27 (agent 0.6.17: built, canary-installed, release committed locally)
 
 - Objective: cut agent `0.6.17` agent-only, keeping overlay `0.6.30`, build locally

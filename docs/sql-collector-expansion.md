@@ -1,5 +1,10 @@
 # SQL Server Collector Expansion — Investigation
 
+The [2026-10-27 role-tab research](sql-server-role-tab-research.md) revises the
+remaining collection priorities and permission/metric interpretation below.
+Keep this document's probe results as historical evidence; they do not establish
+the permissions or behavior of every supported SQL installation.
+
 Status: **surface defects fixed; Tier 1 server-level counters implemented and
 verified with a development build.** This is the survey that
 `docs/collector-roadmap.md` item 5 ("Deeper SQL Server") asks for before design
@@ -13,8 +18,11 @@ On 2026-10-27, on the multi-instance test host, `probe-sql-sources.ps1` was run
 once as an elevated administrator and once as LocalSystem, and a development
 build of the agent was run there with `--once` as LocalSystem. Results are in
 "On-host probe results" and "Development build on the host" below. The
-development build was never installed as a service, so nothing it produced
-reached LibreNMS.
+development build was not installed during that probe. Subsequently the exact
+published agent 0.6.17 was canary-installed as a service and its SQL payload was
+verified through overlay 0.6.31, including live metrics and RRD graphs. The
+earlier `--once` evidence below remains separate from that installed-service
+validation.
 
 ## What the collector did before the defect fixes
 
@@ -270,12 +278,12 @@ decision first, because it needs a connection.
 | `msdb.dbo.backupset` | **Last full / differential / log backup age per database.** The most-requested SQL monitoring metric there is, and it is unreachable in every tier above |
 | `msdb.dbo.sysjobs` + `sysjobhistory` + `sysjobactivity` | Per-job last outcome, duration, failure reason, jobs currently running past expected duration, jobs not run when scheduled |
 | `sys.databases` | `state_desc` (ONLINE / SUSPECT / RECOVERY_PENDING / OFFLINE), `recovery_model_desc`, `log_reuse_wait_desc` (**tells you *why* a log will not truncate**), `is_read_only`, `user_access_desc`, `compatibility_level` |
-| `DBCC DBINFO` → `dbi_dbccLastKnownGood` | **Days since last clean CHECKDB per database.** Corruption you have not looked for |
-| `sys.dm_io_virtual_file_stats` | Per-file read/write latency (`io_stall_read_ms` / `num_of_reads`) — real storage latency as SQL experiences it, far better than the host disk counters |
+| `DATABASEPROPERTYEX(database, 'LastGoodCheckDbTime')` | Last recorded successful CHECKDB, where supported and visible; no CHECKDB execution. Sentinel/NULL values need explicit interpretation, not a corruption verdict |
+| `sys.dm_io_virtual_file_stats` | Per-file interval read/write stall per operation from reset-aware deltas; lifetime stall divided by lifetime reads is not recent latency. Complements host storage context |
 | `sys.dm_os_wait_stats` | Top wait types — the standard "what is this server waiting on" answer |
 | `sys.dm_exec_requests` + `sys.dm_os_waiting_tasks` | Blocking chain head, blocked session count, longest block duration |
 | `sys.dm_tran_active_transactions` | Oldest open transaction age |
-| `sys.dm_hadr_database_replica_states` | AG `synchronization_health_desc`, log send queue, redo queue size, estimated failover data loss |
+| `sys.dm_hadr_database_replica_states` | Local/cached AG synchronization, suspension and queue observations; these alone cannot promise failover data loss or recovery time |
 | `sys.configurations` | `max server memory`, `MAXDOP`, `cost threshold for parallelism`, `optimize for ad hoc workloads` — config drift |
 | `sys.dm_os_sys_info` | `sqlserver_start_time` — real engine uptime, distinct from Windows uptime |
 | `sys.dm_os_volume_stats` | Free space on each volume holding a database file |
@@ -283,31 +291,31 @@ decision first, because it needs a connection.
 
 ### The credential question
 
-Two routes, and the first may cost nothing:
+Two routes were considered. The first proposed implementation should use local
+integrated auth, off by default; stored SQL credentials remain deferred.
 
-**Route A — integrated auth as the agent's own identity.** The agent runs as
-LocalSystem. SQL Server Setup provisions `NT AUTHORITY\SYSTEM` as a sysadmin
-login on the Database Engine, so a local shared-memory connection
-(`Server=lpc:<host>[\<instance>];Integrated Security=SSPI`) may succeed with
-no stored credential whatsoever. On the test host this held: run as SYSTEM,
-section 12 of the probe connected to all three instances as
-`NT AUTHORITY\SYSTEM` with sysadmin. **It must still be verified per host, not
-assumed** — the login can be removed by hardening, and Route A is not
-available if the agent is ever reconfigured to run as a non-SYSTEM account.
-Section 12 of `probe-sql-sources.ps1` tests exactly this; it only answers the
-question when the script is run as SYSTEM.
+**Route A — integrated auth as the agent's configured identity.** A local
+connection may succeed without a stored SQL credential, but access and rights
+must be probed per instance. The test host accepted `NT AUTHORITY\SYSTEM` with
+sysadmin; that is a host observation, not a Setup default. Microsoft's
+[provisioning guidance](https://learn.microsoft.com/en-us/sql/database-engine/configure-windows/configure-windows-service-accounts-and-permissions#database-engine-provisioning)
+distinguishes SQL service SIDs from LocalSystem grants for particular HA
+installations. Do not grant sysadmin or assume any Windows service identity can
+query SQL. A local query also does not prove remote application connectivity.
 
-If Route A works, sysadmin is also more rights than this should take. The
-collector should connect, then operate under the assumption it may be
-restricted later, and should never require more than:
-`CONNECT SQL`, `VIEW SERVER STATE`, `VIEW ANY DEFINITION`, and read on
-`msdb` (`SQLAgentReaderRole` + `db_datareader`).
+Permissions must be designed per capability and version. Several performance
+DMVs use `VIEW SERVER PERFORMANCE STATE` on SQL Server 2022+, rather than the
+earlier `VIEW SERVER STATE`. Database visibility can be incomplete even after a
+successful connection. Do not prescribe blanket `msdb` reads or
+`SQLAgentReaderRole` as read-only monitoring: that role inherits owned-job
+creation/execution permissions. Prefer reviewed narrow reads or a constrained
+module and validate with a restricted principal; see the linked research.
 
-**Route B — explicit least-privilege login.** Follow the Horizon API precedent
-exactly: `mode: "disabled"` by default, a DPAPI `LocalMachine`-scoped
-credential file written by a provisioning command, and a documented
-`CREATE LOGIN` / `GRANT VIEW SERVER STATE` snippet in the docs.
-`HorizonApiCredentialStore.cs` and `HorizonApiConfig` are the templates.
+**Route B — explicit least-privilege login (deferred).** If stored credentials
+are later needed, evaluate the Horizon API's disabled-by-default,
+DPAPI-protected credential store as a precedent. Per-capability, version-specific
+grants must be designed and validated then; there is no universal grant snippet.
+This proposal does not add credential provisioning or change authentication.
 
 Either way this tier should be **opt-in and off by default**, exactly like
 `HorizonApiConfig.Mode = "disabled"`, so the default install keeps today's
@@ -315,15 +323,15 @@ credential-free posture.
 
 ### Guardrails for Tier 3
 
-- Read-only queries only; no `DBCC` that writes, no `sp_` that changes state.
-  (`DBCC DBINFO WITH TABLERESULTS` is read-only but needs sysadmin — gate it
-  separately and degrade gracefully when permission is absent.)
+- Fixed read-only metadata queries only; no database maintenance or job actions.
+  Prefer the documented `LastGoodCheckDbTime` property over a sysadmin-only
+  `DBCC DBINFO` path. Never execute CHECKDB as part of monitoring.
 - Per-query timeout well under the collector timeout; one slow DMV must not
   stall the agent.
 - Never emit query text, parameter values, login names, or object names beyond
   database names — query text can contain data.
-- `sys.dm_os_wait_stats` and `sys.dm_io_virtual_file_stats` are cumulative
-  since restart; emit deltas or they are meaningless after week one.
+- Wait and file-I/O counters are cumulative: distinguish lifetime values from
+  reset-aware interval deltas. Wait stats can also be cleared manually.
 - Cap database enumeration the same way Tier 1 caps per-database counters.
 
 ## Suggested implementation order
@@ -343,13 +351,16 @@ credential-free posture.
    counters on three SQL Server 2017 instances**, plus Agent counters where
    Agent was running; see "Development build on the host". Availability must
    still degrade safely on other hosts.
-3. **Tier 2 ERRORLOG and event-log evidence** into
-   `windows_agent_sql_server_evidence` — bounded pattern counts, no raw log.
-4. **Tier 1 per-database counters**, gated and capped, with the
-   `sql_db_<measure>:<key>` application-metric flattening for alert targeting.
-5. **Tier 3**, opt-in, starting with backup age and job outcome, because those
-   are the two things operators ask for first and neither is reachable without
-   a connection.
+3. **Proposed correctness contract:** explicit family capability/coverage and
+   reset-aware cumulative observations to close job/deadlock cadence gaps.
+4. **Proposed opt-in local queries:** database/log state, policy-qualified
+   backup observations and job outcomes, after restricted permissions and query
+   bounds are designed. A narrow capped per-database PDH log-capacity subset is
+   a parallel alternative where queries cannot be enabled.
+5. **Additional evidence by need:** file-I/O/tempdb, integrity timestamp,
+   bounded events, selected waits and conditional HA. Broad per-database PDH
+   and raw ERRORLOG expansion are no longer prerequisites for query-mode work.
+   See the role-tab research for scope, sources and validation requirements.
 
 ## On-host probe results
 
@@ -452,7 +463,8 @@ afterwards.
 | The defect fixes build, pass unit tests, and pass overlay fixtures | `dotnet build` 0 warnings / 0 errors; 77 agent tests pass (exit 0); `run-parser-fixtures`, `run-app-page-fixtures`, `run-horizon-central-tests` all exit 0; 70/70 overlay PHP files lint clean |
 | The defect fixes produce correct output on a real SQL host | Development build run with `--once` on the host: ports, port sources, listener state, PIDs, edition and Agent verdicts all correct |
 | LocalDB is not reported as an unmapped engine | Second `--once` run after the fix: `unmapped_engine_processes=0`, `localdb_processes=1` |
-| The agent works installed as a service with these changes | **Not verified.** Not installed; deferred to the next agent release, which would go to the test host first |
+| The agent works installed as a service with these changes | Subsequently verified with the exact published agent 0.6.17 canary: service running, all four SQL sections populated, readable counters and correct Agent/LocalDB semantics. Overlay 0.6.31 live app metrics and SQL RRD graphs were also checked; environment-specific evidence is retained outside the public source |
 
-The DMV list above is still from product knowledge. Treat Tier 2 and Tier 3 as
-unconfirmed until something reads them on a host.
+The later role-tab research checked the proposed SQL metadata sources against
+Microsoft documentation. Optional query collection, restricted permissions and
+overhead remain unverified on a host; no Tier 2/3 implementation is claimed.

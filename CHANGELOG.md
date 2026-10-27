@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — research and documentation
+
+- Propose an automatically detected SQL Server role tab, prioritize existing
+  decision-grade signals and document optional bounded database/log/backup/job
+  collection. Correct earlier permission, integrity-time and counter-interval
+  guidance. No runtime, installer or published artifact changes.
+
 ## Windows agent 0.6.17 - 2026-10-27
 
 Agent-only release. Overlay `0.6.31` (below) is unchanged and already carries the

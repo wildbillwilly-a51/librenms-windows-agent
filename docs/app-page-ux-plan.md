@@ -216,6 +216,31 @@ to evidence, what was cut, sources consulted, and any metric identified as
 collected-but-not-surfaced (which feeds Phase 3) or not-collected-but-valuable
 (which becomes a separate agent-side proposal, out of scope here).
 
+### SQL Server Research Record — 2026-10-27
+
+Proposal: [SQL Server role-tab research](sql-server-role-tab-research.md).
+The SQL-scoped stored-versus-rendered audit is included there; the cross-role
+Phase 3 audit is not claimed complete. No UI, collector or release changes yet.
+
+- Promote an engine-detected first-level SQL Server tab with five forefront
+  tiles: engine services, local TCP listeners, scheduled work, blocking now and
+  pending workspace-memory grants. Use one verdict/attention model and show
+  collection coverage beside the verdict.
+- Demote PLE, memory/target %, connections, rates, edition, ports and PID to
+  evidence. Replace the mixed-unit trend presentation with views over existing
+  datasets grouped by unit; keep existing RRD schemas.
+- Surface bounded stored tempdb/version-store evidence, pressure reason flags,
+  job baseline/reset and applicability context. Qualify the existing longest
+  transaction counter's RCSI scope. These need no new collection.
+- Agent proposals: capability results and cadence-safe cumulative observations
+  first; optional local integrated queries for database/log state, backup
+  evidence and job outcomes next. A narrow capped PDH log-capacity subset is an
+  alternative for sites without query access. No automatic grants or alerts.
+- Sources: Microsoft SQL catalog/DMV/counter, backup, Agent and service-security
+  documentation; LibreNMS application-data documentation; current local source.
+  Claude challenged the priorities and code semantics; the linked record
+  contains the reconciled findings, limits and implementation acceptance checks.
+
 ---
 
 ## Phase 3 — Collected-But-Unsurfaced Data Audit

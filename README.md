@@ -516,6 +516,11 @@ Expected output includes `<<<windows_agent>>>`, `collectors_run=23`, and
 
 ## Development
 
+SQL Server presentation and proposed collection priorities are documented in
+[SQL Server role-tab research](docs/sql-server-role-tab-research.md), with the
+shared UI contract in [the application-page roadmap](docs/app-page-ux-plan.md).
+These are proposals; they do not enable new database queries or change releases.
+
 Universal agent, collector, MSI, and overlay work is developed directly in this
 repository. The source tree uses only the public `LibreNMS.WindowsAgent`
 namespaces and `windows_agent_*` protocol; no private identifier-conversion
