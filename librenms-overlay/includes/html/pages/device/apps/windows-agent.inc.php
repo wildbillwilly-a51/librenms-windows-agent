@@ -342,7 +342,11 @@ $render_tab_summary = static function (array $summary) use ($esc): string {
     if (! empty($attention)) {
         $html .= '<div class="windows-agent-role-attention"><h4>Needs attention <small>' . count($attention) . '</small></h4><ul>';
         foreach ($attention as $item) {
-            $html .= '<li><strong>' . $esc((string) ($item['title'] ?? 'Issue')) . '</strong> ';
+            $html .= '<li><strong>';
+            if (isset($item['href'])) $html .= '<a data-sql-evidence-link href="' . $esc($item['href']) . '">';
+            $html .= $esc((string) ($item['title'] ?? 'Issue'));
+            if (isset($item['href'])) $html .= '</a>';
+            $html .= '</strong> ';
             $html .= '<span class="text-muted">' . $esc((string) ($item['detail'] ?? '')) . '</span>';
             if (($item['action'] ?? '') !== '') {
                 $html .= '<div class="text-muted windows-agent-role-attention-action"><strong>Next:</strong> ' . $esc((string) $item['action']) . '</div>';
@@ -2327,6 +2331,23 @@ echo '<style>
     --sql-subtle: #343b43;
     --sql-link: #79b8ff;
 }
+
+.windows-agent-sql [hidden] { display: none !important; }
+.windows-agent-sql-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 12px; background: var(--sql-subtle); border: 1px solid var(--sql-border); }
+.windows-agent-sql-filters > div { flex: 1 1 190px; }
+.windows-agent-sql-filters label { display: block; margin-bottom: 5px; }
+.windows-agent-sql-filters .form-control { background: var(--sql-surface); color: var(--sql-text); border-color: var(--sql-border); }
+.windows-agent-sql-filter-status { margin: 10px 0; }
+.windows-agent-sql-section { border: 1px solid var(--sql-border); margin-bottom: 10px; }
+.windows-agent-sql-section > summary { cursor: pointer; padding: 10px 12px; background: var(--sql-subtle); }
+.windows-agent-sql-section > summary > span { margin-left: 10px; font-size: 12px; }
+.windows-agent-sql-section > summary:focus-visible { outline: 2px solid var(--sql-link); }
+.windows-agent-sql-section-body { padding: 12px; }
+@media (max-width: 767px) {
+    .windows-agent-sql-filters > div { flex-basis: 100%; }
+    .windows-agent-sql-section > summary > span { display: block; margin: 4px 0 0; }
+}
+
 .windows-agent-sql .text-muted { color: var(--sql-muted) !important; }
 .windows-agent-sql small { color: var(--sql-muted); }
 .windows-agent-sql a { color: var(--sql-link); }
@@ -2627,7 +2648,7 @@ $tab_definitions += [
         'issue' => $state_has_issue($sections['agent']['state']) || $state_has_issue($sections['vm']['state']) || $state_has_issue($sections['performance']['state']),
     ],
 ];
-$active_tab_id = (string) array_key_first($tab_definitions);
+$active_tab_id = $sql_promoted && ($sql_has_scope ?? false) ? 'windows-agent-sql-server' : (string) array_key_first($tab_definitions);
 $issue_icon = '<span class="windows-agent-tab-alert glyphicon glyphicon-exclamation-sign text-danger" title="This tab has one or more issues" aria-label="issues present"></span>';
 echo '<ul class="nav nav-tabs" role="tablist">';
 foreach ($tab_definitions as $id => $tab) {
@@ -2643,7 +2664,65 @@ echo '<script>
 (function () {
     "use strict";
     var lastDrawerTrigger = null;
+    var sqlRoot = document.querySelector(".windows-agent-sql");
+    var sqlForm = sqlRoot && sqlRoot.querySelector("[data-sql-filters]");
+    function sqlScope(writeUrl) {
+        if (!sqlForm) return;
+        var selected = sqlForm.elements.sql_instance.value;
+        var show = sqlForm.elements.sql_show.value;
+        var shown = 0, outside = 0, total = 0;
+        sqlRoot.querySelectorAll("[data-sql-instance]").forEach(function (card) {
+            var visible = (selected === "all" || selected === card.dataset.sqlInstance) && (show === "all" || card.dataset.sqlState !== "ok");
+            card.hidden = !visible;
+            total++;
+            if (visible) shown++; else outside += Number(card.dataset.sqlIssues || 0);
+        });
+        sqlRoot.querySelector("[data-sql-filter-status]").textContent = "Showing " + shown + " of " + total + " instances; " + outside + " instance condition(s) outside this filter. Summary and attention remain global.";
+        sqlRoot.querySelector("[data-sql-empty]").hidden = shown > 0;
+        if (writeUrl) {
+            var url = new URL(sqlForm.action);
+            url.searchParams.set("sql_instance", selected);
+            url.searchParams.set("sql_show", show);
+            if (url.origin === location.origin) history.replaceState(null, "", url);
+        }
+    }
+    if (sqlForm) {
+        sqlForm.addEventListener("submit", function (event) {
+            if (new URL(sqlForm.action).origin !== location.origin) return;
+            event.preventDefault(); sqlScope(true);
+        });
+        sqlForm.addEventListener("change", function () { sqlScope(true); });
+        sqlRoot.querySelector("[data-sql-clear]").addEventListener("click", function (event) {
+            event.preventDefault();
+            sqlForm.elements.sql_instance.value = "all";
+            sqlForm.elements.sql_show.value = "all";
+            sqlScope(true);
+        });
+        sqlScope(false);
+    }
     document.addEventListener("click", function (event) {
+        var evidence = event.target.closest("[data-sql-evidence-link]");
+        if (evidence && sqlForm) {
+            var target = new URL(evidence.href);
+            if (target.origin !== location.origin) return;
+            var id = target.searchParams.get("sql_open");
+            var card = document.getElementById("windows-agent-sql-instance-" + id);
+            if (!card) return;
+            event.preventDefault();
+            sqlForm.elements.sql_instance.value = id;
+            sqlForm.elements.sql_show.value = "all";
+            sqlScope(false);
+            var sqlTab = document.querySelector("a[role=tab][aria-controls=windows-agent-sql-server]");
+            if (sqlTab) sqlTab.click();
+            card.open = true;
+            var section = document.getElementById("windows-agent-sql-" + id + "-" + target.searchParams.get("sql_section"));
+            if (section) section.open = true;
+            history.replaceState(null, "", target);
+            var summary = (section || card).querySelector("summary");
+            summary.focus();
+            summary.scrollIntoView({block: "nearest"});
+            return;
+        }
         if (!event.target.closest("[data-windows-agent-open-sql]")) return;
         var tab = document.querySelector("a[role=tab][aria-controls=windows-agent-sql-server]");
         if (tab) { event.preventDefault(); tab.click(); tab.focus(); }

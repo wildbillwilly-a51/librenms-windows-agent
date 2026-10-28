@@ -1,6 +1,9 @@
 <?php
 
 use App\Models\Application;
+
+require_once dirname(__DIR__, 2) . '/windows-agent/application-save.inc.php';
+require_once dirname(__DIR__, 2) . '/windows-agent/sql-evaluation.inc.php';
 use LibreNMS\RRD\RrdDefinition;
 
 $name = 'windows-agent';
@@ -855,43 +858,7 @@ $fields = [
 // an earlier pool's row (accepted risk, documented in docs/horizon-monitoring.md). "Pool
 // stopped reporting" is not encoded here — it stays on the estate-wide horizon_pools_incomplete
 // rollup; the per-pool state number carries only the positive severity axis.
-foreach ($horizon_pools as $pool_index => $pool_row) {
-    $pool_name = (string) ($pool_row['name'] ?? $pool_index);
-    if ($pool_name === '') {
-        continue;
-    }
-    $pool_metric_key = preg_replace('/[^A-Za-z0-9_-]/', '_', $pool_name);
-    if ($pool_metric_key === null || $pool_metric_key === '') {
-        continue;
-    }
-
-    $pool_machines_total = (int) ($pool_row['machines_total'] ?? 0);
-    $pool_spare_ready = (int) ($pool_row['spare_ready'] ?? 0);
-    $pool_ready_percent = $pool_machines_total > 0
-        ? round(($pool_spare_ready * 100) / $pool_machines_total, 1)
-        : 0;
-
-    // Severity ordinal only: ok < info < warning < critical, so `>= n` means "this bad or worse"
-    // (info = one unavailable spare while capacity remains; count-based per HorizonPoolHealth).
-    // disabled and incomplete sit below ok as sentinels so positive-threshold rules skip them.
-    $pool_state = [
-        'ok' => 0,
-        'info' => 1,
-        'informational' => 1,
-        'warning' => 2,
-        'critical' => 3,
-        'disabled' => -1,
-        'incomplete' => -2,
-    ][strtolower((string) ($pool_row['health_state'] ?? 'incomplete'))] ?? -2;
-
-    $fields['horizon_pool_ready:' . $pool_metric_key] = $pool_spare_ready;
-    $fields['horizon_pool_ready_percent:' . $pool_metric_key] = $pool_ready_percent;
-    $fields['horizon_pool_machines_total:' . $pool_metric_key] = $pool_machines_total;
-    $fields['horizon_pool_state:' . $pool_metric_key] = $pool_state;
-    $fields['horizon_pool_maintenance:' . $pool_metric_key] = (int) ($pool_row['spare_maintenance'] ?? 0);
-    $fields['horizon_pool_spare_total:' . $pool_metric_key] = (int) ($pool_row['spare_total'] ?? 0);
-    $fields['horizon_pool_unready:' . $pool_metric_key] = (int) ($pool_row['spare_unready'] ?? 0);
-}
+$fields = array_merge($fields, \WindowsAgentOverlay\HorizonProjection::poolMetrics(['horizon_pools' => $horizon_pools]));
 
 // Per-instance SQL Server counter metrics, flattened the same way as the Horizon pools
 // so an alert rule can target one instance. Contract: `sql_perf_<measure>:<key>`, where
@@ -972,7 +939,7 @@ $response = ($pending_reboot || $update_reboot || $watched_not_running > 0)
     ? 'WARNING: ' . implode(' ', $status_parts)
     : 'OK: ' . implode(' ', $status_parts);
 
-$windows_agent_app->data = [
+$incoming_application_data = [
     'agent' => $agent,
     'windows_os' => $os,
     'roles' => $roles,
@@ -1679,7 +1646,7 @@ app('Datastore')->put($device, 'app', [
     'health_issues' => $fields['datto_backup_health_issues'],
 ]);
 
-update_application($windows_agent_app, $response, $fields, $response);
+\WindowsAgentOverlay\ApplicationSave::save($windows_agent_app->app_id, $incoming_application_data, $response, $fields);
 
 if (function_exists('base_path')) {
     $horizon_trigger_path = base_path('windows-agent-overlay/horizon-central-coordination.php');

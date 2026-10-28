@@ -1,0 +1,98 @@
+{
+  "name": "Save preserves concurrent central data and complete metrics",
+  "device": {
+    "device_id": 1202,
+    "hostname": "writer.example.test"
+  },
+  "app_id": 2202,
+  "agent_data": {
+    "windows_agent": "version=0.6.17.0 protocol=checkmk host=writer utc=2026-10-28T12:00:00Z"
+  },
+  "existing_application_data": {
+    "horizon_central_meta": {
+      "source": "central"
+    },
+    "horizon_api_summary": {
+      "state": "ok",
+      "sessions_total": "10"
+    },
+    "horizon_pools": [
+      {
+        "name": "OLDPOOL",
+        "machines_total": "4",
+        "spare_ready": "1",
+        "health_state": "warning"
+      }
+    ],
+    "extension_sibling": {
+      "marker": "preserved"
+    }
+  },
+  "initial_metrics": {
+    "horizon_api_sessions_total": 10,
+    "horizon_pool_ready:OLDPOOL": 1,
+    "horizon_vendor_errors_total": 0
+  },
+  "concurrent_application_data": {
+    "horizon_central_meta": {
+      "source": "central",
+      "snapshot_age_seconds": 0
+    },
+    "horizon_api_summary": {
+      "state": "partial",
+      "sessions_total": "20",
+      "services_unhealthy": "3"
+    },
+    "horizon_pools": [
+      {
+        "name": "NEWPOOL",
+        "machines_total": "8",
+        "spare_ready": "5",
+        "health_state": "ok"
+      }
+    ],
+    "horizon_health_summary": {
+      "overall_health_state": "warning",
+      "platform_health_state": "warning",
+      "dependency_health_state": "ok",
+      "capacity_health_state": "ok",
+      "collector_health_state": "ok"
+    },
+    "horizon_vendor_metrics": {
+      "errors_total": "7"
+    }
+  },
+  "concurrent_metrics": {
+    "horizon_api_sessions_total": 20,
+    "horizon_vendor_errors_total": 7,
+    "horizon_overall_health_state": 3
+  },
+  "expect": {
+    "status_prefix": "OK:",
+    "fields": {
+      "horizon_api_sessions_total": 20,
+      "horizon_api_services_unhealthy": 3,
+      "horizon_vendor_errors_total": 7,
+      "horizon_overall_health_state": 3,
+      "horizon_pool_ready:NEWPOOL": 5
+    },
+    "metric_values": {
+      "horizon_api_sessions_total": 20,
+      "horizon_vendor_errors_total": 7,
+      "horizon_overall_health_state": 3,
+      "horizon_pool_ready:NEWPOOL": 5
+    },
+    "metric_previous": {
+      "horizon_api_sessions_total": 10,
+      "horizon_vendor_errors_total": 0
+    },
+    "metrics_absent": [
+      "horizon_pool_ready:OLDPOOL"
+    ],
+    "data": {
+      "extension_sibling.marker": "preserved",
+      "horizon_api_summary.sessions_total": "20",
+      "horizon_pools.0.name": "NEWPOOL"
+    }
+  }
+}

@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace { require_once __DIR__ . '/fixture-storage.inc.php'; }
+
 namespace LibreNMS\RRD {
     final class RrdDefinition
     {
@@ -22,6 +24,20 @@ namespace LibreNMS\RRD {
             ];
 
             return $this;
+        }
+    }
+}
+
+namespace LibreNMS\Util {
+    final class Url
+    {
+        public static function generate(array $vars): string
+        {
+            $url = PHP_SAPI === 'cli-server' ? '/fixture/' . rawurlencode(basename((string) ($_GET['render'] ?? 'sql-server-performance-counters.json'))) : '';
+            $url .= '/' . rawurlencode($vars['page']) . '/';
+            unset($vars['page']);
+            foreach ($vars as $key => $value) $url .= rawurlencode((string) $key) . '=' . rawurlencode((string) $value) . '/';
+            return $url;
         }
     }
 }
@@ -47,6 +63,8 @@ namespace App\Models {
             $this->app_id = $appId;
         }
 
+        public static function query(): \WindowsAgentFixtureApplicationQuery { return new \WindowsAgentFixtureApplicationQuery(); }
+
         public static function find(int $appId): ?self
         {
             return \LibreNMSAppPageTestState::$application;
@@ -68,6 +86,7 @@ namespace {
             self::$application = new \App\Models\Application($appId);
             self::$application->data = $initialData;
             self::$updatedApplication = [];
+            \WindowsAgentFixtureStorage::reset(self::$application);
         }
     }
 
@@ -75,6 +94,7 @@ namespace {
     {
         public function put(array $device, string $type, array $tags, array $fields): void
         {
+            WindowsAgentFixtureStorage::datastoreWrite();
         }
     }
 
@@ -131,6 +151,8 @@ namespace {
 
     function update_application(\App\Models\Application $application, string $response, array $fields, string $status): void
     {
+        WindowsAgentFixtureStorage::save($application, $fields);
+        LibreNMSAppPageTestState::$application = $application;
         LibreNMSAppPageTestState::$updatedApplication = [
             'app_id' => $application->app_id,
             'response' => $response,
@@ -166,6 +188,7 @@ namespace {
         LibreNMSAppPageTestState::$now = isset($fixture['now_utc'])
             ? (int) strtotime($fixture['now_utc'])
             : ((int) strtotime($clock[1] ?? '2026-10-27T18:00:00Z') + 60);
+        WindowsAgentFixtureStorage::$now = LibreNMSAppPageTestState::$now;
 
         $agent_data = $fixture['agent_data'];
         $device = $fixture['device'];
@@ -173,6 +196,7 @@ namespace {
         include $parserPath;
         ob_end_clean();
 
+        $vars = $fixture['page_vars'] ?? [];
         $app = new LibreNMSAppPageFixtureApp((int) $fixture['app_id'], LibreNMSAppPageTestState::$application?->data ?? []);
         ob_start();
         include $pagePath;
@@ -227,7 +251,7 @@ namespace {
         if (PHP_SAPI === 'cli-server') {
             echo '</body></html>';
         }
-        exit(0);
+        return;
     }
 
     $failed = 0;

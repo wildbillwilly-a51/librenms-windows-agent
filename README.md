@@ -298,8 +298,12 @@ The unreleased overlay source also promotes `SQL Server` after these role tabs
 when engine evidence is present. It uses existing agent data for service and
 local-listener state, sampled blocking/grants and scheduled-work evidence, with
 explicit coverage, named attention, expandable instances and separate-unit
-trends. Component-only hosts remain in generic inventory. No database queries
-or new alert rules are enabled.
+trends. Instance/issue dropdowns filter current evidence while attention stays
+global; attention links open Performance, Services and identity, or Collection
+details. URL/GET controls work without JavaScript. Component-only hosts remain
+in generic inventory. Additive [qualified SQL metrics](docs/sql-qualified-metrics.md)
+share page validity/reset checks and carry an absolute expiry for a future rule
+pilot. No database queries or new alert rules are enabled.
 
 Quick network check from the poller that owns the device:
 

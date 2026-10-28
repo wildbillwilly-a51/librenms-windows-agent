@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace { require_once __DIR__ . '/fixture-storage.inc.php'; }
+
 namespace LibreNMS\RRD {
     final class RrdDefinition
     {
@@ -26,6 +28,10 @@ namespace LibreNMS\RRD {
     }
 }
 
+namespace App\Facades {
+    final class LibrenmsConfig { public static function get(string $key): int { return \WindowsAgentFixtureStorage::$now; } }
+}
+
 namespace App\Models {
     final class Application
     {
@@ -36,6 +42,8 @@ namespace App\Models {
         {
             $this->app_id = $appId;
         }
+
+        public static function query(): \WindowsAgentFixtureApplicationQuery { return new \WindowsAgentFixtureApplicationQuery(); }
 
         public static function find(int $appId): ?self
         {
@@ -59,6 +67,7 @@ namespace {
             self::$application->data = $initialData;
             self::$datastoreWrites = [];
             self::$updatedApplication = [];
+            \WindowsAgentFixtureStorage::reset(self::$application);
         }
     }
 
@@ -66,6 +75,7 @@ namespace {
     {
         public function put(array $device, string $type, array $tags, array $fields): void
         {
+            WindowsAgentFixtureStorage::datastoreWrite();
             WindowsAgentOverlayParserTestState::$datastoreWrites[] = [
                 'device' => $device,
                 'type' => $type,
@@ -96,6 +106,8 @@ namespace {
 
     function update_application(\App\Models\Application $application, string $response, array $fields, string $status): void
     {
+        WindowsAgentFixtureStorage::save($application, $fields);
+        WindowsAgentOverlayParserTestState::$application = $application;
         WindowsAgentOverlayParserTestState::$updatedApplication = [
             'app_id' => $application->app_id,
             'response' => $response,
@@ -151,6 +163,12 @@ namespace {
         $fixture = json_decode((string) file_get_contents($fixturePath), true, flags: JSON_THROW_ON_ERROR);
         WindowsAgentOverlayParserTestState::reset((int) $fixture['app_id'], $fixture['existing_application_data'] ?? []);
 
+        preg_match('/(?:^|\s)utc=(\S+)/', (string) ($fixture['agent_data']['windows_agent'] ?? ''), $clock);
+        WindowsAgentFixtureStorage::$now = (int) strtotime($fixture['now_utc'] ?? ($clock[1] ?? '2026-10-27T18:00:00Z')) + (isset($fixture['now_utc']) ? 0 : 60);
+        WindowsAgentFixtureStorage::applyMetrics($fixture['initial_metrics'] ?? [], true);
+        WindowsAgentFixtureStorage::$concurrentData = $fixture['concurrent_application_data'] ?? null;
+        WindowsAgentFixtureStorage::$concurrentMetrics = $fixture['concurrent_metrics'] ?? [];
+
         $agent_data = $fixture['agent_data'];
         $device = $fixture['device'];
 
@@ -190,6 +208,18 @@ namespace {
 
         foreach ($expect['datastore'] ?? [] as $lookup => $expected) {
             assertFixtureEqual($expected, datastoreFieldValue($lookup), "datastore $lookup");
+        }
+
+        if (WindowsAgentFixtureStorage::$transactions !== 1) throw new RuntimeException('Expected one short save transaction');
+        if (isset($fixture['concurrent_application_data']) && ! WindowsAgentFixtureStorage::$interleaved) throw new RuntimeException('Concurrent writer was not exercised');
+        foreach ($expect['metric_values'] ?? [] as $key => $value) {
+            assertFixtureEqual($value, WindowsAgentFixtureStorage::$metrics[$key]['value'] ?? null, 'stored metric ' . $key);
+        }
+        foreach ($expect['metric_previous'] ?? [] as $key => $value) {
+            assertFixtureEqual($value, WindowsAgentFixtureStorage::$metrics[$key]['value_prev'] ?? null, 'previous changed metric ' . $key);
+        }
+        foreach ($expect['metrics_absent'] ?? [] as $key) {
+            if (isset(WindowsAgentFixtureStorage::$metrics[$key])) throw new RuntimeException('Obsolete metric retained: ' . $key);
         }
 
         foreach ($expect['datastore_absent'] ?? [] as $name) {

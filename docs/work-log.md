@@ -1,5 +1,38 @@
 # Work Log
 
+## 2026-10-28 (SQL overlay controls and qualification)
+
+- Added native instance/issue selectors, clear/no-match status, stable evidence
+  links and one-level Performance/Services/Collection disclosures. Global tiles,
+  attention, coverage, host trends and inventory remain unfiltered. URL reload,
+  normal GET without JavaScript and SQL deep links on other first-role hosts work.
+- Extracted a shared SQL evaluation for page interpretation and additive qualified
+  metrics. Explicit timestamp/state checks, an advancing save/render clock,
+  retained expiry for cached payloads, independent job validity and reset/unknown
+  handling preserve measured zero and known bad partial evidence. Legacy fields,
+  agent source, protocol and RRD schemas remain unchanged. No rules were enabled.
+- Replaced the early-model save with a short locked re-read/merge. Shared Horizon
+  projection preserves concurrent central JSON, all central scalar metrics
+  (including health/vendor fields), previous changed values and current pool keys.
+  Other data siblings survive; agent-only metric behavior is preserved. RRD I/O
+  stays outside the transaction. Mode changes during RRD work remain a known limit.
+- Claude reviewed the plan, source and four generic light/dark/mobile screenshots,
+  then verified clock/link/focus corrections in source. Its final response found
+  no remaining blocker. Peer execution did not include tests, browser or hashes.
+- Validation: 32 qualification assertions, 39 parser and 39 page fixtures, 35
+  Horizon checks and 88 source/test PHP syntax results passed. Deterministic
+  interleaving models upstream metric cast/change/delete semantics and verifies
+  both JSON and metrics. Ten source-bound Edge runs and ten captures cover scope,
+  clear/no-match, reload, evidence/focus, keyboard, no-JavaScript GET, role deep
+  links, malformed input, canonical-origin fallback, mobile and scoped dark CSS.
+  No relevant browser errors or horizontal clipping. Unchanged graph source/PNG
+  hashes and lazy-loading behavior were checked; graph math tests were reused.
+- Temporary non-release package: 83 payload files match source; all 82 packaged
+  PHP files linted. Documentation links, complete public-snapshot safety and Git
+  checks passed. Agent/MSI/release tests are inapplicable to this overlay batch.
+  Real DB locking/deadlocks, installed schema/core, production shell/theme and
+  alert lifecycle remain rollout/pilot checks. No release or deployment performed.
+
 ## 2026-10-28 (SQL alerting and details investigation)
 
 - Investigated alert possibilities and page content with Claude as a read-only

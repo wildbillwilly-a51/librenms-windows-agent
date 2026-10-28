@@ -2,6 +2,13 @@
 
 ## Unreleased — SQL Server role tab
 
+- Add instance/issue selectors, stable evidence links and native Performance,
+  Services and Collection disclosures, preserving global attention and coverage.
+  Share SQL qualification with additive metrics, retain payload expiry across
+  cached repeats and distinguish missing/reset evidence from measured zero.
+- Save application data through a locked re-read and merge; re-project complete
+  central Horizon metrics so concurrent updates and central-only health/vendor
+  fields survive a poll. Preserve legacy agent-only metrics and RRD layouts.
 - Document proposed SQL alert validity, policy/state ownership, prioritized
   database/log/job/backup collection and filter/expandable-detail navigation.
   Identify source freshness, reset semantics and unknown/recovery limits;

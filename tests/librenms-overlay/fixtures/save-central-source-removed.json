@@ -1,0 +1,60 @@
+{
+  "name": "Save does not resurrect removed central source",
+  "device": {
+    "device_id": 1202,
+    "hostname": "writer.example.test"
+  },
+  "app_id": 2202,
+  "agent_data": {
+    "windows_agent": "version=0.6.17.0 protocol=checkmk host=writer utc=2026-10-28T12:00:00Z"
+  },
+  "existing_application_data": {
+    "horizon_central_meta": {
+      "source": "central"
+    },
+    "horizon_api_summary": {
+      "state": "ok",
+      "sessions_total": "10"
+    },
+    "horizon_pools": [
+      {
+        "name": "OLDPOOL",
+        "machines_total": "4",
+        "spare_ready": "1",
+        "health_state": "warning"
+      }
+    ],
+    "extension_sibling": {
+      "marker": "preserved"
+    }
+  },
+  "initial_metrics": {
+    "horizon_api_sessions_total": 10,
+    "horizon_pool_ready:OLDPOOL": 1,
+    "horizon_vendor_errors_total": 0
+  },
+  "concurrent_application_data": {
+    "horizon_central_meta": {},
+    "horizon_api_summary": [],
+    "horizon_pools": [],
+    "horizon_health_summary": [],
+    "horizon_vendor_metrics": []
+  },
+  "concurrent_metrics": {},
+  "expect": {
+    "status_prefix": "OK:",
+    "fields": {
+      "horizon_api_sessions_total": 0
+    },
+    "metrics_absent": [
+      "horizon_pool_ready:OLDPOOL",
+      "horizon_vendor_errors_total",
+      "horizon_overall_health_state"
+    ],
+    "data": {
+      "extension_sibling.marker": "preserved",
+      "horizon_central_meta": {},
+      "horizon_pools": []
+    }
+  }
+}

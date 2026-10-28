@@ -5,6 +5,15 @@ Baseline: existing-data SQL tab at `27c824e`; published versions remain in
 `CURRENT-STATE.md`. This document adds no collectors, permissions or alert rules.
 It extends [the role-tab research](sql-server-role-tab-research.md).
 
+Implementation update: the overlay-only foundation and existing-data selectors/
+disclosures are now implemented in unreleased source. See
+[qualified metrics and controls](sql-qualified-metrics.md) for the actual
+contract and validation boundary. The source findings below describe the
+research baseline; the locked saver and shared projection address its data/
+metric overwrite path. Distinct SQL sample history, new query capabilities,
+monitoring policy/digest configuration, held incidents and alert activation
+remain future batches.
+
 ## Recommendation
 
 Add database availability, log capacity, actual job outcomes and backup evidence,
@@ -64,7 +73,7 @@ expectations before an overdue rule is meaningful. Last outcome alone can miss
 a failure followed by a success between polls; retain bounded occurrence
 identity/count evidence if that alert behavior is required. [5], [6], [7]
 
-## Existing alert path: findings that affect implementation
+## Research-baseline alert path: findings that affect implementation
 
 The existing parser passes numeric fields to `update_application`; it already
 exports `sql_perf_state`, blocked/grants/PLE/connections/batches/jobs/pressure
@@ -214,7 +223,7 @@ generation/gap information reported to this poller state. Restart/failover and
 two polling paths observing the same snapshot need idempotence tests. The
 optional held-incident latch below is additional state with a different purpose.
 
-The current save path is not suitable for that persistence unchanged. The
+The research-baseline save path was not suitable for that persistence unchanged. The
 [parser](../librenms-overlay/includes/polling/unix-agent/windows_agent.inc.php)
 reads application data near its start, rebuilds a fixed key list and saves the
 whole model after RRD work. It carries central Horizon data from that early

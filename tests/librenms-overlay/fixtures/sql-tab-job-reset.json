@@ -29,17 +29,17 @@
       "panes": {
         "windows-agent-sql-server": {
           "contains": [
-            "<span class=\"label label-success\">OK</span> <strong>",
-            "No issues observed in service, listener and readable counter checks.",
+            "<span class=\"label label-info\">Unknown</span> <strong>",
+            "SQL Server is partially checked; some evidence is unavailable.",
             "Database state, backups and job history are not collected",
             "1/1 running",
             "1/1 listening",
             "Baseline reset — awaiting next sample",
-            "job failures not measured"
+            "job failures not measured",
+            "sampled job counters are unavailable or awaiting a reset baseline."
           ],
           "not_contains": [
-            "Needs attention",
-            "Collection coverage"
+            "Needs attention"
           ]
         },
         "windows-agent-roles": {

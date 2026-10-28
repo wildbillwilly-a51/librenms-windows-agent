@@ -4,6 +4,10 @@ Date: 2026-10-27. Status: **existing-data tab implemented in unreleased overlay
 source; agent additions remain proposals**.
 Source baseline: agent 0.6.17 / overlay 0.6.31, commit `3f5e91c`.
 
+The subsequent [qualified-metric/control batch](sql-qualified-metrics.md) adds
+existing-data filters and shared observation qualification in unreleased source.
+Its contract is implemented; optional database-query collection remains proposed.
+
 ## Recommendation
 
 Promote SQL Server to an automatically detected first-level tab, following the
