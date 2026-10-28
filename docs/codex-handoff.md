@@ -1,22 +1,22 @@
 # Codex Handoff
 
-- Objective: Publish/deploy approved corrective overlay 0.6.33 and complete
-  SQL tab verification with Claude, keeping the agent release separate.
-- Current State: 0.6.33 packages reviewed correction `ba763ee`, preserving
-  native graph HTML and core lazy loading. It supersedes deployed 0.6.32,
-  whose live SQL tooltip markup broke tab parentage. Installer/capability
-  defaults and checksum target the new immutable payload. Agent 0.6.17 and
-  previous overlay artifacts remain byte-identical. No rules are enabled.
+- Objective: Publish/deploy overlay and verify SQL tab with Claude while
+  preserving the agent release. Completed with approved corrective 0.6.33.
+- Current State: Public/private main release `f5176d2`; overlay installer default
+  0.6.33, agent 0.6.17 unchanged. Native graph HTML/lazy loading is preserved.
+  This supersedes 0.6.32, whose live tooltip markup disrupted tab layout.
+  Prior overlay and agent artifacts remain immutable. No alert rules enabled.
 - Validation Completed: 93 portable checks, four extracted-package PHP suites,
-  82 packaged PHP lints, 83 payload/source comparisons and preserved RRD
-  definitions. Native golden regression catches immutable 0.6.32; correction
-  passes 39 page fixtures and ten source-bound generic browser runs with native
-  graph shape, tooltip script and verified raw production styles. Claude
-  source/four-image review found no blocker. Installed-core/schema and normal
-  canary metrics/eight graph types were verified during the 0.6.32 rollout.
-- Relevant Decisions: New release/deploy explicitly approved; no .32 recut.
-  Agent rollout, optional query collection and alerts remain separate. SQL
-  qualification is not dwell/held-incident state. Actual alert lifecycle and
-  sustained contention remain pilot work.
-- Next Action: Finish public snapshot/publication checks, deploy exact 0.6.33
-  through the management updater and repeat live tab/tooltip/graph acceptance.
+  82 packaged PHP lints, 83 source/payload comparisons, preserved agent/RRD
+  definitions and a clean full public scan. All 22 public URL checks match.
+  Installed/staged deployment files and services pass; updater is current.
+  Normal polling retains 33 qualified metrics, correct expiry/missing-zero
+  semantics, eight rendered SQL graph types and three fresh SQL RRD families.
+  Live tab/tooltip/filter/disclosure/Overview/deep-link, native icon, console
+  and mobile checks pass. Native golden regression catches immutable 0.6.32;
+  ten source-bound generic browser runs pass. Claude reviewed correction source
+  and four generic images with no blocking issue; lead verified actual UI.
+- Relevant Decisions: Agent release/rollout and optional SQL query collection
+  stay separate. Qualification is observation validity, not dwell, event
+  history or held incident state. Sustained DB contention and actual alert
+  lifecycle remain optional pilot work; these do not block this overlay release.

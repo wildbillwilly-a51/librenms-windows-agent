@@ -150,5 +150,7 @@ check. A release preflight against an installed core verified double-precision
 values, 64-character metric keys and all 33 canary qualification metrics through
 the actual save seam. An outer transaction rolled back with application and
 metric rows unchanged. This checks the seam and precision, not sustained
-contention or deadlocks. Production theme and actual alert lifecycle remain
-pilot/rollout checks.
+contention or deadlocks. Corrective overlay `0.6.33` passed native production
+graph-row/tab, tooltip, scoped theme, filter/deep-link and mobile checks after
+removing a post-render image rewrite. Sustained contention and actual alert
+lifecycle remain pilot checks.

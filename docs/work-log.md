@@ -12,8 +12,18 @@
   Reuse the correction's source-bound native golden/negative-control and ten
   generic browser runs with verified raw production styles. Claude source/pixel
   review found no blocker. No alert rules or agent rollout.
-- Public snapshot verification, immutable publication and approved deployment
-  are followed by actual production tab/tooltip/graph acceptance.
+- Published commit `f5176d2` passed the full public snapshot scan (309 files,
+  2599 objects/archive members, zero findings) and 22 pinned/main raw URL
+  comparisons. Approved deployment verifies exact installed/staged payloads,
+  healthy services, backend exclusion and updater current/no-op.
+- Live SQL acceptance now passes: native graph parentage and tooltip image,
+  filters/no-match/clear, Performance/Collection, SQL/Overview agreement, direct
+  Collection link, native icons and 390-pixel mobile details without horizontal
+  clipping. Browser diagnostics are clean. Normal polling retains 33 qualified
+  metrics with correct expiry and missing/zero jobs; all eight SQL graph types
+  render and all three existing SQL RRD families are fresh.
+- The earlier 0.6.32 UI failure is superseded by 0.6.33; prior artifacts remain
+  immutable. Agent 0.6.17 source, installer, MSI/config and alert rules are unchanged.
 
 ## 2026-10-28 (Native graph markup correction; unreleased)
 

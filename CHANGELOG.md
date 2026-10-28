@@ -6,8 +6,8 @@
   image rewrite that inserted quotes into escaped tooltip attributes, breaking
   the graph markup and tab parentage in overlay 0.6.32.
 - Replace the flat graph stub with a generic native-renderer golden fragment
-  and require SQL graph HTML to remain byte-identical. No agent, metric, RRD,
-  agent release or previous published-artifact changes.
+  and require SQL graph HTML to remain byte-identical. No agent, metric or
+  RRD changes; previous published artifacts remain unchanged.
 
 ## Overlay 0.6.32 - 2026-10-28
 
