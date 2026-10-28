@@ -865,7 +865,7 @@ $tests['discovery reports TLS auth identity and cross-site ambiguity failures'] 
 $tests['capability manifest advertises the stable private integration contract'] = static function (): void {
     $path = dirname(__DIR__, 2) . '/librenms-overlay/tools/capabilities.json';
     $manifest = json_decode((string) file_get_contents($path), true, flags: JSON_THROW_ON_ERROR);
-    expect($manifest['overlay_version'] === '0.6.32', 'overlay capability version mismatch');
+    expect($manifest['overlay_version'] === '0.6.33', 'overlay capability version mismatch');
     expect((int) ($manifest['capabilities']['horizon_machine_state_taxonomy'] ?? 0) === 1, 'machine state taxonomy capability not advertised');
     expect((int) ($manifest['capabilities']['horizon_uniform_tab_summaries'] ?? 0) === 1, 'uniform tab summaries capability not advertised');
     expect((int) ($manifest['capabilities']['horizon_disconnected_stuck_detection'] ?? 0) === 1, 'disconnected stuck detection capability not advertised');

@@ -1,13 +1,13 @@
 # Changelog
 
-## Unreleased — native SQL graph markup correction
+## Overlay 0.6.33 - 2026-10-28
 
 - Preserve core graph-row HTML and native lazy loading. Remove the SQL-only
   image rewrite that inserted quotes into escaped tooltip attributes, breaking
   the graph markup and tab parentage in overlay 0.6.32.
 - Replace the flat graph stub with a generic native-renderer golden fragment
   and require SQL graph HTML to remain byte-identical. No agent, metric, RRD,
-  default-version or published-artifact changes.
+  agent release or previous published-artifact changes.
 
 ## Overlay 0.6.32 - 2026-10-28
 

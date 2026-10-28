@@ -1,28 +1,22 @@
 # Codex Handoff
 
-- Objective: Publish/deploy overlay 0.6.32 and verify the SQL tab with Claude,
-  keeping the agent release separate. Publication and deployment completed;
-  live UI acceptance found a graph markup defect.
-- Current State: Public/private main release commit `0cb8f92`, overlay 0.6.32,
-  agent 0.6.17. All five application nodes match all 83 installed/staged files;
-  backends are overlay-free and services healthy. Normal polling stores 33
-  qualified metrics; all eight SQL graph types render. Live instance filters
-  and evidence disclosures work. Graph tooltip corruption disrupts tab layout,
-  so complete UI acceptance is not claimed.
-- Correction: `codex/sql-native-graph-markup` preserves native graph HTML and
-  its lazy loading, removing the post-render image rewrite. Native golden
-  fixtures replace the flat stub and detect immutable 0.6.32 as a negative
-  control. No release bytes, versions/defaults, metrics, agent or RRD changes.
-- Validation Completed: Release: 93 portable checks, four extracted-package
-  suites, 82 packaged PHP lint, full public scan and 22 public URL checks.
-  Correction: 39 page fixtures, native byte/structure/tooltip checks and ten
-  source-bound browser interaction runs with production styles and generic data.
-  Claude reviewed release/source plans, the correction and four generic images
-  with no blocking issue. Lead resolved the asset-export glyph fidelity issue
-  using raw server CSS hash checks and verified every SQL graph type.
-- Relevant Decisions: Published 0.6.32 is immutable. Correction must ship as a
-  new overlay release after explicit operator publication/deployment approval.
-  No alert rules or agent rollout. Sustained DB contention and actual alert
-  lifecycle remain pilot work; qualification is not dwell/held incident state.
-- Next Action: Complete correction peer review and obtain approval to publish
-  and deploy the next immutable overlay version, then repeat live UI acceptance.
+- Objective: Publish/deploy approved corrective overlay 0.6.33 and complete
+  SQL tab verification with Claude, keeping the agent release separate.
+- Current State: 0.6.33 packages reviewed correction `ba763ee`, preserving
+  native graph HTML and core lazy loading. It supersedes deployed 0.6.32,
+  whose live SQL tooltip markup broke tab parentage. Installer/capability
+  defaults and checksum target the new immutable payload. Agent 0.6.17 and
+  previous overlay artifacts remain byte-identical. No rules are enabled.
+- Validation Completed: 93 portable checks, four extracted-package PHP suites,
+  82 packaged PHP lints, 83 payload/source comparisons and preserved RRD
+  definitions. Native golden regression catches immutable 0.6.32; correction
+  passes 39 page fixtures and ten source-bound generic browser runs with native
+  graph shape, tooltip script and verified raw production styles. Claude
+  source/four-image review found no blocker. Installed-core/schema and normal
+  canary metrics/eight graph types were verified during the 0.6.32 rollout.
+- Relevant Decisions: New release/deploy explicitly approved; no .32 recut.
+  Agent rollout, optional query collection and alerts remain separate. SQL
+  qualification is not dwell/held-incident state. Actual alert lifecycle and
+  sustained contention remain pilot work.
+- Next Action: Finish public snapshot/publication checks, deploy exact 0.6.33
+  through the management updater and repeat live tab/tooltip/graph acceptance.

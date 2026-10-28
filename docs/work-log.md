@@ -1,5 +1,20 @@
 # Work Log
 
+## 2026-10-28 (Overlay 0.6.33 corrective release)
+
+- Operator approved a new immutable overlay release and cluster deployment
+  after 0.6.32 live acceptance found the native tooltip markup defect. Package
+  the reviewed native-HTML correction; set installer/capability default to
+  0.6.33. Preserve both prior overlay artifacts and agent 0.6.17 bytes.
+- Release validation: 93 portable checks; all four extracted-package PHP suites,
+  82 packaged PHP lints and 83 source/payload comparisons; shell syntax,
+  unchanged SQL RRD definitions, and preserved agent source/installer/artifacts.
+  Reuse the correction's source-bound native golden/negative-control and ten
+  generic browser runs with verified raw production styles. Claude source/pixel
+  review found no blocker. No alert rules or agent rollout.
+- Public snapshot verification, immutable publication and approved deployment
+  are followed by actual production tab/tooltip/graph acceptance.
+
 ## 2026-10-28 (Native graph markup correction; unreleased)
 
 - Removed post-processing of core graph-row HTML after the live release check
