@@ -526,6 +526,8 @@ Expected output includes `<<<windows_agent>>>`, `collectors_run=23`, and
 SQL Server presentation and proposed collection priorities are documented in
 [SQL Server role-tab research](docs/sql-server-role-tab-research.md), with the
 shared UI contract in [the application-page roadmap](docs/app-page-ux-plan.md).
+Proposed alert-ready collection, policy ownership and dropdown/detail navigation
+are covered in [SQL Server alerting and details design](docs/sql-server-alerting-and-details-design.md).
 The existing-data tab is implemented in unreleased overlay source; additional
 agent collection remains proposed. Published installers and payloads are unchanged.
 

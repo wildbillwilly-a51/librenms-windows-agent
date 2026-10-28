@@ -2,6 +2,10 @@
 
 ## Unreleased — SQL Server role tab
 
+- Document proposed SQL alert validity, policy/state ownership, prioritized
+  database/log/job/backup collection and filter/expandable-detail navigation.
+  Identify source freshness, reset semantics and unknown/recovery limits;
+  no runtime, agent, rule activation or release changes in this investigation.
 - Promote detected SQL engines to a first-level tab using existing agent data,
   with five decision tiles, named attention, explicit collection coverage and
   expandable instance evidence. Keep SQL status consistent with Overview and

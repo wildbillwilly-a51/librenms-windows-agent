@@ -21,6 +21,11 @@ are omitted. Primary documentation and this repository's code support the
 decisions below; collection overhead and restricted-login behavior still need
 implementation-time validation.
 
+The follow-on [alerting and details design](sql-server-alerting-and-details-design.md)
+investigates numeric-metric validity, policy and incident lifecycle, optional
+collection batches and instance selectors/expandable evidence. It remains a
+proposal; it does not add agent queries or enable alerting.
+
 Microsoft recommends comparing performance against a measured workload baseline.
 As a comparable-product cross-check, Redgate Monitor distinguishes database
 unavailability, blocking, backup overdue, job failure and collection failure,

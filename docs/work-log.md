@@ -1,5 +1,29 @@
 # Work Log
 
+## 2026-10-28 (SQL alerting and details investigation)
+
+- Investigated alert possibilities and page content with Claude as a read-only
+  source/design partner. Retained a prioritized database/log/job/backup proposal,
+  optional local-query boundary, policy and persisted-evaluation ownership,
+  instance dropdown/filter design and bounded expandable evidence hierarchy.
+- Verified page/legacy-metric guard differences and reset-plus-available semantics
+  against current source. Pinned upstream LibreNMS checks cover metric updates,
+  deletion, numeric storage, rule recovery on lost matches and entity identity.
+  Documented absolute expiry, partial-object monitoring gaps, count-only alert
+  limits, distinct-sample dwell and separate unverified/recovery behavior.
+- Recorded a possible stale-snapshot overwrite between the poller and central
+  Horizon publisher, including overlapping metric writes. Future SQL persistence
+  must use save-time re-read/merge, locked sample transitions and consistent
+  metric projection; no production loss was observed or runtime fix made here.
+  Final metric-ownership and rollout clarifications were source-checked by Codex
+  after Claude's last response; runtime validation remains an implementation gate.
+- Validation: Microsoft and LibreNMS primary sources, source-to-proposal tracing,
+  Claude critique/reconciliation, Markdown/local links, full public-snapshot
+  safety scan and Git diff checks. The inspected upstream core is reference
+  evidence; installed schema/core and actual alert lifecycle remain pilot checks.
+  No runtime/build tests apply to this documentation-only change. Agent code,
+  grants, alert rules, versions, published artifacts and deployments are unchanged.
+
 ## 2026-10-27 (existing-data SQL Server tab)
 
 - Implemented an engine-evidence-gated first-level SQL tab with five summary

@@ -1,30 +1,32 @@
 # Codex Handoff
 
-- Objective: Implement the existing-data SQL Server tab with Claude design and
-  visual review, keeping all agent changes separate. Implementation complete.
-- Current State: Unreleased overlay source is on `codex/sql-server-tab`, based on
-  research commit `5d62251`. An engine-evidence-gated first-level SQL tab has
-  five decision tiles, named attention, explicit coverage/freshness and native
-  instance disclosures. One issue model also drives Overview; generic Roles
-  keeps a pointer. Five separate-unit performance views use existing RRD DS.
-  Agent, protocol, metrics/schema, installer, versions/checksums and published
-  payloads are unchanged. No release or deployment performed.
-- Relevant Decisions: Preserve AD/FactoryTalk/Horizon/SQL ordering and first-role
-  landing behavior. With failed collection and no engine rows, show unknown SQL
-  collection in Overview/Role inventory and omit the tab; no last-good persistence
-  added. UI freshness uses a documented conservative 15-minute limit. Existing
-  pressure flags remain the policy source. Native lazy images and negative/bin
-  masking preserve missing evidence. Job deltas remain qualified sampled values.
-- Validation Completed: Claude design, source and pixel reviews reconciled; its
-  final review found no remaining blocker. Thirty page and thirty parser fixtures,
-  35 Horizon checks, 81 PHP syntax results, five real RRD PNG/xport checks and nine
-  source/image-bound Edge views passed. Desktop/mobile and light/dark fixture
-  checks cover keyboard evidence, tab navigation, lazy graphs and no clipping or
-  relevant browser errors. Read-only inspection confirmed existing canary RRD
-  MIN/MAX/AVERAGE archives. Temporary package: 80 payload files match source,
-  eight new SQL PHP files present and all 79 packaged PHP files linted. Complete
-  public-safety and diff checks passed. Local save uses explicit scoped Git because
-  the save helper does not support linked worktrees.
-- Validation Remaining: Production theme and print-graphrow integration are rollout
-  checks. Agent/MSI tests are inapplicable to this overlay-only change. Additional
-  agent collection remains a separate proposal; no SQL queries or grants added.
+- Objective: Investigate SQL alerting possibilities, useful app-page content and
+  dropdown/expandable details with Claude. Investigation complete; retained in
+  `docs/sql-server-alerting-and-details-design.md`. No implementation authorized
+  by this investigation beyond documentation.
+- Current State: `codex/sql-alerting-design` builds on completed, unreleased SQL
+  tab commit `27c824e`. The proposal prioritizes alert validity/shared evaluation,
+  then separate optional database/log/job/backup collection. Agent source,
+  permissions, rules, RRD schemas, versions, installers and release payloads are
+  unchanged; no GitHub publication or deployment performed.
+- Relevant Decisions: Keep current evidence/legacy metric contracts, add qualified
+  fields later, and assign cross-poll sample/dwell state to a bounded persisted
+  overlay evaluator. Unknown/partial/expired data must not imply healthy recovery.
+  New policy has one operator-owned source; existing pressure limits remain
+  labeled agent policy. Dropdowns filter current scope; native disclosures show
+  evidence while global attention/coverage stay visible. Existing graphs remain
+  host aggregates. Future state saving requires a locked save-time re-read,
+  idempotent transitions and a shared projection for overlapping Horizon metrics;
+  current stale-snapshot overwrite is a source-identified possibility, not an
+  observed production loss. No query or alert is enabled by this proposal.
+- Validation Completed: Claude source/design critique and reconciliation;
+  Microsoft/LibreNMS primary-source checks; pinned upstream core/storage/alert
+  behavior and local reset/metric semantics; documentation links, public-safety
+  snapshot and diff checks. Earlier tab validation remains recorded in work log:
+  30 page/30 parser fixtures, 35 Horizon checks, 81 PHP lint results, five actual
+  RRD renders/exports and nine source-bound browser views.
+- Validation Remaining: Future implementation must test installed core/schema,
+  clock/expiry, bad/unknown/good lifecycle, fault identity, persistence/idempotence,
+  query permissions/limits/overhead and dropdown accessibility/themes. Existing
+  tab production theme/print-graphrow integration remains a rollout check.
+  No runtime, build or visual tests were added for this documentation-only work.
