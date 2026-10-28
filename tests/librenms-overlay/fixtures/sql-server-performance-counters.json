@@ -125,7 +125,6 @@
             "APPDB: performance counters are not measured.",
             "application_windows-agent_sql_server_queues",
             "Not measured",
-            "loading=\"lazy\"",
             "2 job failures",
             "+3 more",
             "1/2 instances measured"

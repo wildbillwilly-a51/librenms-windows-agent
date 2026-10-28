@@ -215,7 +215,7 @@ $kv_table = static function (array $rows) use ($esc): string {
     return $html;
 };
 
-$render_graph_html = static function (string $key, bool $lazy_images = false) use ($app_id): string {
+$render_graph_html = static function (string $key) use ($app_id): string {
     $graph_type = $key;
     $graph_array = [];
     $graph_array['height'] = '100';
@@ -227,7 +227,8 @@ $render_graph_html = static function (string $key, bool $lazy_images = false) us
     ob_start();
     include 'includes/html/print-graphrow.inc.php';
     $html = (string) ob_get_clean();
-    return $lazy_images ? (string) preg_replace('/<img\b(?![^>]*\bloading=)/i', '<img loading="lazy" decoding="async"', $html) : $html;
+    // Core owns lazy loading and the escaping of images inside tooltip attributes.
+    return $html;
 };
 
 $state_has_issue = static function (array $state): bool {
@@ -1990,7 +1991,7 @@ $performance_tab .= $render_section_summary('performance-depth', 'Windows Perfor
     ['label' => 'Pressure Issues', 'key' => 'windows-agent_perf_pressure_issues'],
 ]);
 
-$render_graph_list = static function (array $graphs, string $id_prefix, bool $lazy_images = false) use ($esc, $render_graph_html, $render_disclosure): string {
+$render_graph_list = static function (array $graphs, string $id_prefix) use ($esc, $render_graph_html, $render_disclosure): string {
     $primary = '';
     $secondary = '';
     foreach ($graphs as $graph) {
@@ -1999,7 +2000,7 @@ $render_graph_list = static function (array $graphs, string $id_prefix, bool $la
             continue;
         }
 
-        $graph_html = '<div class="windows-agent-graph-view"><h4>' . $esc($graph['label'] ?? 'Graph') . '</h4>' . $render_graph_html($graph_key, $lazy_images) . '</div>';
+        $graph_html = '<div class="windows-agent-graph-view"><h4>' . $esc($graph['label'] ?? 'Graph') . '</h4>' . $render_graph_html($graph_key) . '</div>';
         if ((bool) ($graph['secondary'] ?? false)) {
             $secondary .= $graph_html;
         } else {

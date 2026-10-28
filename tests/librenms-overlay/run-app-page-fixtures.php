@@ -212,9 +212,19 @@ namespace {
 
     $stubRoot = sys_get_temp_dir() . '/windows-agent-app-page-fixture-stubs';
     @mkdir($stubRoot . '/includes/html', 0777, true);
+    // Generic native Html::graphRow output from core cd03f8a076c38f90b4b238d557eb8285bd9fffca.
+    // Preserve the escaped nested image in onmouseover, not just a flat graph image.
+    $nativeGraphRow = (string) file_get_contents(__DIR__ . '/native-graph-row.html');
+    file_put_contents($stubRoot . '/native-graph-row.html', $nativeGraphRow);
     file_put_contents(
         $stubRoot . '/includes/html/print-graphrow.inc.php',
-        '<?php echo "<div class=\"graph-stub\" data-type=\"" . htmlspecialchars((string) ($graph_array["type"] ?? ""), ENT_QUOTES, "UTF-8") . "\"><img src=\"fixture-graph.png\" alt=\"Fixture graph\"></div>";'
+        <<<'PHP'
+<?php
+$type = htmlspecialchars((string) ($graph_array['type'] ?? ''), ENT_QUOTES, 'UTF-8');
+echo '<div class="graph-stub" data-type="' . $type . '">';
+echo str_replace('__GRAPH_TYPE__', $type, file_get_contents(__DIR__ . '/../../native-graph-row.html'));
+echo '</div>';
+PHP
     );
     set_include_path($stubRoot . PATH_SEPARATOR . get_include_path());
 
@@ -260,6 +270,11 @@ namespace {
         try {
             $fixture = json_decode((string) file_get_contents($fixturePath), true, flags: JSON_THROW_ON_ERROR);
             $html = renderFixture($fixturePath, $parserPath, $pagePath);
+
+            preg_match_all('/data-type="(application_windows-agent_sql_server[a-z_]*)"/', $html, $sqlGraphTypes);
+            foreach (array_unique($sqlGraphTypes[1]) as $sqlGraphType) {
+                assertContainsText($html, str_replace('__GRAPH_TYPE__', $sqlGraphType, $nativeGraphRow), $name . ':native graph HTML must remain byte-identical:' . $sqlGraphType);
+            }
 
             foreach ([
                 'Health Overview',

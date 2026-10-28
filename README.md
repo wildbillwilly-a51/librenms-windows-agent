@@ -11,6 +11,11 @@ The current published overlay is `0.6.32` and the current Windows agent is
 `0.6.17`. They are versioned independently. See `CURRENT-STATE.md` for release
 status.
 
+Known issue in published overlay `0.6.32`: SQL trend tooltip markup can disrupt
+the application tab layout. A source correction preserves native LibreNMS graph
+HTML and lazy loading; its corrective release is pending. Existing collection
+and metric storage remain operational. Published payloads are unchanged.
+
 ## Primary Runbook
 
 Use this path for a normal installation or upgrade.

@@ -1,5 +1,25 @@
 # Work Log
 
+## 2026-10-28 (Native graph markup correction; unreleased)
+
+- Removed post-processing of core graph-row HTML after the live release check
+  demonstrated quotes inserted inside escaped tooltip attributes. Installed
+  core already supplies lazy loading for visible graph images.
+- Added a generic native graph-row golden fixture from the inspected core,
+  including escaped tooltip images. All 39 page fixtures preserve its bytes;
+  the regression fails against immutable 0.6.32 as a negative control.
+- Browser checks use the observed production styles, native graph-row shape
+  and actual tooltip script with generic fixture data. Structural checks cover
+  24 intact graph anchors, seven sibling tab panes, no leaked attributes,
+  valid tooltip handlers and a rendered popup image. Ten interaction runs cover
+  desktop/mobile/dark/no-JavaScript behavior. Claude found no blocking source
+  or visual issue. Its glyph-fidelity finding was traced to text conversion in
+  the browser asset export; fresh raw server CSS hashes and U+E114 live-DOM
+  comparison corrected the harness. Lead verification after review extends
+  byte identity to every SQL graph type and repeats the browser captures.
+  No version bump, new artifact, public push or corrective
+  deployment is authorized yet. Agent work remains separate.
+
 ## 2026-10-28 (Overlay 0.6.32 release)
 
 - Package the existing-data SQL role tab, instance/issue filters, disclosures,
@@ -15,8 +35,15 @@
   and 33 qualification metrics. The actual save seam ran in a short outer
   transaction and rolled back with application/metric rows identical. This is
   not a sustained-contention test. No alert rules or agent deployments.
-- Claude reviewed the release plan; final package/public-safety review and
-  operator-authorized cluster rollout are the remaining release steps.
+- Publication commit `0cb8f92` passed the full snapshot scan (307 files, 2506
+  objects/archive members, zero findings) and 22 pinned/main public URL checks.
+  Operator-authorized cluster rollout completed; all five application nodes
+  match all 83 installed/staged payloads, required services are active and
+  backends remain overlay-free. Normal polling emits 33 qualified metrics and
+  all eight SQL graph types render. Agent 0.6.17 is unchanged.
+- Live SQL filters/disclosures work, but native graph tooltip HTML is corrupted
+  by the SQL image rewrite, disrupting tab layout. Acceptance is incomplete.
+  Published 0.6.32 remains immutable; do not broaden rollout before correction.
 
 ## 2026-10-28 (SQL overlay controls and qualification)
 

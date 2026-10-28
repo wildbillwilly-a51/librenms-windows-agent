@@ -184,7 +184,7 @@ if ($sql_view['counterNames'] !== []) {
     $sql_graphs[] = ['label' => 'Memory / target — highest readable instance, context only', 'key' => 'windows-agent_sql_server_memory', 'secondary' => true];
 }
 $sql_trend_note = '<p class="text-muted">Host aggregates only; these plots do not contain per-instance history. Currently readable instances: ' . $esc($sql_view['counterNames'] === [] ? 'none' : implode(', ', $sql_view['counterNames'])) . '. Partial sums may under-report the host. Historical contributing instances are not recorded at each point. Negative unavailable values are hidden in the performance views; gaps do not mean zero.</p>';
-$sql_tab .= $render_disclosure('windows-agent-sql-trends', 'Trends', $sql_trend_note . $render_graph_list($sql_graphs, 'windows-agent-sql', true), 'Host aggregates · separate units');
+$sql_tab .= $render_disclosure('windows-agent-sql-trends', 'Trends', $sql_trend_note . $render_graph_list($sql_graphs, 'windows-agent-sql'), 'Host aggregates · separate units');
 
 $sql_inventory = '<p class="text-muted windows-agent-sql-scroll-hint">Tables scroll horizontally on smaller screens.</p>';
 $sql_inventory .= $table(['Instance', 'Edition', 'Patch level', 'State', 'Start mode', 'Ports', 'PID'], array_column($sql_view['cards'], 'row'), static function (array $row) use ($esc): string {
