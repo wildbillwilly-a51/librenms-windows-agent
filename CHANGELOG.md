@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased — SQL Server role tab
+## Overlay 0.6.32 - 2026-10-28
+
+Overlay-only release using existing agent data; Windows agent `0.6.17` is
+preserved byte-for-byte. No alert rules are enabled.
 
 - Add instance/issue selectors, stable evidence links and native Performance,
   Services and Collection disclosures, preserving global attention and coverage.
@@ -12,19 +15,19 @@
 - Document proposed SQL alert validity, policy/state ownership, prioritized
   database/log/job/backup collection and filter/expandable-detail navigation.
   Identify source freshness, reset semantics and unknown/recovery limits;
-  no runtime, agent, rule activation or release changes in this investigation.
+  optional query collection remains future agent work.
 - Promote detected SQL engines to a first-level tab using existing agent data,
   with five decision tiles, named attention, explicit collection coverage and
   expandable instance evidence. Keep SQL status consistent with Overview and
   avoid duplicate SQL warnings in generic Roles.
 - Add separate-unit performance views over existing SQL RRD datasets, preserve
   gaps for negative unavailable samples and bins containing them, and lazy-load SQL graph images.
-  Preserve agent code, protocol, RRD schemas, alerts and released artifacts.
+  Preserve agent code, protocol, RRD schemas and previous released artifacts.
 
 - Propose an automatically detected SQL Server role tab, prioritize existing
   decision-grade signals and document optional bounded database/log/backup/job
   collection. Correct earlier permission, integrity-time and counter-interval
-  guidance. No runtime, installer or published artifact changes.
+  guidance; additional collection remains outside this release.
 
 ## Windows agent 0.6.17 - 2026-10-27
 

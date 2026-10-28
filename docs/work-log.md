@@ -1,5 +1,23 @@
 # Work Log
 
+## 2026-10-28 (Overlay 0.6.32 release)
+
+- Package the existing-data SQL role tab, instance/issue filters, disclosures,
+  separate-unit graphs, qualified metrics and locked application-data merge.
+  Set the public overlay installer default and capability version to 0.6.32.
+  Preserve the 0.6.17 agent MSI/config, agent source and Windows installer.
+- Validation: 93 portable agent checks; 32 qualification assertions, 39 parser
+  and 39 page fixtures, 35 Horizon checks against extracted release bytes;
+  82 packaged PHP lint checks and shell syntax. All 83 payload files match
+  source. Existing SQL RRD schemas and previous release payloads are unchanged.
+  Reuse the source-bound ten-case browser and graph evidence for unchanged UI.
+- Installed-core preflight confirms double precision, 64-character metric keys
+  and 33 qualification metrics. The actual save seam ran in a short outer
+  transaction and rolled back with application/metric rows identical. This is
+  not a sustained-contention test. No alert rules or agent deployments.
+- Claude reviewed the release plan; final package/public-safety review and
+  operator-authorized cluster rollout are the remaining release steps.
+
 ## 2026-10-28 (SQL overlay controls and qualification)
 
 - Added native instance/issue selectors, clear/no-match status, stable evidence

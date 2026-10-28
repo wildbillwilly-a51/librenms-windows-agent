@@ -7,7 +7,7 @@ The Windows agent listens on TCP `6556` and emits Checkmk-style
 `windows_agent_*` sections. The LibreNMS overlay teaches LibreNMS how to parse
 those sections and show the `Windows Agent` application.
 
-The current published overlay is `0.6.31` and the current Windows agent is
+The current published overlay is `0.6.32` and the current Windows agent is
 `0.6.17`. They are versioned independently. See `CURRENT-STATE.md` for release
 status.
 
@@ -62,6 +62,12 @@ The overlay installs:
 - LibreNMS application page and graph definitions.
 - A systemd reapply timer so the overlay can be restored after LibreNMS
   updates.
+
+Overlay `0.6.32` adds a first-level SQL Server tab with instance and issue
+filters, expandable evidence, separate-unit trends and qualified application
+metrics for future alert rules. It uses existing agent data, preserves the agent
+release and existing RRD schemas, and enables no alert rules. See the
+[qualified metrics contract](docs/sql-qualified-metrics.md).
 
 Overlay `0.6.31` adds SQL Server component and performance visibility for agents
 that report the new SQL sections. The SQL inventory shows per-instance edition,
@@ -294,7 +300,7 @@ and `Horizon` on a Horizon server. The leftmost tab present is the landing tab,
 so a role host opens on its role. Roles that were evaluated but not detected are
 listed in the `Detected Roles` table on `Roles & Workloads`.
 
-The unreleased overlay source also promotes `SQL Server` after these role tabs
+Overlay `0.6.32` also promotes `SQL Server` after these role tabs
 when engine evidence is present. It uses existing agent data for service and
 local-listener state, sampled blocking/grants and scheduled-work evidence, with
 explicit coverage, named attention, expandable instances and separate-unit
@@ -400,7 +406,7 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Install a specific overlay version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.31
+curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.32
 ```
 
 Preview without changing the node:
@@ -532,7 +538,7 @@ SQL Server presentation and proposed collection priorities are documented in
 shared UI contract in [the application-page roadmap](docs/app-page-ux-plan.md).
 Proposed alert-ready collection, policy ownership and dropdown/detail navigation
 are covered in [SQL Server alerting and details design](docs/sql-server-alerting-and-details-design.md).
-The existing-data tab is implemented in unreleased overlay source; additional
+The existing-data tab is implemented in overlay `0.6.32`; additional
 agent collection remains proposed. Published installers and payloads are unchanged.
 
 Universal agent, collector, MSI, and overlay work is developed directly in this

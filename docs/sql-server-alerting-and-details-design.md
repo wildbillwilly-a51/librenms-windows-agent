@@ -6,7 +6,7 @@ Baseline: existing-data SQL tab at `27c824e`; published versions remain in
 It extends [the role-tab research](sql-server-role-tab-research.md).
 
 Implementation update: the overlay-only foundation and existing-data selectors/
-disclosures are now implemented in unreleased source. See
+disclosures are now implemented in overlay `0.6.32`. See
 [qualified metrics and controls](sql-qualified-metrics.md) for the actual
 contract and validation boundary. The source findings below describe the
 research baseline; the locked saver and shared projection address its data/

@@ -1,6 +1,6 @@
 # SQL qualified metrics and page controls
 
-Status: implemented in unreleased overlay source, using existing agent data.
+Status: implemented in overlay `0.6.32`, using existing agent data.
 Agent collection, existing `sql_perf_*` metrics, RRD schemas and alert rules are
 unchanged. Deeper database/log/job/backup collection remains in
 [the separate design](sql-server-alerting-and-details-design.md).
@@ -146,5 +146,9 @@ and omitted-metric deletion behavior. They verify JSON, numeric values,
 deterministic regression checks, not proof of real database lock/deadlock
 behavior. RRD work remains outside the transaction. A source-mode change during
 RRD work still uses the earlier source flag; transition testing remains a rollout
-check. Production theme, installed-core/schema and actual alert lifecycle remain
+check. A release preflight against an installed core verified double-precision
+values, 64-character metric keys and all 33 canary qualification metrics through
+the actual save seam. An outer transaction rolled back with application and
+metric rows unchanged. This checks the seam and precision, not sustained
+contention or deadlocks. Production theme and actual alert lifecycle remain
 pilot/rollout checks.
