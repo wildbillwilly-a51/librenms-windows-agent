@@ -181,6 +181,9 @@ final class HorizonCentralConfiguration
      */
     private static function setReporters(string $path, array $options): int
     {
+        if (array_key_exists('template', $options) || array_key_exists('template-clear', $options)) {
+            return self::setReporterTemplate($path, $options);
+        }
         $site = strtolower(trim((string) ($options['site'] ?? '')));
         if ($site === '') throw new HorizonFailure('missing_site');
         $clear = ($options['clear'] ?? false) === true;
@@ -196,20 +199,54 @@ final class HorizonCentralConfiguration
             $found = true;
             if ($clear) unset($pod[\WindowsAgentOverlay\HorizonPoolReporter::META_KEY]);
             else $pod[\WindowsAgentOverlay\HorizonPoolReporter::META_KEY] = $hosts;
-            PodCollector::validateConfig($pod);
-            if (! $clear) {
-                $hosts = \WindowsAgentOverlay\HorizonPoolReporter::configured($pod);
-                $pod[\WindowsAgentOverlay\HorizonPoolReporter::META_KEY] = $hosts;
-            }
+            $effective = \WindowsAgentOverlay\HorizonPoolReporter::withTemplate($pod, $config);
+            PodCollector::validateConfig($effective);
+            $hosts = \WindowsAgentOverlay\HorizonPoolReporter::configured($effective);
+            if (! $clear) $pod[\WindowsAgentOverlay\HorizonPoolReporter::META_KEY] = $hosts;
         }
         unset($pod);
         if (! $found) throw new HorizonFailure('site_not_found');
         $config['version'] = 2;
         $config['pods'] = array_values($pods);
         self::writeConfig($path, $config);
-        fwrite(STDOUT, $clear
-            ? "Pod {$site}: pool reporters cleared; every member reports pool metrics.\n"
+        fwrite(STDOUT, $hosts === []
+            ? "Pod {$site}: no reporter list; every member reports pool metrics.\n"
             : "Pod {$site}: pool metrics reported by the first server up in: " . implode(', ', $hosts) . "\n");
+
+        return 0;
+    }
+
+    /**
+     * Set or clear the one ordered list every pod uses unless it has its own,
+     * e.g. --template '{site}-vcs1,{site}-vcs2,{site}-horizon-gw'.
+     *
+     * @param array<string,string|bool> $options
+     */
+    private static function setReporterTemplate(string $path, array $options): int
+    {
+        $clear = ($options['template-clear'] ?? false) === true;
+        $raw = is_string($options['template'] ?? null) ? (string) $options['template'] : '';
+        if ($clear === ($raw !== '')) throw new HorizonFailure('use_template_or_template_clear');
+        $entries = $clear ? [] : array_values(array_filter(array_map('trim', explode(',', $raw)), static fn (string $entry): bool => $entry !== ''));
+        if (! $clear && $entries === []) throw new HorizonFailure('use_template_or_template_clear');
+        $config = self::readConfig($path);
+        if ($clear) unset($config[\WindowsAgentOverlay\HorizonPoolReporter::TEMPLATE_KEY]);
+        else $config[\WindowsAgentOverlay\HorizonPoolReporter::TEMPLATE_KEY] = \WindowsAgentOverlay\HorizonPoolReporter::template($entries);
+        // Every pod must still be valid with the new template before anything is written.
+        foreach ($config['pods'] as $pod) {
+            if (! is_array($pod)) throw new HorizonFailure('invalid_pod');
+            PodCollector::validateConfig(\WindowsAgentOverlay\HorizonPoolReporter::withTemplate($pod, $config));
+        }
+        $config['version'] = 2;
+        self::writeConfig($path, $config);
+        fwrite(STDOUT, $clear
+            ? "Pool reporter template cleared.\n"
+            : 'Pool reporter template: ' . implode(', ', $config[\WindowsAgentOverlay\HorizonPoolReporter::TEMPLATE_KEY]) . "\n");
+        foreach ($config['pods'] as $pod) {
+            $effective = \WindowsAgentOverlay\HorizonPoolReporter::withTemplate($pod, $config);
+            $hosts = \WindowsAgentOverlay\HorizonPoolReporter::configured($effective);
+            fwrite(STDOUT, '  ' . $pod['site'] . ': ' . ($hosts === [] ? 'every member reports' : implode(', ', $hosts)) . ' (' . \WindowsAgentOverlay\HorizonPoolReporter::source($effective) . ")\n");
+        }
 
         return 0;
     }
@@ -348,7 +385,7 @@ SQL,
         $config = self::readConfig($configPath);
         foreach (($config['pods'] ?? []) as $pod) {
             if (! is_array($pod)) throw new HorizonFailure('invalid_pod');
-            PodCollector::validateConfig($pod);
+            PodCollector::validateConfig(\WindowsAgentOverlay\HorizonPoolReporter::withTemplate($pod, $config));
         }
         $version = (int) ($config['version'] ?? 1);
         if ($version < 1 || $version > 2) throw new HorizonFailure('unsupported_configuration_schema');
@@ -366,12 +403,15 @@ SQL,
         $credential = ($env['WINDOWS_AGENT_HORIZON_API_USERNAME'] ?? '') !== '' && ($env['WINDOWS_AGENT_HORIZON_API_PASSWORD'] ?? '') !== '';
         echo 'schema=' . (int) ($config['version'] ?? 1) . PHP_EOL;
         echo 'credential=' . ($credential ? 'present' : 'absent') . PHP_EOL;
+        $template = \WindowsAgentOverlay\HorizonPoolReporter::template($config[\WindowsAgentOverlay\HorizonPoolReporter::TEMPLATE_KEY] ?? null);
+        if ($template !== []) echo 'pool_reporter_template=' . implode(',', $template) . PHP_EOL;
         foreach (($config['pods'] ?? []) as $pod) {
             if (! is_array($pod)) continue;
             $seeds = PodCollector::seedEndpoints($pod);
-            $reporters = \WindowsAgentOverlay\HorizonPoolReporter::configured($pod);
+            $effective = \WindowsAgentOverlay\HorizonPoolReporter::withTemplate($pod, $config);
+            $reporters = \WindowsAgentOverlay\HorizonPoolReporter::configured($effective);
             echo 'site=' . $pod['site'] . ' enabled=' . (($pod['enabled'] ?? true) ? 'yes' : 'no') . ' display=' . $pod['display_device'] . ' preferred=' . $seeds[0] . ' fallback=' . $seeds[1]
-                . ' pool_reporters=' . ($reporters === [] ? 'all-members' : implode(',', $reporters)) . PHP_EOL;
+                . ' pool_reporters=' . ($reporters === [] ? 'all-members' : implode(',', $reporters) . ' (' . \WindowsAgentOverlay\HorizonPoolReporter::source($effective) . ')') . PHP_EOL;
         }
 
         return 0;
@@ -599,7 +639,9 @@ UNIT;
     /** @param array<string,mixed> $config */
     private static function writeConfig(string $path, array $config): void
     {
-        foreach ($config['pods'] as $pod) PodCollector::validateConfig($pod);
+        // Validate each pod as the collector will see it (with the template), but
+        // serialize the file as given: the template never lands inside a pod.
+        foreach ($config['pods'] as $pod) PodCollector::validateConfig(\WindowsAgentOverlay\HorizonPoolReporter::withTemplate($pod, $config));
         $json = json_encode($config, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
         self::atomicWrite($path, $json, 0600, false);
     }
@@ -757,7 +799,9 @@ Horizon central collector configuration
   pod list
   pod enable|disable|remove --site abc
   pod reporters --site abc --hosts abc-vcs1,abc-vcs2   (pool alert metrics from the first one up)
-  pod reporters --site abc --clear                     (every member reports pool metrics)
+  pod reporters --site abc --clear                     (back to the template, or every member)
+  pod reporters --template '{site}-vcs1,{site}-vcs2'   (one order for every pod without its own list)
+  pod reporters --template-clear
   config validate|status
   test network|api --site abc
   worker enable|disable|status

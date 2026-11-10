@@ -402,14 +402,26 @@ default every member carries the same per-pool rows and one bad pool raises one
 alert per member. To give pool alerts a single home with failover, list the
 pod's servers in priority order:
 
+When every site names its servers the same way, set one template for all pods
+instead of one list per site. `{site}` is replaced by each pod's site code, and
+names a site does not have are skipped:
+
 ```sh
-php windows-agent-overlay/horizon-central-config.php pod reporters --site abc --hosts abc-vcs1,abc-vcs2,abc-gw
-php windows-agent-overlay/horizon-central-config.php pod reporters --site abc --clear
+php windows-agent-overlay/horizon-central-config.php pod reporters --template '{site}-vcs1,{site}-vcs2,{site}-horizon-gw'
 php windows-agent-overlay/horizon-central-config.php config status
+php windows-agent-overlay/horizon-central-config.php pod reporters --template-clear
 ```
 
-Short names get the pod's `dns_suffix`, the same as member names. A pod with one
-connection server lists one. The rule is: **only the first listed server that
+`config status` and the `--template` command print every pod's resulting order.
+A site that differs gets its own list, which overrides the template; clearing
+that list returns the site to the template:
+
+```sh
+php windows-agent-overlay/horizon-central-config.php pod reporters --site abc --hosts abc-vcs2,abc-vcs1
+php windows-agent-overlay/horizon-central-config.php pod reporters --site abc --clear
+```
+
+Short names get the pod's `dns_suffix`, the same as member names. The rule is: **only the first listed server that
 is up keeps the `horizon_pool_*` rows.** "Up" is the same test as LibreNMS's
 `macros.device_up` (status up, not disabled, not ignored), plus an active
 windows-agent application. Every member still shows the full pod pages; the
@@ -431,12 +443,12 @@ How it moves:
   Device Down alert is the signal.
 - A server removed from the list is queued in the collector's state file and
   sent the new list on every run until one delivery succeeds, so it drops its
-  pool rows. Clearing the list restores the default (every member reports).
+  pool rows. With no site list and no template, every member reports (the
+  default).
 
 Limits: a listed server that is up but whose agent has stopped answering keeps
 its last pool rows and stays the reporter, because LibreNMS still shows it up;
-watch the agent itself for that. `pool_reporters` cannot be combined with an
-enabled `pool_alerts` observation block on the same pod.
+watch the agent itself for that.
 
 **Cardinality.** Seven measures per pool. These are indexed DB rows, not RRD
 files, so a pod with a few dozen pools adds a few hundred rows to a table that

@@ -7,7 +7,8 @@
 - Current State: Implemented locally on branch `horizon-pool-reporter`
   (`includes/windows-agent/horizon-pool-reporter.inc.php`, gate in
   `ApplicationSave`/`HorizonProjection::pollerMetrics`, list stamping and
-  cleanup queue in the collector, `pod reporters` in the helper). Default off.
+  cleanup queue in the collector, `pod reporters` in the helper, one
+  `{site}` template for all pods). Default off.
 - Relevant Decisions: strict priority order; "up" equals `macros.device_up`
   plus an active windows-agent app; supersedes enabling the 2026-11-04
   `pool_alerts` observations for the same pod (validation rejects both).

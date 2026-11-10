@@ -209,9 +209,13 @@ servers in priority order; only the first one that is up keeps them, and they
 move back to it when it recovers (see `docs/horizon-monitoring.md`):
 
 ```bash
-sudo -u librenms php windows-agent-overlay/horizon-central-config.php pod reporters --site abc --hosts abc-vcs1,abc-vcs2
-sudo -u librenms php windows-agent-overlay/horizon-central-config.php pod reporters --site abc --clear
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php pod reporters --template '{site}-vcs1,{site}-vcs2,{site}-horizon-gw'
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php config status
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php pod reporters --site abc --hosts abc-vcs2,abc-vcs1
 ```
+
+The template applies to every site (`{site}` is the site code; missing servers
+are skipped); a site list overrides it for one site.
 
 Overlay upgrades do not replace `.env`, `.horizon-pods.json`, or the collector's
 last-good state. The display device is only a stable LibreNMS application/data

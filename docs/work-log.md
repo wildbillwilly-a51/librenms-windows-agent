@@ -23,6 +23,12 @@
 - Codex reviewed the plan (moved the decision to save time, cleanup, conflict
   check, validation) and the diff (lossy cleanup, empty host list); both
   findings were fixed and confirmed resolved by source inspection.
+- Added a top-level `pool_reporter_template` with `{site}` so consistently
+  named sites need one command (`pod reporters --template ...`). Codex advised
+  a naming convention over deriving the order from Horizon's member list, which
+  could change between runs. Site lists override it; `pool_alerts` pods never
+  inherit it; `config status` prints each pod's resulting order and source.
+  New runner now 17 scenarios; template-injection mutation fails three. Second Codex review: validate template-expanded pods in the shared config writer (add/discover) and use the owner gateway naming in examples; both fixed and confirmed.
 
 ## 2026-10-28 (Overlay 0.6.33 corrective release)
 

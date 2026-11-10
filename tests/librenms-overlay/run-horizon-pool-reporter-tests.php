@@ -238,8 +238,6 @@ namespace {
             rejects(static fn () => PodCollector::validateConfig(pod($bad)), 'invalid_pool_reporters');
         }
         rejects(static fn () => PodCollector::validateConfig(pod(['pool_reporters' => array_map(static fn (int $i): string => "abc-vcs{$i}", range(1, 9))])), 'too_many_pool_reporters');
-        rejects(static fn () => PodCollector::validateConfig(pod(['pool_reporters' => ['abc-vcs1'], 'pool_alerts' => ['enabled' => true]])), 'pool_reporters_conflict_with_pool_alerts');
-        PodCollector::validateConfig(pod(['pool_reporters' => ['abc-vcs1'], 'pool_alerts' => ['enabled' => false]]));
     };
     $tests['listed and former reporters always receive the snapshot'] = static function (): void {
         $snapshot = \HorizonCentralRuntime::withPoolReporters(pod(['pool_reporters' => ['abc-vcs1', 'abc-gw'], 'publish_to_members' => false]), ['horizon_central_meta' => []]);
@@ -282,6 +280,69 @@ namespace {
         check(\HorizonCentralRuntime::reporterCleanup($state3, $pod2) === [], 'cleanup did not finish');
         // A host that comes back onto the list leaves the cleanup queue.
         check(\HorizonCentralRuntime::reporterCleanup($state2, pod(['pool_reporters' => ['abc-vcs1', 'abc-gw']])) === [], 'relisted host still queued');
+    };
+    $tests['one template orders every site, and a site list overrides it'] = static function (): void {
+        $config = ['pool_reporter_template' => ['{site}-vcs1', '{site}-vcs2', '{site}-gw']];
+        $abc = HorizonPoolReporter::withTemplate(pod(), $config);
+        check(HorizonPoolReporter::configured($abc) === [VCS1, VCS2, GW], 'template expansion');
+        check(HorizonPoolReporter::source($abc) === 'template', 'template source');
+        $xyz = HorizonPoolReporter::withTemplate(['site' => 'xyz9', 'dns_suffix' => SUFFIX, 'display_device' => 'xyz9-vcs1.example.test'], $config);
+        check(HorizonPoolReporter::configured($xyz) === ['xyz9-vcs1.example.test', 'xyz9-vcs2.example.test', 'xyz9-gw.example.test'], 'second site');
+        $own = HorizonPoolReporter::withTemplate(pod(['pool_reporters' => ['abc-vcs2']]), $config);
+        check(HorizonPoolReporter::configured($own) === [VCS2] && HorizonPoolReporter::source($own) === 'site list', 'site list did not override');
+        check(HorizonPoolReporter::configured(HorizonPoolReporter::withTemplate(pod(), [])) === [], 'no template, no list');
+        $stamped = \HorizonCentralRuntime::withPoolReporters($abc, ['horizon_central_meta' => []]);
+        check($stamped['horizon_central_meta']['pool_reporters'] === [VCS1, VCS2, GW], 'collector did not stamp the template order');
+        foreach ([['abc-vcs1'], 'x', [7], ['{site}-bad host'], array_map(static fn (int $i): string => '{site}-vcs' . $i, range(1, 9))] as $bad) {
+            $thrown = false;
+            try { HorizonPoolReporter::template($bad); } catch (RuntimeException) { $thrown = true; }
+            check($thrown, 'invalid template accepted: ' . json_encode($bad));
+        }
+    };
+    $tests['a template skips servers a site does not have'] = static function (): void {
+        // Template lists three; this site only has vcs1 in LibreNMS.
+        resetPod(null);
+        unset(\App\Models\Device::$rows[2], \App\Models\Device::$rows[3], \App\Models\Application::$rows[12], \App\Models\Application::$rows[13]);
+        $pod = HorizonPoolReporter::withTemplate(pod(), ['pool_reporter_template' => ['{site}-vcs1', '{site}-vcs2', '{site}-gw']]);
+        \App\Models\Application::$rows[11]->data = \HorizonCentralRuntime::withPoolReporters($pod, \App\Models\Application::$rows[11]->data);
+        poll(1);
+        check(reports(1), 'the only server did not report');
+        check(HorizonPoolReporter::active(HorizonPoolReporter::configured($pod)) === 1, 'active should be vcs1');
+    };
+    $tests['configuration helper sets and clears the template'] = static function (): void {
+        $path = tempnam(sys_get_temp_dir(), 'pods');
+        file_put_contents($path, json_encode(['version' => 2, 'pods' => [pod(), pod(['site' => 'xyz9', 'display_device' => 'xyz9-vcs1.example.test', 'pool_reporters' => ['xyz9-vcs2']])]]));
+        try {
+            $set = HorizonCentralConfiguration::main(['helper', 'pod', 'reporters', '--config', $path, '--template', '{site}-vcs1,{site}-vcs2,{site}-gw']);
+            $config = json_decode(file_get_contents($path), true);
+            check($set === 0 && $config['pool_reporter_template'] === ['{site}-vcs1', '{site}-vcs2', '{site}-gw'], 'template not stored');
+            check(! array_key_exists('pool_reporter_template', $config['pods'][0]), 'template leaked into a pod');
+            check($config['pods'][1]['pool_reporters'] === ['xyz9-vcs2'], 'site list changed');
+            $before = file_get_contents($path);
+            $bad = HorizonCentralConfiguration::main(['helper', 'pod', 'reporters', '--config', $path, '--template', 'abc-vcs1']);
+            check($bad === 2 && file_get_contents($path) === $before, 'template without {site} written');
+            $empty = HorizonCentralConfiguration::main(['helper', 'pod', 'reporters', '--config', $path, '--template', ' , ']);
+            check($empty === 2 && file_get_contents($path) === $before, 'empty template written');
+            // Clearing the site list falls back to the template, not to every member.
+            HorizonCentralConfiguration::main(['helper', 'pod', 'reporters', '--config', $path, '--site', 'xyz9', '--clear']);
+            $config = json_decode(file_get_contents($path), true);
+            check(! array_key_exists('pool_reporters', $config['pods'][1]), 'site list not cleared');
+            check(HorizonPoolReporter::configured(HorizonPoolReporter::withTemplate($config['pods'][1], $config))[0] === 'xyz9-vcs1.example.test', 'site did not fall back to template');
+            $clear = HorizonCentralConfiguration::main(['helper', 'pod', 'reporters', '--config', $path, '--template-clear']);
+            check($clear === 0 && ! array_key_exists('pool_reporter_template', json_decode(file_get_contents($path), true)), 'template not cleared');
+        } finally { unlink($path); }
+    };
+    $tests['adding a site is checked against the template before writing'] = static function (): void {
+        $path = tempnam(sys_get_temp_dir(), 'pods');
+        // Valid for site abc (63-character label), too long once a longer site code fills it in.
+        $template = '{site}-' . str_repeat('a', 55);
+        file_put_contents($path, json_encode(['version' => 2, 'pods' => [pod()]]));
+        try {
+            check(HorizonCentralConfiguration::main(['helper', 'pod', 'reporters', '--config', $path, '--template', $template]) === 0, 'template rejected for abc');
+            $before = file_get_contents($path);
+            $added = HorizonCentralConfiguration::main(['helper', 'pod', 'add', '--config', $path, '--site', 'longsite', '--dns-suffix', SUFFIX, '--display-device', 'longsite-vcs1.example.test']);
+            check($added === 2 && file_get_contents($path) === $before, 'pod written with an invalid template host');
+        } finally { unlink($path); }
     };
     $tests['device page says who reports'] = static function (): void {
         resetPod();

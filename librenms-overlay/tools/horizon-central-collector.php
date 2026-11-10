@@ -71,6 +71,7 @@ final class HorizonCentralRuntime
         $matched = false;
         foreach ($pods as $pod) {
             if (! is_array($pod) || ! ($pod['enabled'] ?? true)) continue;
+            $pod = \WindowsAgentOverlay\HorizonPoolReporter::withTemplate($pod, $config);
             $site = strtolower((string) ($pod['site'] ?? ''));
             if ($siteFilter !== '' && $site !== $siteFilter) continue;
             $matched = true;

@@ -8,7 +8,8 @@
   over down the list and moves back to the first server when it recovers.
   Member pod pages are unchanged; the device page shows which server reports.
   Without the setting, behaviour is unchanged. Adds `pod reporters` to the
-  configuration helper.
+  configuration helper, including one `{site}` template for every pod, so
+  consistently named sites need a single command; a site list overrides it.
 
 ## Overlay 0.6.33 - 2026-10-28
 

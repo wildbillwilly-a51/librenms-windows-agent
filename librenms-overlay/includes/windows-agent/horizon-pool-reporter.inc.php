@@ -40,22 +40,70 @@ final class HorizonPoolReporter
     }
 
     /**
-     * The pod's ordered reporter hostnames; an empty list when not configured.
+     * Top-level `.horizon-pods.json` key: one ordered list for every pod, with
+     * `{site}` standing for the pod's site code, e.g.
+     * ["{site}-vcs1", "{site}-vcs2", "{site}-horizon-gw"]. A pod's own `pool_reporters`
+     * list overrides it. Names that do not exist at a site are simply skipped.
+     */
+    public const TEMPLATE_KEY = 'pool_reporter_template';
+
+    /**
+     * A copy of a pod carrying the file's template, for reading only. Never
+     * write the result back into the configuration file.
+     *
+     * @param array<string,mixed> $pod
+     * @param array<string,mixed> $config the whole configuration file
+     * @return array<string,mixed>
+     */
+    public static function withTemplate(array $pod, array $config): array
+    {
+        if (array_key_exists(self::TEMPLATE_KEY, $config)) $pod[self::TEMPLATE_KEY] = $config[self::TEMPLATE_KEY];
+
+        return $pod;
+    }
+
+    /**
+     * The validated template entries; an empty list when none is set.
+     *
+     * @return list<string>
+     */
+    public static function template(mixed $raw): array
+    {
+        if ($raw === null || $raw === []) return [];
+        if (! is_array($raw) || ! array_is_list($raw)) throw new \RuntimeException('invalid_pool_reporter_template');
+        $entries = [];
+        foreach ($raw as $entry) {
+            // {site} is required, or every pod would name the same server.
+            if (! is_string($entry) || ! str_contains($entry, '{site}')) throw new \RuntimeException('invalid_pool_reporter_template');
+            if (! self::validHostname(str_replace('{site}', 'site', strtolower(trim($entry))))) throw new \RuntimeException('invalid_pool_reporter_template');
+            $entries[] = strtolower(trim($entry));
+        }
+        if (count(array_unique($entries)) > self::MAX_REPORTERS) throw new \RuntimeException('too_many_pool_reporters');
+
+        return array_values(array_unique($entries));
+    }
+
+    /**
+     * The pod's ordered reporter hostnames: its own list, else the template
+     * filled in with its site, else an empty list (every member reports).
      *
      * @param array<string,mixed> $pod
      * @return list<string>
      */
     public static function configured(array $pod): array
     {
-        if (! array_key_exists(self::META_KEY, $pod) || $pod[self::META_KEY] === null || $pod[self::META_KEY] === []) {
-            return [];
+        $own = $pod[self::META_KEY] ?? null;
+        if ($own === null || $own === []) {
+            $template = self::template($pod[self::TEMPLATE_KEY] ?? null);
+            if ($template === []) return [];
+            $site = strtolower(trim((string) ($pod['site'] ?? '')));
+            $own = array_map(static fn (string $entry): string => str_replace('{site}', $site, $entry), $template);
         }
-        $raw = $pod[self::META_KEY];
-        if (! is_array($raw) || ! array_is_list($raw)) {
+        if (! is_array($own) || ! array_is_list($own)) {
             throw new \RuntimeException('invalid_pool_reporters');
         }
         $hosts = [];
-        foreach ($raw as $name) {
+        foreach ($own as $name) {
             if (! is_string($name)) throw new \RuntimeException('invalid_pool_reporters');
             $host = self::hostname($name, (string) ($pod['dns_suffix'] ?? ''));
             if (! self::validHostname($host)) throw new \RuntimeException('invalid_pool_reporters');
@@ -64,6 +112,19 @@ final class HorizonPoolReporter
         if (count($hosts) > self::MAX_REPORTERS) throw new \RuntimeException('too_many_pool_reporters');
 
         return $hosts;
+    }
+
+    /**
+     * Where a pod's list comes from, for status output.
+     *
+     * @param array<string,mixed> $pod
+     */
+    public static function source(array $pod): string
+    {
+        $own = $pod[self::META_KEY] ?? null;
+        if ($own !== null && $own !== []) return 'site list';
+
+        return self::configured($pod) === [] ? 'all members' : 'template';
     }
 
     /**
