@@ -7,14 +7,13 @@ The Windows agent listens on TCP `6556` and emits Checkmk-style
 `windows_agent_*` sections. The LibreNMS overlay teaches LibreNMS how to parse
 those sections and show the `Windows Agent` application.
 
-The current published overlay is `0.6.33` and the current Windows agent is
+The current published overlay is `0.6.34` and the current Windows agent is
 `0.6.17`. They are versioned independently. See `CURRENT-STATE.md` for release
 status.
 
-Known issue in published overlay `0.6.32`: SQL trend tooltip markup can disrupt
-the application tab layout. Overlay `0.6.33` corrects this by preserving native
-LibreNMS graph HTML and lazy loading. Upgrade nodes on `0.6.32`; previously
-published payloads are unchanged.
+Overlay `0.6.34` adds optional Horizon pool reporters, so each pool's alert
+metrics live on one pod server at a time instead of on every member (see the
+central Horizon section below). Nothing changes until it is configured.
 
 ## Primary Runbook
 
@@ -425,7 +424,7 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Install a specific overlay version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.33
+curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.34
 ```
 
 Preview without changing the node:

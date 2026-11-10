@@ -1,15 +1,18 @@
 # Changelog
 
-## Unreleased implementation - 2026-11-10
+## Overlay 0.6.34 - 2026-11-10
 
-- Add optional `pool_reporters` per central Horizon pod: an ordered server list
-  where only the first server that is up keeps the per-pool `horizon_pool_*`
-  alert metrics, so one bad pool alerts once instead of once per member. Fails
-  over down the list and moves back to the first server when it recovers.
-  Member pod pages are unchanged; the device page shows which server reports.
-  Without the setting, behaviour is unchanged. Adds `pod reporters` to the
-  configuration helper, including one `{site}` template for every pod, so
-  consistently named sites need a single command; a site list overrides it.
+- Add optional Horizon pool reporters. A pod lists its servers in priority
+  order (`pod reporters --site X --hosts a,b,c`), or one `{site}` template
+  covers every pod (`pod reporters --template '{site}-vcs1,{site}-vcs2'`); a
+  site list overrides the template. Only the first listed server that is up
+  keeps the per-pool `horizon_pool_*` alert metrics, so one bad pool alerts
+  once instead of once per pod member. It fails over down the list and moves
+  back to the first server when it recovers. Each server decides at its own
+  poll against the live device table; servers dropped from the list are queued
+  and retried until told. Member pod pages are unchanged and the device page
+  shows which server reports. Nothing changes until reporters are configured.
+  Windows agent `0.6.17` is unchanged.
 
 ## Overlay 0.6.33 - 2026-10-28
 

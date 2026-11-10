@@ -1,34 +1,26 @@
 # Work Log
 
-## 2026-11-10 (Horizon pool alert reporter; local only)
+## 2026-11-10 (Overlay 0.6.34: Horizon pool reporters)
 
-- Owner chose a single active reporter per pod over the 2026-11-04 per-pool
-  rule design: an ordered `pool_reporters` list, first server that is up keeps
-  the per-pool `horizon_pool_*` metrics, strict priority (moves back to the
-  first server). Member pod pages unchanged; device page shows the reporter.
-  Absent setting keeps the previous every-member behaviour. Rejected with an
-  enabled `pool_alerts` block on the same pod.
-- Decision is made at each device's save against the live device table, so
-  failover does not depend on collector runs. Servers dropped from the list are
-  queued in collector state and retried until delivery succeeds. Adds
-  `pod reporters --hosts|--clear`; `config status` prints the list.
-- Validation: new runner 13 scenarios through real ApplicationSave/projection/
-  collector helpers/configuration helper; gate and cleanup mutations fail it.
-  Existing runners: central 36, pool alert 14, parser 39, page 39, SQL
-  qualification 32. Full overlay/test PHP lint clean. Temporary package contains
-  the new include and the new runner passes against the extracted payload.
-  SQL graph fixtures skipped: rrdtool absent in this WSL. No version bump,
-  release, deployment or live configuration. Native omitted-metric deletion and
-  real handover timing remain unverified.
-- Codex reviewed the plan (moved the decision to save time, cleanup, conflict
-  check, validation) and the diff (lossy cleanup, empty host list); both
-  findings were fixed and confirmed resolved by source inspection.
-- Added a top-level `pool_reporter_template` with `{site}` so consistently
-  named sites need one command (`pod reporters --template ...`). Codex advised
-  a naming convention over deriving the order from Horizon's member list, which
-  could change between runs. Site lists override it; `pool_alerts` pods never
-  inherit it; `config status` prints each pod's resulting order and source.
-  New runner now 17 scenarios; template-injection mutation fails three. Second Codex review: validate template-expanded pods in the shared config writer (add/discover) and use the owner gateway naming in examples; both fixed and confirmed.
+- Owner chose one active reporter per pod for the per-pool `horizon_pool_*`
+  metrics: ordered per-pod list or one `{site}` template, first server that is
+  up keeps the metrics, strict priority with move-back. Decided at each
+  device's save against the live device table; dropped servers are queued in
+  collector state until delivery succeeds. Default unchanged until configured.
+- Released from the published 0.6.33 base with only the reporter changes; an
+  unrelated agent prototype and an unreleased per-pool observation design stay
+  on their development branch.
+- Native LibreNMS `update_application` deletes stored application metrics that
+  a non-empty save omits, so a non-reporter's pool rows go at its next poll.
+- Validation: reporter runner 17 scenarios (gate, cleanup and template
+  mutations each fail it), central 35, parser 39, page 39, SQL qualification
+  32, portable agent checks through the release build; full source PHP lint;
+  extracted package: 83 PHP lints, reporter and central runners pass against
+  the packaged helper. SQL graph fixtures skipped (rrdtool absent locally).
+  Agent MSI and config hashes unchanged.
+- Codex reviewed the plan, the implementation (lossy cleanup, empty host list),
+  the template (writer validation, gateway naming in examples) and the release
+  base; all findings fixed and confirmed.
 
 ## 2026-10-28 (Overlay 0.6.33 corrective release)
 
