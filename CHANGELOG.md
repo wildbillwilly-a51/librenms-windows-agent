@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased implementation - 2026-11-10
+
+- Add optional `pool_reporters` per central Horizon pod: an ordered server list
+  where only the first server that is up keeps the per-pool `horizon_pool_*`
+  alert metrics, so one bad pool alerts once instead of once per member. Fails
+  over down the list and moves back to the first server when it recovers.
+  Member pod pages are unchanged; the device page shows which server reports.
+  Without the setting, behaviour is unchanged. Adds `pod reporters` to the
+  configuration helper.
+
 ## Overlay 0.6.33 - 2026-10-28
 
 - Preserve core graph-row HTML and native lazy loading. Remove the SQL-only

@@ -1,5 +1,20 @@
 # Codex Handoff
 
+## Horizon pool alert reporter
+
+- Objective: one alerting home per Horizon pod for the per-pool
+  `horizon_pool_*` metrics, with failover, without per-pool rule machinery.
+- Current State: Implemented locally on branch `horizon-pool-reporter`
+  (`includes/windows-agent/horizon-pool-reporter.inc.php`, gate in
+  `ApplicationSave`/`HorizonProjection::pollerMetrics`, list stamping and
+  cleanup queue in the collector, `pod reporters` in the helper). Default off.
+- Relevant Decisions: strict priority order; "up" equals `macros.device_up`
+  plus an active windows-agent app; supersedes enabling the 2026-11-04
+  `pool_alerts` observations for the same pod (validation rejects both).
+- Validation Completed: see the 2026-11-10 work-log entry.
+- Validation Remaining: confirm LibreNMS core deletes omitted application
+  metrics; staging or live handover timing; release and rollout.
+
 - Objective: Publish/deploy overlay and verify SQL tab with Claude while
   preserving the agent release. Completed with approved corrective 0.6.33.
 - Current State: Public/private main release `f5176d2`; overlay installer default

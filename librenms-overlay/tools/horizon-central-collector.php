@@ -16,6 +16,7 @@ use WindowsAgentOverlay\Horizon\PodCollector;
 use WindowsAgentOverlay\Horizon\RedisHorizonCoordination;
 
 require_once __DIR__ . '/../includes/windows-agent/horizon-projection.inc.php';
+require_once __DIR__ . '/../includes/windows-agent/horizon-pool-reporter.inc.php';
 require_once __DIR__ . '/horizon-central-lib.php';
 require_once __DIR__ . '/horizon-central-coordination.php';
 
@@ -93,8 +94,18 @@ final class HorizonCentralRuntime
                     $statePath = $stateDir . '/' . $site . '.json';
                     $previous = is_file($statePath) ? self::readJson($statePath) : [];
                     $snapshot = $collector->collect($pod, $credential, $previous);
+                    $snapshot = self::withPoolReporters($pod, $snapshot);
+                    // Servers dropped from the list stay queued here (never published)
+                    // until one delivery tells them they no longer report.
+                    $cleanup = self::reporterCleanup($previous, $pod);
+                    $snapshot[self::REPORTER_CLEANUP_KEY] = $cleanup;
                     self::atomicJson($statePath, $snapshot, 0600);
-                    self::publish($pod, $snapshot);
+                    $failed = self::publish($pod, $snapshot, $cleanup);
+                    $pending = self::stillPending($cleanup, $failed);
+                    if ($pending !== $cleanup) {
+                        $snapshot[self::REPORTER_CLEANUP_KEY] = $pending;
+                        self::atomicJson($statePath, $snapshot, 0600);
+                    }
                     $meta = $snapshot['horizon_central_meta'];
                     self::log($site, ((int) ($meta['stale'] ?? 0) === 1 ? 'stale' : 'ok') . ' source=' . ($meta['source_endpoint'] ?? 'none'));
 
@@ -195,7 +206,65 @@ final class HorizonCentralRuntime
     }
 
     /** @param array<string,mixed> $pod @param array<string,mixed> $snapshot */
-    private static function publish(array $pod, array $snapshot): void
+    /**
+     * Stamp the pod's ordered pool reporter list into the snapshot every member
+     * receives, or remove it when the pod has none. Each member's own save then
+     * decides from the live device table whether it is the active reporter.
+     *
+     * @param array<string,mixed> $pod
+     * @param array<string,mixed> $snapshot
+     * @return array<string,mixed>
+     */
+    public static function withPoolReporters(array $pod, array $snapshot): array
+    {
+        $meta = is_array($snapshot['horizon_central_meta'] ?? null) ? $snapshot['horizon_central_meta'] : [];
+        $hosts = \WindowsAgentOverlay\HorizonPoolReporter::configured($pod);
+        if ($hosts === []) unset($meta[\WindowsAgentOverlay\HorizonPoolReporter::META_KEY]);
+        else $meta[\WindowsAgentOverlay\HorizonPoolReporter::META_KEY] = $hosts;
+        $snapshot['horizon_central_meta'] = $meta;
+
+        return $snapshot;
+    }
+
+    public const REPORTER_CLEANUP_KEY = 'pool_reporter_cleanup';
+
+    /**
+     * Servers that were reporters (or still awaiting cleanup) at the previous run
+     * and are no longer listed: each must receive the new list once.
+     *
+     * @param array<string,mixed> $previous the previous run's saved state
+     * @param array<string,mixed> $pod
+     * @return list<string>
+     */
+    public static function reporterCleanup(array $previous, array $pod): array
+    {
+        $meta = is_array($previous['horizon_central_meta'] ?? null) ? $previous['horizon_central_meta'] : [];
+        $queued = is_array($previous[self::REPORTER_CLEANUP_KEY] ?? null) ? $previous[self::REPORTER_CLEANUP_KEY] : [];
+        $key = \WindowsAgentOverlay\HorizonPoolReporter::META_KEY;
+        $candidates = array_merge(
+            \WindowsAgentOverlay\HorizonPoolReporter::fromMeta($meta),
+            \WindowsAgentOverlay\HorizonPoolReporter::fromMeta([$key => $queued])
+        );
+        $current = \WindowsAgentOverlay\HorizonPoolReporter::configured($pod);
+
+        return array_values(array_unique(array_diff($candidates, $current)));
+    }
+
+    /**
+     * @param list<string> $cleanup
+     * @param list<string> $failed hosts whose publication threw
+     * @return list<string> the cleanup hosts that still need a delivery
+     */
+    public static function stillPending(array $cleanup, array $failed): array
+    {
+        return array_values(array_intersect($cleanup, $failed));
+    }
+
+    /**
+     * @param list<string> $formerReporters servers that must hear the new list
+     * @return list<string> member hostnames whose publication failed
+     */
+    private static function publish(array $pod, array $snapshot, array $formerReporters = []): array
     {
         $primaryHost = strtolower(trim((string) ($pod['display_device'] ?? '')));
         $device = Device::findByHostname($primaryHost);
@@ -213,7 +282,10 @@ final class HorizonCentralRuntime
         // application, or races a delete is skipped without failing the collection.
         // The member's own poll preserves these central keys because the collector
         // stamps horizon_central_meta.source=central, which the parser keys on.
-        foreach (self::publishTargets($pod, $snapshot) as $hostname) {
+        // A host with no device or application has nothing to clean up; only a
+        // publication that throws counts as failed.
+        $failed = [];
+        foreach (self::publishTargets($pod, $snapshot, $formerReporters) as $hostname) {
             if ($hostname === $primaryHost) continue;
             try {
                 $memberDevice = Device::findByHostname($hostname);
@@ -222,9 +294,12 @@ final class HorizonCentralRuntime
                 if (! $memberApp) continue;
                 self::publishToDevice($memberDevice, $memberApp, $snapshot);
             } catch (\Throwable $e) {
+                $failed[] = $hostname;
                 self::log((string) ($pod['site'] ?? 'pod'), 'member_publish_skipped:' . $hostname);
             }
         }
+
+        return $failed;
     }
 
     private static function windowsAgentApp(int $deviceId): ?Application
@@ -241,15 +316,17 @@ final class HorizonCentralRuntime
      * Deduped lowercase hostnames that should receive the pod-wide snapshot: the
      * display device always, plus every reported pod member resolved to a hostname
      * (member name, suffixed with the pod dns_suffix when it is a short name). A pod
-     * may opt out of member fan-out with publish_to_members=false.
+     * may opt out of member fan-out with publish_to_members=false. Listed pool
+     * reporters, and those listed by the previous run, always receive it.
      *
      * @param array<string,mixed> $pod
      * @param array<string,mixed> $snapshot
+     * @param list<string> $formerReporters
      * @return list<string>
      */
-    public static function publishTargets(array $pod, array $snapshot): array
+    public static function publishTargets(array $pod, array $snapshot, array $formerReporters = []): array
     {
-        $suffix = strtolower(trim((string) ($pod['dns_suffix'] ?? ''), " \t\n."));
+        $suffix = (string) ($pod['dns_suffix'] ?? '');
         $targets = [];
         $add = static function (string $host) use (&$targets): void {
             $host = strtolower(trim($host));
@@ -261,9 +338,15 @@ final class HorizonCentralRuntime
                 if (! is_array($member)) continue;
                 $name = strtolower(trim((string) ($member['name'] ?? '')));
                 if ($name === '') continue;
-                $add(str_contains($name, '.') || $suffix === '' ? $name : $name . '.' . $suffix);
+                $add(\WindowsAgentOverlay\HorizonPoolReporter::hostname($name, $suffix));
             }
         }
+        // Every listed reporter must hold the current list to know whether it is
+        // the active one, and a server dropped from the list must hear once more
+        // that it no longer is, or it would keep its old pool metrics.
+        $meta = is_array($snapshot['horizon_central_meta'] ?? null) ? $snapshot['horizon_central_meta'] : [];
+        foreach (\WindowsAgentOverlay\HorizonPoolReporter::fromMeta($meta) as $host) $add($host);
+        foreach ($formerReporters as $host) $add((string) $host);
 
         return $targets;
     }

@@ -396,6 +396,48 @@ summary rollups, which default to `0` on every host. The trade-off: if a pool
 stops reporting, an exact-match per-pool rule silently stops matching, which is
 why `horizon_pools_incomplete` remains the coarse "went dark" guard.
 
+**One reporting server per pod (`pool_reporters`).** In central mode the
+collector copies the pod snapshot to every member that runs the agent, so by
+default every member carries the same per-pool rows and one bad pool raises one
+alert per member. To give pool alerts a single home with failover, list the
+pod's servers in priority order:
+
+```sh
+php windows-agent-overlay/horizon-central-config.php pod reporters --site abc --hosts abc-vcs1,abc-vcs2,abc-gw
+php windows-agent-overlay/horizon-central-config.php pod reporters --site abc --clear
+php windows-agent-overlay/horizon-central-config.php config status
+```
+
+Short names get the pod's `dns_suffix`, the same as member names. A pod with one
+connection server lists one. The rule is: **only the first listed server that
+is up keeps the `horizon_pool_*` rows.** "Up" is the same test as LibreNMS's
+`macros.device_up` (status up, not disabled, not ignored), plus an active
+windows-agent application. Every member still shows the full pod pages; the
+device page's *Collector reliability* panel shows "Pool alert metrics: This
+server", "Reported by <host>" or "No listed server is up".
+
+How it moves:
+
+- Each server decides at its own poll, against LibreNMS's live device table, so
+  failover does not wait for the central collector.
+- When the first server goes down, its Device Down alert fires and its pool
+  alerts clear (alert rules should keep `macros.device_up = 1`, so a down
+  server's last rows cannot alert). The next listed server adds the pool rows
+  at its next poll and any still-bad pool alerts again from there.
+- When the first server recovers, the pool rows move back to it: it adds them at
+  its next poll and the stand-in drops them at its next poll. Expect up to about
+  one poll interval with two copies or none during a handover.
+- If no listed server is up, no server carries pool rows; each server's own
+  Device Down alert is the signal.
+- A server removed from the list is queued in the collector's state file and
+  sent the new list on every run until one delivery succeeds, so it drops its
+  pool rows. Clearing the list restores the default (every member reports).
+
+Limits: a listed server that is up but whose agent has stopped answering keeps
+its last pool rows and stays the reporter, because LibreNMS still shows it up;
+watch the agent itself for that. `pool_reporters` cannot be combined with an
+enabled `pool_alerts` observation block on the same pod.
+
 **Cardinality.** Seven measures per pool. These are indexed DB rows, not RRD
 files, so a pod with a few dozen pools adds a few hundred rows to a table that
 already holds ~180 entries per device — acceptable.

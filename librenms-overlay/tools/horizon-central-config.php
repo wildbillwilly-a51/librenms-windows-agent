@@ -32,6 +32,7 @@ final class HorizonCentralConfiguration
                 'pod:remove' => self::changePod($configPath, $options, 'remove'),
                 'pod:enable' => self::changePod($configPath, $options, 'enable'),
                 'pod:disable' => self::changePod($configPath, $options, 'disable'),
+                'pod:reporters' => self::setReporters($configPath, $options),
                 'pod:discover' => self::discoverPods($root, $configPath, $envPath, $options),
                 'pod:list' => self::status($configPath, $envPath),
                 'config:validate' => self::validate($configPath, $envPath),
@@ -169,6 +170,46 @@ final class HorizonCentralConfiguration
         $config['pods'] = array_values($pods);
         self::writeConfig($path, $config);
         fwrite(STDOUT, "Pod {$site} {$operation}d.\n");
+
+        return 0;
+    }
+
+    /**
+     * Set or clear the ordered servers that carry a pod's per-pool alert metrics.
+     *
+     * @param array<string,string|bool> $options
+     */
+    private static function setReporters(string $path, array $options): int
+    {
+        $site = strtolower(trim((string) ($options['site'] ?? '')));
+        if ($site === '') throw new HorizonFailure('missing_site');
+        $clear = ($options['clear'] ?? false) === true;
+        $list = is_string($options['hosts'] ?? null) ? (string) $options['hosts'] : '';
+        if ($clear === ($list !== '')) throw new HorizonFailure('use_hosts_or_clear');
+        $hosts = $clear ? [] : array_values(array_filter(array_map('trim', explode(',', $list)), static fn (string $host): bool => $host !== ''));
+        if (! $clear && $hosts === []) throw new HorizonFailure('use_hosts_or_clear');
+        $config = self::readConfig($path);
+        $pods = is_array($config['pods'] ?? null) ? $config['pods'] : [];
+        $found = false;
+        foreach ($pods as &$pod) {
+            if (! is_array($pod) || strcasecmp((string) ($pod['site'] ?? ''), $site) !== 0) continue;
+            $found = true;
+            if ($clear) unset($pod[\WindowsAgentOverlay\HorizonPoolReporter::META_KEY]);
+            else $pod[\WindowsAgentOverlay\HorizonPoolReporter::META_KEY] = $hosts;
+            PodCollector::validateConfig($pod);
+            if (! $clear) {
+                $hosts = \WindowsAgentOverlay\HorizonPoolReporter::configured($pod);
+                $pod[\WindowsAgentOverlay\HorizonPoolReporter::META_KEY] = $hosts;
+            }
+        }
+        unset($pod);
+        if (! $found) throw new HorizonFailure('site_not_found');
+        $config['version'] = 2;
+        $config['pods'] = array_values($pods);
+        self::writeConfig($path, $config);
+        fwrite(STDOUT, $clear
+            ? "Pod {$site}: pool reporters cleared; every member reports pool metrics.\n"
+            : "Pod {$site}: pool metrics reported by the first server up in: " . implode(', ', $hosts) . "\n");
 
         return 0;
     }
@@ -328,7 +369,9 @@ SQL,
         foreach (($config['pods'] ?? []) as $pod) {
             if (! is_array($pod)) continue;
             $seeds = PodCollector::seedEndpoints($pod);
-            echo 'site=' . $pod['site'] . ' enabled=' . (($pod['enabled'] ?? true) ? 'yes' : 'no') . ' display=' . $pod['display_device'] . ' preferred=' . $seeds[0] . ' fallback=' . $seeds[1] . PHP_EOL;
+            $reporters = \WindowsAgentOverlay\HorizonPoolReporter::configured($pod);
+            echo 'site=' . $pod['site'] . ' enabled=' . (($pod['enabled'] ?? true) ? 'yes' : 'no') . ' display=' . $pod['display_device'] . ' preferred=' . $seeds[0] . ' fallback=' . $seeds[1]
+                . ' pool_reporters=' . ($reporters === [] ? 'all-members' : implode(',', $reporters)) . PHP_EOL;
         }
 
         return 0;
@@ -713,6 +756,8 @@ Horizon central collector configuration
   pod discover --dns-suffix example.test [--apply]
   pod list
   pod enable|disable|remove --site abc
+  pod reporters --site abc --hosts abc-vcs1,abc-vcs2   (pool alert metrics from the first one up)
+  pod reporters --site abc --clear                     (every member reports pool metrics)
   config validate|status
   test network|api --site abc
   worker enable|disable|status

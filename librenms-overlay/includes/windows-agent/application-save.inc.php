@@ -6,6 +6,7 @@ use App\Models\Application;
 use Illuminate\Support\Facades\DB;
 
 require_once __DIR__ . '/horizon-projection.inc.php';
+require_once __DIR__ . '/horizon-pool-reporter.inc.php';
 require_once __DIR__ . '/sql-evaluation.inc.php';
 
 final class ApplicationSave
@@ -29,8 +30,14 @@ final class ApplicationSave
                 foreach (array_keys($fields) as $name) {
                     if (HorizonProjection::ownsMetric($name)) unset($fields[$name]);
                 }
+                // Only the pod's active pool reporter keeps the per-pool metrics; the
+                // others omit them, and core deletes omitted metrics.
+                $emitPools = HorizonPoolReporter::allows(
+                    is_array($merged['horizon_central_meta'] ?? null) ? $merged['horizon_central_meta'] : [],
+                    (int) $locked->device_id
+                );
                 // Include central-only health/vendor fields; core deletes omitted metrics.
-                $fields = array_merge($fields, HorizonProjection::pollerMetrics($merged, $latestCentral));
+                $fields = array_merge($fields, HorizonProjection::pollerMetrics($merged, $latestCentral, $emitPools));
             }
             // Bound repeated cached observations by their first accepted expiry.
             $view = SqlEvaluation::evaluate(

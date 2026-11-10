@@ -1455,10 +1455,21 @@ if ($horizon_surface_available) {
             : ((int) ($horizon_pod_summary['gateways_total'] ?? 0) - (int) ($horizon_pod_summary['gateways_unhealthy'] ?? 0)) . ' of ' . (int) ($horizon_pod_summary['gateways_total'] ?? 0) . ' healthy';
         $horizon_details .= '</tbody></table></div><div class="windows-agent-horizon-platform-summary"><span>Configuration replication <strong>' . $esc(((int) ($horizon_pod_summary['configuration_replications_total'] ?? 0) - (int) ($horizon_pod_summary['configuration_replications_unhealthy'] ?? 0))) . ' of ' . $esc($horizon_pod_summary['configuration_replications_total'] ?? 0) . ' healthy</strong></span><span>AD domain access <strong>' . $esc(((int) ($horizon_directory_summary['member_links_total'] ?? 0) - (int) ($horizon_directory_summary['member_links_unhealthy'] ?? 0))) . ' of ' . $esc($horizon_directory_summary['member_links_total'] ?? 0) . ' healthy</strong></span><span>Standalone gateways <strong>' . $esc($gatewaySummary) . '</strong></span></div></div></section>';
         $horizon_details .= '<section class="col-md-5"><div class="windows-agent-horizon-section"><div class="windows-agent-horizon-section-heading"><h4>Collector reliability</h4><span class="' . ($horizon_api_stale ? 'text-warning' : 'text-success') . '">' . ($horizon_api_stale ? 'Stale' : 'Fresh') . '</span></div><dl class="windows-agent-horizon-collector">';
+        // Which pod member carries the per-pool alert metrics, when the pod lists them.
+        $pool_reporter_line = null;
+        if (is_array($horizon_central_meta) && ! empty($horizon_central_meta['pool_reporters'])) {
+            require_once __DIR__ . '/../../../../windows-agent/horizon-pool-reporter.inc.php';
+            try {
+                $pool_reporter_line = \WindowsAgentOverlay\HorizonPoolReporter::describe($horizon_central_meta, (int) ($app->device_id ?? 0));
+            } catch (\Throwable) {
+                $pool_reporter_line = 'Unavailable';
+            }
+        }
         foreach ([
             'Last success' => $horizon_central_meta['last_success_utc'] ?? 'unknown',
             'Duration' => (string) ($horizon_central_meta['collection_duration_ms'] ?? 0) . ' ms',
             'Source endpoint' => $horizon_central_meta['source_endpoint'] ?? 'unknown',
+            ...($pool_reporter_line !== null ? ['Pool alert metrics' => $pool_reporter_line] : []),
             'Endpoints attempted' => $horizon_central_meta['endpoints_attempted'] ?? 0,
             'Requests' => $horizon_central_meta['requests_total'] ?? 0,
             'Pages' => $horizon_central_meta['pages_total'] ?? 0,

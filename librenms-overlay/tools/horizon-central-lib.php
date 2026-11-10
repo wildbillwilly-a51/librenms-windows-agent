@@ -6,6 +6,8 @@ namespace WindowsAgentOverlay\Horizon;
 
 use RuntimeException;
 
+require_once __DIR__ . '/../includes/windows-agent/horizon-pool-reporter.inc.php';
+
 final class HorizonFailure extends RuntimeException
 {
     public function __construct(public readonly string $reason)
@@ -386,6 +388,11 @@ final class PodCollector
         $detailLimit = (int) ($config['machine_detail_limit'] ?? 1000);
         if ($detailLimit < 1 || $detailLimit > 5000) {
             throw new HorizonFailure('invalid_machine_detail_limit');
+        }
+        try {
+            \WindowsAgentOverlay\HorizonPoolReporter::configured($config);
+        } catch (\RuntimeException $failure) {
+            throw new HorizonFailure($failure->getMessage());
         }
     }
 

@@ -132,7 +132,11 @@ final class HorizonProjection
         return str_starts_with($name, 'horizon_pool_') || isset($keys[$name]);
     }
 
-    public static function pollerMetrics(array $snapshot, bool $central): array
+    /**
+     * @param bool $emitPools false when another pod member is the active pool
+     *        reporter (see HorizonPoolReporter); its pool metrics are then omitted.
+     */
+    public static function pollerMetrics(array $snapshot, bool $central, bool $emitPools = true): array
     {
         $fields = self::metrics($snapshot);
         if (! $central) {
@@ -142,6 +146,6 @@ final class HorizonProjection
             }
         }
 
-        return array_merge($fields, self::poolMetrics($snapshot));
+        return $emitPools ? array_merge($fields, self::poolMetrics($snapshot)) : $fields;
     }
 }

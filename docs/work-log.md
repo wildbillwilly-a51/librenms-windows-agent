@@ -1,5 +1,29 @@
 # Work Log
 
+## 2026-11-10 (Horizon pool alert reporter; local only)
+
+- Owner chose a single active reporter per pod over the 2026-11-04 per-pool
+  rule design: an ordered `pool_reporters` list, first server that is up keeps
+  the per-pool `horizon_pool_*` metrics, strict priority (moves back to the
+  first server). Member pod pages unchanged; device page shows the reporter.
+  Absent setting keeps the previous every-member behaviour. Rejected with an
+  enabled `pool_alerts` block on the same pod.
+- Decision is made at each device's save against the live device table, so
+  failover does not depend on collector runs. Servers dropped from the list are
+  queued in collector state and retried until delivery succeeds. Adds
+  `pod reporters --hosts|--clear`; `config status` prints the list.
+- Validation: new runner 13 scenarios through real ApplicationSave/projection/
+  collector helpers/configuration helper; gate and cleanup mutations fail it.
+  Existing runners: central 36, pool alert 14, parser 39, page 39, SQL
+  qualification 32. Full overlay/test PHP lint clean. Temporary package contains
+  the new include and the new runner passes against the extracted payload.
+  SQL graph fixtures skipped: rrdtool absent in this WSL. No version bump,
+  release, deployment or live configuration. Native omitted-metric deletion and
+  real handover timing remain unverified.
+- Codex reviewed the plan (moved the decision to save time, cleanup, conflict
+  check, validation) and the diff (lossy cleanup, empty host list); both
+  findings were fixed and confirmed resolved by source inspection.
+
 ## 2026-10-28 (Overlay 0.6.33 corrective release)
 
 - Operator approved a new immutable overlay release and cluster deployment

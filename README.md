@@ -203,6 +203,16 @@ sudo php /opt/librenms/windows-agent-overlay/horizon-central-config.php worker e
   --librenms-root /opt/librenms
 ```
 
+Per-pool alert metrics are copied to every pod member by default, so one bad
+pool alerts once per member. To give them one home with failover, list the
+servers in priority order; only the first one that is up keeps them, and they
+move back to it when it recovers (see `docs/horizon-monitoring.md`):
+
+```bash
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php pod reporters --site abc --hosts abc-vcs1,abc-vcs2
+sudo -u librenms php windows-agent-overlay/horizon-central-config.php pod reporters --site abc --clear
+```
+
 Overlay upgrades do not replace `.env`, `.horizon-pods.json`, or the collector's
 last-good state. The display device is only a stable LibreNMS application/data
 anchor: its down state does not stop API collection, while deletion of the
