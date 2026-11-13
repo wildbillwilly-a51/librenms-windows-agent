@@ -35,7 +35,7 @@ agent and overlay payloads are immutable; the next change ships as a new version
 - Windows MSI: `artifacts/librenms-windows-agent-0.6.17.msi`
 - Versioned agent config: `artifacts/librenms-windows-agent-config-0.6.17-win.json`
 - Checksums: `SHA256SUMS`
-- Overlay SHA256: `819bd00f3de086258f7403305ae80f1efb45495305aec3fe17543db16aef80b7`
+- Overlay SHA256: `d2a1e02fe9d843637da27b816e07857cb8cae178c9111920d7764ba52a3df8c2`
 - Windows MSI SHA256: `8e588074498671a3772bb8ca5520f0734cba23d430b66eb04458038a411a96c9`
 - Versioned config SHA256: `94fd8b56e0ac2ca15f50dd0ffff1d3f9167032b4717aeecd5b091f336fbe404b`
 - Public overlay installer: `install.sh`
