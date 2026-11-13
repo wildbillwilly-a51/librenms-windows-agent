@@ -912,6 +912,11 @@ $tests['discovery back-off skips a rejected login for a day without alternating'
     expect($kept === $backoff, 'unreachable changed the back-off');
     $kept = HorizonCentralConfiguration::nextBackoff($backoff, [['site' => 'abc', 'state' => 'tls-invalid']], $t0 + 86500);
     expect($kept === $backoff, 'TLS failure changed the back-off');
+    // An agent briefly missing must not clear the wait: when it returns, still no login.
+    $kept = HorizonCentralConfiguration::nextBackoff($backoff, [['site' => 'abc', 'state' => 'waiting-for-agent']], $t0 + 86410);
+    expect($kept === $backoff, 'waiting-for-agent cleared the back-off');
+    [$state] = $run($kept, $t0 + 86420, $reject);
+    expect($state === 'backoff' && $calls === 2, 'restored agent logged in during the wait');
     [$state, $cleared] = $run([], $t0 + 86500, static fn (array $pod, string $seed): array => ['pod_identity' => 'ABC Pod', 'discovered_connection_servers' => [$seed]]);
     expect($state === 'ready' && HorizonCentralConfiguration::nextBackoff($backoff, [['site' => 'abc', 'state' => 'ready']], $t0 + 86500) === [], 'success did not clear the back-off');
 };

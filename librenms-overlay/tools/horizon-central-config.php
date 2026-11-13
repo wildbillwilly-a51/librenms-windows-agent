@@ -307,12 +307,14 @@ SQL,
             ],
             $rows
         );
-        $config = self::readConfig($configPath);
-        $collector = new PodCollector();
-        // One discovery at a time, and a site whose login was rejected is not
-        // retried for 24 hours (the read-only account is shared by every site).
+        // One discovery at a time, from reading the configuration through apply
+        // and registration (the lock is released when this function returns), and
+        // a site whose login was rejected is not retried for 24 hours (the
+        // read-only account is shared by every site).
         $stateDir = (string) ($options['state-dir'] ?? $root . '/storage/app/windows-agent-horizon');
         $lock = self::discoveryLock($stateDir);
+        $config = self::readConfig($configPath);
+        $collector = new PodCollector();
         $backoffPath = $stateDir . '/discovery-backoff.json';
         $backoff = self::readBackoff($backoffPath);
         $now = time();
@@ -337,7 +339,6 @@ SQL,
         if ($updated !== $backoff) {
             self::atomicWrite($backoffPath, json_encode($updated, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT) . PHP_EOL, 0600, false);
         }
-        unset($lock);
 
         foreach ($results as $result) {
             $parts = [
@@ -403,10 +404,9 @@ SQL,
 
     /**
      * The back-off after one discovery run: a real rejected login records its
-     * time; a skipped site keeps its original time; unreachable and TLS results
-     * keep any entry unchanged; anything that proves the site no longer needs
-     * a wait (validated, existing, waiting for an agent, ambiguous after login)
-     * clears it.
+     * time; only a result that proves a login worked (validated, existing,
+     * ambiguous after login) clears it; anything else (skipped, unreachable,
+     * TLS, waiting for an agent) keeps the original time.
      *
      * @param array<string,array{failed_at:int,reason:string}> $backoff
      * @param list<array<string,mixed>> $results
@@ -420,7 +420,7 @@ SQL,
             $state = (string) ($result['state'] ?? '');
             if ($state === 'unauthorized') {
                 $backoff[$site] = ['failed_at' => $now, 'reason' => (string) ($result['reason'] ?? 'unauthorized')];
-            } elseif (! in_array($state, ['backoff', 'unreachable', 'tls-invalid'], true)) {
+            } elseif (in_array($state, ['ready', 'existing', 'ambiguous'], true)) {
                 unset($backoff[$site]);
             }
         }

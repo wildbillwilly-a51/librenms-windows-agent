@@ -9,8 +9,10 @@
 - Discovery skips a site whose Horizon login was rejected for 24 hours (state
   `backoff`), keeping the original failure time while skipping, so a short
   discovery timer does not repeatedly fail the shared read-only account.
-  `--retry-now` overrides; a malformed back-off file stops discovery before any
-  login; only one discovery runs at a time. Preview follows the same back-off.
+  Only a check that proves the login worked clears the wait. `--retry-now`
+  overrides; a malformed back-off file stops discovery before any login; one
+  discovery runs at a time, from reading the configuration through apply.
+  Preview follows the same back-off.
 - Windows agent `0.6.17` is unchanged.
 
 ## Overlay 0.6.34 - 2026-11-10

@@ -276,8 +276,9 @@ reasons.
 
 A site whose Horizon login is rejected (`unauthorized`) is not tried again for
 24 hours and is reported as `backoff` meanwhile, because the read-only account is
-shared by every site and repeated rejected logins can lock it out. A successful
-check clears the wait; unreachable and TLS failures leave it unchanged. Add
+shared by every site and repeated rejected logins can lock it out. Only a check
+that proves the login worked clears the wait; unreachable, TLS and missing-agent
+results leave it unchanged. Add
 `--retry-now` after fixing the account to try at once. The state is
 `discovery-backoff.json` in the collector's state directory; a malformed file
 stops discovery before any login. Only one discovery runs at a time.
