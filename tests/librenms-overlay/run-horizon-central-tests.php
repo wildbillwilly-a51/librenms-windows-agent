@@ -862,10 +862,79 @@ $tests['discovery reports TLS auth identity and cross-site ambiguity failures'] 
     expect($states['ghi'] === 'ambiguous', 'identity failure classification changed');
     expect($states['jkl'] === 'ambiguous' && $states['mno'] === 'ambiguous', 'duplicate pod identity was not blocked across sites');
 };
+$tests['discovery accepts site-named non-vcs connection servers and rejects other sites'] = static function (): void {
+    $withThird = static function (string $name): array {
+        $responses = successfulResponses();
+        $responses['rest/monitor/v3/connection-servers'][2]['name'] = $name;
+        $responses['rest/config/v2/connection-servers'][2]['name'] = $name;
+
+        return $responses;
+    };
+    $discover = static function (array $responses): array {
+        $collector = new PodCollector(static fn (string $endpoint): ApiSession => new FakeHorizonSession($responses));
+
+        return $collector->discoverFromEndpoint(testConfig(), ['username' => 'reader', 'password' => str_repeat('x', 12)], 'abc-vcs1.example.test');
+    };
+    // A gateway-named server that is a real pod member belongs to the site.
+    $snapshot = $discover($withThird('abc-horizon-gw'));
+    expect(in_array('abc-horizon-gw.example.test', $snapshot['discovered_connection_servers'], true), 'site-named member not discovered');
+    // A member named for another site still rejects the whole pod.
+    $rejected = '';
+    try { $discover($withThird('xyz-vcs1')); } catch (HorizonFailure $failure) { $rejected = $failure->reason; }
+    expect($rejected === 'pod_member_name_mismatch', 'other-site member was accepted: ' . $rejected);
+};
+$tests['discovery back-off skips a rejected login for a day without alternating'] = static function (): void {
+    $devices = [['device_id' => 1, 'hostname' => 'abc-vcs1.example.test', 'status' => 1, 'disabled' => 0, 'has_application' => true, 'horizon_detected' => true]];
+    $calls = 0;
+    $reject = static function () use (&$calls): array { $calls++; throw new HorizonFailure('authentication_failed'); };
+    $run = static function (array $backoff, int $now, callable $validate) use ($devices): array {
+        $skip = [];
+        foreach ($backoff as $site => $entry) {
+            if ($now - $entry['failed_at'] < HorizonCentralConfiguration::BACKOFF_SECONDS) $skip[$site] = $entry['reason'];
+        }
+        $results = HorizonPodDiscovery::discover($devices, [], 'example.test', $validate, $skip);
+
+        return [$results[0]['state'], HorizonCentralConfiguration::nextBackoff($backoff, $results, $now)];
+    };
+    $t0 = 1_800_000_000;
+    [$state, $backoff] = $run([], $t0, $reject);
+    expect($state === 'unauthorized' && $backoff['abc']['failed_at'] === $t0 && $calls === 1, 'first rejection not recorded');
+    // Two skipped runs keep the original time and make no login.
+    foreach ([60, 120] as $offset) {
+        [$state, $backoff] = $run($backoff, $t0 + $offset, $reject);
+        expect($state === 'backoff' && $backoff['abc']['failed_at'] === $t0 && $calls === 1, 'skipped run logged in or moved the window');
+    }
+    // After a day it tries again; another rejection restarts the day.
+    [$state, $backoff] = $run($backoff, $t0 + 86400, $reject);
+    expect($state === 'unauthorized' && $calls === 2 && $backoff['abc']['failed_at'] === $t0 + 86400, 'back-off did not expire');
+    // Success clears it; unreachable and TLS keep it unchanged.
+    $kept = HorizonCentralConfiguration::nextBackoff($backoff, [['site' => 'abc', 'state' => 'unreachable']], $t0 + 86500);
+    expect($kept === $backoff, 'unreachable changed the back-off');
+    $kept = HorizonCentralConfiguration::nextBackoff($backoff, [['site' => 'abc', 'state' => 'tls-invalid']], $t0 + 86500);
+    expect($kept === $backoff, 'TLS failure changed the back-off');
+    [$state, $cleared] = $run([], $t0 + 86500, static fn (array $pod, string $seed): array => ['pod_identity' => 'ABC Pod', 'discovered_connection_servers' => [$seed]]);
+    expect($state === 'ready' && HorizonCentralConfiguration::nextBackoff($backoff, [['site' => 'abc', 'state' => 'ready']], $t0 + 86500) === [], 'success did not clear the back-off');
+};
+$tests['discovery back-off state fails closed when unreadable or malformed'] = static function (): void {
+    $path = tempnam(sys_get_temp_dir(), 'backoff');
+    try {
+        unlink($path);
+        expect(HorizonCentralConfiguration::readBackoff($path) === [], 'missing state should mean no back-off');
+        foreach (['not json', '[1,2]', '{"abc":{"failed_at":"soon","reason":"x"}}'] as $bad) {
+            file_put_contents($path, $bad);
+            $reason = '';
+            try { HorizonCentralConfiguration::readBackoff($path); } catch (HorizonFailure $failure) { $reason = $failure->reason; }
+            expect($reason === 'discovery_backoff_invalid', 'malformed back-off accepted: ' . $bad);
+        }
+        file_put_contents($path, '{"abc":{"failed_at":1800000000,"reason":"authentication_failed"}}');
+        expect(HorizonCentralConfiguration::readBackoff($path)['abc']['failed_at'] === 1800000000, 'valid back-off not read');
+    } finally { @unlink($path); }
+};
 $tests['capability manifest advertises the stable private integration contract'] = static function (): void {
     $path = dirname(__DIR__, 2) . '/librenms-overlay/tools/capabilities.json';
     $manifest = json_decode((string) file_get_contents($path), true, flags: JSON_THROW_ON_ERROR);
-    expect($manifest['overlay_version'] === '0.6.34', 'overlay capability version mismatch');
+    expect($manifest['overlay_version'] === '0.6.35', 'overlay capability version mismatch');
+    expect((int) ($manifest['capabilities']['horizon_discovery_backoff'] ?? 0) === 1, 'discovery back-off capability not advertised');
     expect((int) ($manifest['capabilities']['horizon_machine_state_taxonomy'] ?? 0) === 1, 'machine state taxonomy capability not advertised');
     expect((int) ($manifest['capabilities']['horizon_uniform_tab_summaries'] ?? 0) === 1, 'uniform tab summaries capability not advertised');
     expect((int) ($manifest['capabilities']['horizon_disconnected_stuck_detection'] ?? 0) === 1, 'disconnected stuck detection capability not advertised');

@@ -262,14 +262,25 @@ sudo -u librenms php windows-agent-overlay/horizon-central-config.php pod list
 sudo -u librenms php windows-agent-overlay/horizon-central-config.php test network --site abc
 ```
 
-Preview is the default and changes nothing. Discovery considers the generic
+Preview is the default and changes no pod configuration, but like apply it
+logs in to Horizon for each candidate site. Discovery considers the generic
 `<site>-vcs<number>.<dns-suffix>` device contract, enabled/down/disabled state,
 the `windows-agent` application, and Horizon-detected metrics. One ready seed
 bootstraps authenticated API validation. The API must return a non-empty pod
-identity and validated members that remain inside the expected site and suffix.
-Apply is add-only and idempotent: existing pod/display choices are retained;
-ambiguous, unauthorized, TLS-invalid, unreachable, disabled, and
-waiting-for-agent candidates are skipped with bounded reasons.
+identity, and every Connection Server it lists must be named `<site>-<name>` in
+the pod's DNS suffix (for example `abc-vcs1` or `abc-horizon-gw`); a member of
+another site rejects the pod. Apply is add-only and idempotent: existing
+pod/display choices are retained; ambiguous, unauthorized, TLS-invalid,
+unreachable, disabled, and waiting-for-agent candidates are skipped with bounded
+reasons.
+
+A site whose Horizon login is rejected (`unauthorized`) is not tried again for
+24 hours and is reported as `backoff` meanwhile, because the read-only account is
+shared by every site and repeated rejected logins can lock it out. A successful
+check clears the wait; unreachable and TLS failures leave it unchanged. Add
+`--retry-now` after fixing the account to try at once. The state is
+`discovery-backoff.json` in the collector's state directory; a malformed file
+stops discovery before any login. Only one discovery runs at a time.
 
 `config status` and `pod list` report only credential presence and non-secret
 pod topology. `test network` performs DNS and strict TLS checks without

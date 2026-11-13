@@ -7,13 +7,14 @@ The Windows agent listens on TCP `6556` and emits Checkmk-style
 `windows_agent_*` sections. The LibreNMS overlay teaches LibreNMS how to parse
 those sections and show the `Windows Agent` application.
 
-The current published overlay is `0.6.34` and the current Windows agent is
+The current published overlay is `0.6.35` and the current Windows agent is
 `0.6.17`. They are versioned independently. See `CURRENT-STATE.md` for release
 status.
 
-Overlay `0.6.34` adds optional Horizon pool reporters, so each pool's alert
+Overlay `0.6.34` added optional Horizon pool reporters, so each pool's alert
 metrics live on one pod server at a time instead of on every member (see the
-central Horizon section below). Nothing changes until it is configured.
+central Horizon section below). Overlay `0.6.35` lets discovery accept
+gateway-named pod members and backs off a site whose Horizon login is rejected.
 
 ## Primary Runbook
 
@@ -188,7 +189,11 @@ LibreNMS devices named `<site>-vcs<number>.<dns-suffix>`, requires an enabled
 validation through one seed, accepts API-discovered members, and proposes only
 additive enrollment. Existing pod and display-device choices are preserved.
 Ambiguous, unreachable, unauthorized, TLS-invalid, and waiting-for-agent sites
-are explained and skipped.
+are explained and skipped. Pod members may be any `<site>-<name>` server, so a
+gateway-named Connection Server does not block discovery. A site whose login is
+rejected waits 24 hours before discovery logs in again (`--retry-now` overrides),
+so discovery can run on a short timer without repeatedly failing the shared
+read-only account.
 
 The password is entered through a hidden prompt and is never accepted on the
 command line. `test network` performs DNS and strict TLS checks without a
@@ -424,7 +429,7 @@ curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-
 Install a specific overlay version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.34
+curl -fsSL https://raw.githubusercontent.com/wildbillwilly-a51/librenms-windows-agent/main/install.sh | sudo bash -s -- --version 0.6.35
 ```
 
 Preview without changing the node:

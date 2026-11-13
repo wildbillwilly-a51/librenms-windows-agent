@@ -1,5 +1,20 @@
 # Work Log
 
+## 2026-11-13 (Overlay 0.6.35: discovery member rule and back-off)
+
+- A real pod rejected by discovery: its gateway-named server is a Connection
+  Server, and discovery required every member to be `<site>-vcsN`. Widened to
+  `<site>-<name>` in the DNS suffix; other-site members still reject the pod.
+- Added a 24-hour per-site back-off after a rejected login, recorded in the
+  collector state directory, with `--retry-now`, a run lock and fail-closed
+  parsing, so a scheduled discovery can run every 15 minutes.
+- Validation: central runner 38 (3 new: member rule through discoverFromEndpoint,
+  three-run back-off without alternation plus expiry/clear/keep, malformed
+  state); reporter 17, parser 39, page 39, SQL qualification 32; full PHP lint.
+  Mutations of the member rule, the back-off keep rule and the skip each fail a
+  test. Codex reviewed the plan (no alternation, run lock, fail closed, preview
+  accounting, test through the real path).
+
 ## 2026-11-10 (Overlay 0.6.34: Horizon pool reporters)
 
 - Owner chose one active reporter per pod for the per-pool `horizon_pool_*`

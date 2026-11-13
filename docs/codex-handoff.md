@@ -1,17 +1,15 @@
 # Codex Handoff
 
-## Horizon pool alert reporter (overlay 0.6.34)
+## Horizon discovery member rule and back-off (overlay 0.6.35)
 
-- Objective: one alerting home per Horizon pod for the per-pool
-  `horizon_pool_*` metrics, with failover, without per-pool rule machinery.
-- Current State: Released in overlay 0.6.34
-  (`includes/windows-agent/horizon-pool-reporter.inc.php`, gate in
-  `ApplicationSave`/`HorizonProjection::pollerMetrics`, list stamping and
-  cleanup queue in the collector, `pod reporters` and one `{site}` template in
-  the helper). Nothing changes until reporters are configured.
-- Relevant Decisions: strict priority order; "up" equals `macros.device_up`
-  plus an active windows-agent app. Native `update_application` deletes omitted
-  metrics, which removes a non-reporter's pool rows at its next poll.
-- Validation Completed: see the 2026-11-10 work-log entry.
-- Validation Remaining: deployment and live handover timing are the operator's.
-
+- Objective: let pod discovery add real sites whose gateway-named server is a
+  Connection Server, and make scheduled discovery safe on a short interval.
+- Current State: Member rule is `<site>-<name>` in the DNS suffix
+  (`PodCollector::discoverFromEndpoint`). Per-site 24-hour back-off after a
+  rejected login (`HorizonCentralConfiguration::nextBackoff`/`readBackoff`,
+  `discovery-backoff.json` in the collector state directory, `--retry-now`,
+  run lock). Overlay 0.6.34's pool reporters are unchanged.
+- Relevant Decisions: only `unauthorized` starts a wait; skipped runs keep the
+  original failure time; unreachable/TLS keep the entry; success clears it.
+- Validation Completed: see the 2026-11-13 work-log entry.
+- Validation Remaining: deployment and a live scheduled run are the operator's.

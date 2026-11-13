@@ -25,13 +25,13 @@ and private exports do not belong here.
 
 ## Current Releases
 
-These are the public installer defaults. Overlay `0.6.34` is an overlay-only
+These are the public installer defaults. Overlay `0.6.35` is an overlay-only
 release and preserves Windows agent `0.6.17` byte-for-byte. Previously published
 agent and overlay payloads are immutable; the next change ships as a new version.
 
-- Overlay version: `0.6.34`
+- Overlay version: `0.6.35`
 - Windows agent version: `0.6.17`
-- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.34.tar.gz`
+- Overlay: `artifacts/librenms-windows-agent-overlay-0.6.35.tar.gz`
 - Windows MSI: `artifacts/librenms-windows-agent-0.6.17.msi`
 - Versioned agent config: `artifacts/librenms-windows-agent-config-0.6.17-win.json`
 - Checksums: `SHA256SUMS`
@@ -58,8 +58,10 @@ Overlay release `0.6.33` preserves native graph-row HTML and lazy loading, fixin
 SQL tooltip quotes that disrupted tab layout in `0.6.32`. Overlay `0.6.34` keeps
 that and adds optional Horizon pool reporters: an ordered server list per pod, or
 one `{site}` template for all pods, where only the first server that is up keeps
-the per-pool `horizon_pool_*` alert metrics. It supersedes `0.6.33`; behaviour is
-unchanged until reporters are configured. Agent `0.6.17` is unchanged.
+the per-pool `horizon_pool_*` alert metrics. Overlay `0.6.35` lets pod discovery
+accept any `<site>-<name>` Connection Server (gateway-named servers were rejected)
+and skips a site whose Horizon login was rejected for 24 hours, so discovery can
+run on a short timer. It supersedes `0.6.34`. Agent `0.6.17` is unchanged.
 
 Overlay release `0.6.32` adds an automatically detected SQL Server tab, native
 instance/issue filters, expandable evidence and separate-unit trends over existing
@@ -164,7 +166,7 @@ For an intentional release:
 For an agent-only release that preserves the current overlay:
 
 ```powershell
-.\scripts\build-release.ps1 -Version 0.6.17 -AgentOnly -OverlayVersion 0.6.34 -UpdateChecksums
+.\scripts\build-release.ps1 -Version 0.6.17 -AgentOnly -OverlayVersion 0.6.35 -UpdateChecksums
 ```
 
 Before publishing, review the full committed snapshot for secrets, private
@@ -180,14 +182,14 @@ fixtures.
 
 ## Next Recommended Action
 
-Windows agent `0.6.17` and overlay `0.6.34` are the installer defaults. Agent
+Windows agent `0.6.17` and overlay `0.6.35` are the installer defaults. Agent
 `0.6.17` is running on its canary host only; every other Windows host stays on its
 previous agent until an operator runs `install-agent.ps1` there. Roll the agent
 out at the operator's pace. Hosts still on `0.6.16` or older keep working with
 overlay `0.6.32` but report no SQL components, counters or LocalDB separation.
 
 Publishing changes no deployed node: the reapply timer uses its locally staged
-copy and downloads nothing. Deploy `0.6.34` to the management/web node and every
+copy and downloads nothing. Deploy `0.6.35` to the management/web node and every
 node that polls Windows-agent devices only when the operator authorizes rollout.
 After rollout, confirm SQL tab filters, disclosures/deep links, `sql_q_*` metrics,
 `sql_q_expires` and the existing SQL graphs on a device reporting SQL sections.

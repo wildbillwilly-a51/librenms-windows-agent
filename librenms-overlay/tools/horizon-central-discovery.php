@@ -12,13 +12,15 @@ final class HorizonPodDiscovery
      * @param list<array<string,mixed>> $devices
      * @param list<array<string,mixed>> $existingPods
      * @param callable(array<string,mixed>,string):array<string,mixed> $validate
+     * @param array<string,string> $skipSites site => reason; skipped before any login
      * @return list<array<string,mixed>>
      */
     public static function discover(
         array $devices,
         array $existingPods,
         string $dnsSuffix,
-        callable $validate
+        callable $validate,
+        array $skipSites = []
     ): array {
         $dnsSuffix = strtolower(rtrim(trim($dnsSuffix), '.'));
         if (preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/', $dnsSuffix) !== 1) {
@@ -102,6 +104,17 @@ final class HorizonPodDiscovery
             }
             usort($reachable, [self::class, 'compareCandidates']);
             $seed = $reachable[0];
+            if (isset($skipSites[$site])) {
+                $results[] = [
+                    'site' => $site,
+                    'state' => 'backoff',
+                    'reason' => self::boundedReason((string) $skipSites[$site]),
+                    'seed' => $seed['hostname'],
+                    'display_device' => $display['hostname'],
+                    'apply' => false,
+                ];
+                continue;
+            }
             $pod = [
                 'site' => $site,
                 'dns_suffix' => $dnsSuffix,

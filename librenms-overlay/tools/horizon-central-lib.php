@@ -335,8 +335,11 @@ final class PodCollector
         if (! is_array($members) || $members === []) {
             throw new HorizonFailure('pod_members_missing');
         }
+        // Every Connection Server must belong to this site: `<site>-<name>` in the
+        // pod's DNS suffix. Not only `-vcsN`: a gateway-named server can be a real
+        // pod member. A member of another site rejects the whole pod.
         foreach ($members as $member) {
-            if (! is_string($member) || preg_match('/^' . $site . '-vcs[0-9]+\.' . $suffix . '$/', strtolower($member)) !== 1) {
+            if (! is_string($member) || preg_match('/^' . $site . '-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.' . $suffix . '$/', strtolower($member)) !== 1) {
                 throw new HorizonFailure('pod_member_name_mismatch');
             }
         }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${VERSION:-0.6.34}"
+VERSION="${VERSION:-0.6.35}"
 LIBRENMS_ROOT="${LIBRENMS_ROOT:-/opt/librenms}"
 REPO_OWNER="${REPO_OWNER:-wildbillwilly-a51}"
 REPO_NAME="${REPO_NAME:-librenms-windows-agent}"

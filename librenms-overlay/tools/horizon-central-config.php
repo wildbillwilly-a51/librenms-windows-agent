@@ -309,6 +309,19 @@ SQL,
         );
         $config = self::readConfig($configPath);
         $collector = new PodCollector();
+        // One discovery at a time, and a site whose login was rejected is not
+        // retried for 24 hours (the read-only account is shared by every site).
+        $stateDir = (string) ($options['state-dir'] ?? $root . '/storage/app/windows-agent-horizon');
+        $lock = self::discoveryLock($stateDir);
+        $backoffPath = $stateDir . '/discovery-backoff.json';
+        $backoff = self::readBackoff($backoffPath);
+        $now = time();
+        $skip = [];
+        if (! isset($options['retry-now'])) {
+            foreach ($backoff as $site => $entry) {
+                if ($now - (int) $entry['failed_at'] < self::BACKOFF_SECONDS) $skip[$site] = (string) $entry['reason'];
+            }
+        }
         $results = HorizonPodDiscovery::discover(
             $devices,
             is_array($config['pods'] ?? null) ? $config['pods'] : [],
@@ -317,8 +330,14 @@ SQL,
                 $pod,
                 $credential,
                 $seed
-            )
+            ),
+            $skip
         );
+        $updated = self::nextBackoff($backoff, $results, $now);
+        if ($updated !== $backoff) {
+            self::atomicWrite($backoffPath, json_encode($updated, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT) . PHP_EOL, 0600, false);
+        }
+        unset($lock);
 
         foreach ($results as $result) {
             $parts = [
@@ -378,6 +397,70 @@ SQL,
         fwrite(STDOUT, 'Added ' . count($newPods) . " validated pod(s); existing pods were unchanged.\n");
 
         return 0;
+    }
+
+    public const BACKOFF_SECONDS = 86400;
+
+    /**
+     * The back-off after one discovery run: a real rejected login records its
+     * time; a skipped site keeps its original time; unreachable and TLS results
+     * keep any entry unchanged; anything that proves the site no longer needs
+     * a wait (validated, existing, waiting for an agent, ambiguous after login)
+     * clears it.
+     *
+     * @param array<string,array{failed_at:int,reason:string}> $backoff
+     * @param list<array<string,mixed>> $results
+     * @return array<string,array{failed_at:int,reason:string}>
+     */
+    public static function nextBackoff(array $backoff, array $results, int $now): array
+    {
+        foreach ($results as $result) {
+            $site = (string) ($result['site'] ?? '');
+            if ($site === '') continue;
+            $state = (string) ($result['state'] ?? '');
+            if ($state === 'unauthorized') {
+                $backoff[$site] = ['failed_at' => $now, 'reason' => (string) ($result['reason'] ?? 'unauthorized')];
+            } elseif (! in_array($state, ['backoff', 'unreachable', 'tls-invalid'], true)) {
+                unset($backoff[$site]);
+            }
+        }
+        ksort($backoff, SORT_STRING);
+
+        return $backoff;
+    }
+
+    /** @return array<string,array{failed_at:int,reason:string}> */
+    public static function readBackoff(string $path): array
+    {
+        if (! is_file($path)) return [];
+        $raw = @file_get_contents($path);
+        if ($raw === false) throw new HorizonFailure('discovery_backoff_unreadable');
+        try {
+            $data = json_decode($raw, true, 8, JSON_THROW_ON_ERROR);
+        } catch (Throwable) {
+            throw new HorizonFailure('discovery_backoff_invalid');
+        }
+        if (! is_array($data)) throw new HorizonFailure('discovery_backoff_invalid');
+        $backoff = [];
+        foreach ($data as $site => $entry) {
+            if (! is_string($site) || ! is_array($entry) || ! is_int($entry['failed_at'] ?? null) || ! is_string($entry['reason'] ?? null)) {
+                throw new HorizonFailure('discovery_backoff_invalid');
+            }
+            $backoff[$site] = ['failed_at' => $entry['failed_at'], 'reason' => $entry['reason']];
+        }
+
+        return $backoff;
+    }
+
+    /** @return resource held until released; a second run fails instead of waiting */
+    private static function discoveryLock(string $stateDir)
+    {
+        if (! is_dir($stateDir) && ! mkdir($stateDir, 0700, true) && ! is_dir($stateDir)) throw new HorizonFailure('discovery_state_unavailable');
+        $handle = fopen($stateDir . '/discovery.lock', 'c');
+        if ($handle === false) throw new HorizonFailure('discovery_state_unavailable');
+        if (! flock($handle, LOCK_EX | LOCK_NB)) throw new HorizonFailure('discovery_already_running');
+
+        return $handle;
     }
 
     private static function validate(string $configPath, string $envPath): int
@@ -795,7 +878,7 @@ Horizon central collector configuration
 
   credential set|rotate|remove
   pod add --site abc --dns-suffix example.test --display-device abc-vcs2.example.test
-  pod discover --dns-suffix example.test [--apply]
+  pod discover --dns-suffix example.test [--apply] [--retry-now]
   pod list
   pod enable|disable|remove --site abc
   pod reporters --site abc --hosts abc-vcs1,abc-vcs2   (pool alert metrics from the first one up)
